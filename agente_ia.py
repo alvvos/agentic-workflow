@@ -98,7 +98,6 @@ try:
                     zonas_names = [z.get('zoneName') for z in loc.get('zones', []) if z.get('zoneName')]
                     if zonas_names:
                         texto_tiendas += f"    Zonas: {', '.join(zonas_names)}\n"
-        print(texto_tiendas)
 except Exception as e:
     texto_tiendas = f"Error cargando tiendas: {e}"
 
@@ -206,8 +205,8 @@ def run_sync(n_clicks):
         subprocess.run(["python", "update_and_train.py"], check=True)
         motor = MotorPredictivo()
         return "Sincronizacion finalizada: Datos al dia y modelos actualizados."
-    except subprocess.CalledProcessError as e:
-        return f"Error en el script de actualizacion. Revisa la consola."
+    except subprocess.CalledProcessError:
+        return "Error en el script de actualizacion. Revisa la consola."
     except Exception as e:
         return f"Error: {str(e)}"
 
