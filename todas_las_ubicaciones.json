@@ -1,0 +1,738 @@
+[
+    {
+        "uuid": "996a4e30-3831-4fee-af3c-cc5cd09de833",
+        "name": "S69 Innovation center GRX",
+        "locations": [
+            {
+                "uuid": "3c73b012-fa57-4023-8d76-7b0e60cd6fbc",
+                "name": "Laboratorio GRX",
+                "zones": [
+                    {
+                        "uuid": "43005d4a-34af-4d5c-8328-0abb7b0d2016",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "98313307-aa82-4398-a684-6e3faa504997",
+                        "zoneName": "Tienda"
+                    },
+                    {
+                        "uuid": "7a040573-29c2-4c3a-af7d-348ddf2a6a99",
+                        "zoneName": "Exterior"
+                    }
+                ]
+            },
+            {
+                "uuid": "81824d35-fa27-428b-84d9-dcda463850dc",
+                "name": "JoseVP",
+                "zones": [
+                    {
+                        "uuid": "c486577f-0f1a-4dc6-9802-3c8be7daed13",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "4a864d53-fd44-4f9a-afc4-f184f656ec8f",
+                        "zoneName": "Tienda"
+                    },
+                    {
+                        "uuid": "d6ac2fb3-e848-4055-84f9-8b9d77e5f2f1",
+                        "zoneName": "Exterior"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "uuid": "19c2f7a1-7c08-4a92-a5ba-02c7412c6e65",
+        "name": "S69 Operaciones HQ",
+        "locations": [
+            {
+                "uuid": "123722e6-9a1e-47b4-b33e-8f432c79e18e",
+                "name": "Operaciones",
+                "zones": [
+                    {
+                        "uuid": "4bf2a693-691c-4111-bc71-a3cc41e0ef6d",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "d61e21f3-ec49-48da-a885-dd57290f7400",
+                        "zoneName": "Tienda"
+                    },
+                    {
+                        "uuid": "c3bc4b0c-382e-4e8d-9cc1-8c63ac2992f9",
+                        "zoneName": "Exterior"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "uuid": "5001d2e8-8c4e-4177-abc2-577c48dbcfee",
+        "name": "S69 TSE Showroom HQ",
+        "locations": [
+            {
+                "uuid": "faf7d203-342e-44c6-96e3-1ed64d8252c3",
+                "name": "Showroom",
+                "zones": [
+                    {
+                        "uuid": "35755cf9-2646-41e4-aada-924aecda2070",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "48553e66-c1ab-4ee1-8224-79deb189c7a4",
+                        "zoneName": "Tienda"
+                    },
+                    {
+                        "uuid": "32b057c5-182e-40e7-995f-37635cbe381d",
+                        "zoneName": "Exterior"
+                    },
+                    {
+                        "uuid": "024f50b2-b276-4a26-8c69-93b30fac8943",
+                        "zoneName": "Planta 0"
+                    },
+                    {
+                        "uuid": "d5ce1530-a20d-41ba-968e-8ba7cc344e3c",
+                        "zoneName": "Planta 1"
+                    },
+                    {
+                        "uuid": "b4ae15ce-3e6b-4c0e-8f6a-8c562d00ec94",
+                        "zoneName": "Tienda PL0"
+                    },
+                    {
+                        "uuid": "abfdc070-2b78-4dc6-9fc9-aac281eab47e",
+                        "zoneName": "Tienda PL1"
+                    },
+                    {
+                        "uuid": "fee98a95-b24d-41db-9881-432cf7cde8cf",
+                        "zoneName": "Caja PL0"
+                    },
+                    {
+                        "uuid": "14ed664d-9737-4770-a5bf-9f30b89f8572",
+                        "zoneName": "Caja PL1"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "uuid": "5211a2a2-331a-4999-8756-6e37f2db206d",
+        "name": "TSE Showroom Geneva - GBS",
+        "locations": [
+            {
+                "uuid": "c5490e24-81c2-4894-9ce0-c31a1068fb3c",
+                "name": "Class LONDON",
+                "zones": [
+                    {
+                        "uuid": "f2e5e5a5-26cc-484c-9129-c8ad3574c53f",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "07e13fff-46d9-43dd-a3b0-211352b8bd09",
+                        "zoneName": "Tienda"
+                    },
+                    {
+                        "uuid": "16df63ba-e8d1-43ca-a6d7-018cb87db1ee",
+                        "zoneName": "Exterior"
+                    }
+                ]
+            },
+            {
+                "uuid": "4d912992-4aeb-485c-b525-1329d0548542",
+                "name": "Auditorium",
+                "zones": [
+                    {
+                        "uuid": "48fd1e70-0520-4dee-bb82-2581a78bedbe",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "725ce88b-383f-4198-a876-bb46a501c15c",
+                        "zoneName": "Tienda"
+                    },
+                    {
+                        "uuid": "c6223923-36de-41fa-a7d6-bc683feefe02",
+                        "zoneName": "Exterior"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "uuid": "60df0bbb-2b07-4028-8854-1ec4ea14d5f1",
+        "name": "TSE Showroom MX - ShopeakMedia",
+        "locations": [
+            {
+                "uuid": "80e6fffd-3ddf-4562-9795-49f9a87ae15d",
+                "name": "Oficina ShopeakMedia",
+                "zones": [
+                    {
+                        "uuid": "f394a5a8-3b26-4f0c-b3f7-c5b1a2a9cce4",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "d92a9f33-6845-46e8-8f33-9ac32c542a9f",
+                        "zoneName": "Tienda"
+                    },
+                    {
+                        "uuid": "54db72c0-37a0-431f-931f-191c88272ef8",
+                        "zoneName": "Exterior"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "uuid": "5c13b57d-782d-4458-911b-64cd40eebb55",
+        "name": "Miniso España",
+        "locations": [
+            {
+                "uuid": "67034276-0d01-4c90-a363-fa75699a19a4",
+                "name": "Malaga Muelle 1",
+                "zones": [
+                    {
+                        "uuid": "9ca72b6f-c5e2-41f8-a9f8-a22d95a4ad36",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "288b530d-82a7-4c1b-85b8-8027c0699515",
+                        "zoneName": "Tienda"
+                    },
+                    {
+                        "uuid": "79c9c568-41e1-43b3-84d4-e413630fa58a",
+                        "zoneName": "Calle"
+                    }
+                ]
+            },
+            {
+                "uuid": "db01e2ed-3bbb-4c6f-8bbe-9b73762f473d",
+                "name": "Valencia Bonaire",
+                "zones": [
+                    {
+                        "uuid": "47852e02-201b-44a9-bfa8-f045ac686e49",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "d29dfc9f-0217-4a80-abfe-c54e6939f216",
+                        "zoneName": "Tienda"
+                    },
+                    {
+                        "uuid": "ad0a5f72-a9ff-4ed1-ad94-b58395038eab",
+                        "zoneName": "Calle"
+                    }
+                ]
+            },
+            {
+                "uuid": "251e7f40-95c7-4678-aa48-df1b90e3461c",
+                "name": "Madrid Gran Via",
+                "zones": [
+                    {
+                        "uuid": "81d9af64-1341-4862-ae11-0e2bdd8e1361",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "765797b7-6ca1-4b29-8949-d843634c5b5e",
+                        "zoneName": "Tienda"
+                    },
+                    {
+                        "uuid": "1a958277-8b5e-48ca-a20b-183e2833d47e",
+                        "zoneName": "Calle"
+                    },
+                    {
+                        "uuid": "66ce4df8-f7df-445c-a356-6b1ff90ddf15",
+                        "zoneName": "Planta 0"
+                    },
+                    {
+                        "uuid": "697eb389-4c37-40f6-a4a3-11035a15a874",
+                        "zoneName": "Tienda PL 0"
+                    },
+                    {
+                        "uuid": "8b7e2246-8d76-41c0-9fd6-aec26c55ff7e",
+                        "zoneName": "Planta 1"
+                    },
+                    {
+                        "uuid": "1925fb2c-06be-4de2-abb3-65d4aa39e75f",
+                        "zoneName": "Tienda PL 1"
+                    },
+                    {
+                        "uuid": "8e86160e-4e95-4056-8790-955a2c5bbe00",
+                        "zoneName": "Caja 0"
+                    },
+                    {
+                        "uuid": "4ca3a40a-6bde-4813-b77e-cbe4bcb6b418",
+                        "zoneName": "Caja 1"
+                    },
+                    {
+                        "uuid": "fc932020-1935-4a1c-a47b-2915345ecb35",
+                        "zoneName": "Calle."
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "uuid": "bf5ae186-47dd-4ae4-aba7-5aad965f2a66",
+        "name": "TSE Showroom MX Barracuda Media",
+        "locations": [
+            {
+                "uuid": "845b6172-a478-4307-9344-04749ecd3c2e",
+                "name": "Oficina Barracuda MX",
+                "zones": []
+            }
+        ]
+    },
+    {
+        "uuid": "1282f52b-f819-466a-b23d-8074c15a3d0f",
+        "name": "Demo PWC",
+        "locations": [
+            {
+                "uuid": "de566da6-3410-4234-a3a3-9416921bd7c4",
+                "name": "Demo",
+                "zones": []
+            },
+            {
+                "uuid": "264b6cd5-4c74-4f08-b9a6-b842f7f70382",
+                "name": "Tienda Madrid",
+                "zones": [
+                    {
+                        "uuid": "e586620a-ab8b-455c-9efb-6b5679dbed4b",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "22e12772-e25f-45c5-b724-b9190191c76d",
+                        "zoneName": "Tienda"
+                    },
+                    {
+                        "uuid": "30aec0fc-6d93-4782-9787-a6ac303fc1b5",
+                        "zoneName": "Exterior"
+                    },
+                    {
+                        "uuid": "4d1d4393-b8b9-4aa4-9179-673f46004b6b",
+                        "zoneName": "Exterior"
+                    },
+                    {
+                        "uuid": "a247db7b-94bc-4dbd-8292-42c35ab76c16",
+                        "zoneName": "Planta 0"
+                    },
+                    {
+                        "uuid": "8e19f7ef-ad03-4cf1-905c-668821a9b692",
+                        "zoneName": "Planta 1"
+                    },
+                    {
+                        "uuid": "ea99d112-87c0-41c1-8d44-9cba5dceae09",
+                        "zoneName": "Zona PL0"
+                    },
+                    {
+                        "uuid": "fdaf5f39-1e11-408e-aab1-542a7821000b",
+                        "zoneName": "Zona PL1"
+                    },
+                    {
+                        "uuid": "b44785b7-5f2b-4e06-8714-7f457e713964",
+                        "zoneName": "Caja PL0"
+                    },
+                    {
+                        "uuid": "b4dd50a7-09b0-4b23-905c-1194e65b405a",
+                        "zoneName": "Caja PL1"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "uuid": "3e37fbbf-08d9-4134-9825-2dc3a4f1698b",
+        "name": "Sam's Club (Walmart)",
+        "locations": [
+            {
+                "uuid": "80bb0b26-dd18-484b-8a41-e6310a961176",
+                "name": "Plaza Oriente - Parking",
+                "zones": [
+                    {
+                        "uuid": "50d43060-7c7c-48a3-b4d4-8c2c41cf0185",
+                        "zoneName": "Zona1"
+                    },
+                    {
+                        "uuid": "16bf4538-214d-4294-89f2-a0e666b4cdf8",
+                        "zoneName": "Zona2"
+                    },
+                    {
+                        "uuid": "c28beac1-ebca-4b05-b411-15144af1d23b",
+                        "zoneName": "Zona3"
+                    }
+                ]
+            },
+            {
+                "uuid": "19e6be18-bcf6-47c3-9036-675430cf0ab0",
+                "name": "Plaza Oriente - Photocall",
+                "zones": [
+                    {
+                        "uuid": "e09737dc-ee1c-4cc6-932d-3e40e9e5f373",
+                        "zoneName": "Zona1"
+                    },
+                    {
+                        "uuid": "f9e5ca51-2c99-4758-ac0e-ce28d4908cac",
+                        "zoneName": "Zona2"
+                    },
+                    {
+                        "uuid": "131cf580-4038-4b5e-bf46-2cfbe75d760d",
+                        "zoneName": "Zona3"
+                    }
+                ]
+            },
+            {
+                "uuid": "a047c461-8ba1-4207-b312-1191f0335cd9",
+                "name": "Plaza Oriente - Caja",
+                "zones": [
+                    {
+                        "uuid": "51bb7eac-059e-487f-a370-48e9397fb62f",
+                        "zoneName": "Zona1"
+                    },
+                    {
+                        "uuid": "e9652b2c-d013-4723-8bce-1ef451138c29",
+                        "zoneName": "Zona2"
+                    },
+                    {
+                        "uuid": "a033e8c1-e986-4292-a6e0-1a73ad324a44",
+                        "zoneName": "Zona3"
+                    }
+                ]
+            },
+            {
+                "uuid": "65195206-a646-48ca-b31e-c109be23862b",
+                "name": "Plaza Oriente - Interior tienda",
+                "zones": [
+                    {
+                        "uuid": "86114a86-4df0-43a6-ab40-001721b55a26",
+                        "zoneName": "Zona1"
+                    },
+                    {
+                        "uuid": "7540fc9e-9496-493e-8e2f-63759b8adc7b",
+                        "zoneName": "Zona2"
+                    },
+                    {
+                        "uuid": "63d84ca1-9764-44bd-aaa6-1ebed7bef39a",
+                        "zoneName": "Zona3"
+                    }
+                ]
+            },
+            {
+                "uuid": "90fddcb3-5365-458b-b20b-e3c49cdaf4d3",
+                "name": "Plaza Oriente - Columna",
+                "zones": [
+                    {
+                        "uuid": "998ebdd1-9580-41ec-a64f-3b76a2bb37a1",
+                        "zoneName": "Zona1"
+                    },
+                    {
+                        "uuid": "154c1f66-7631-4697-b445-994598ec2e54",
+                        "zoneName": "Zona2"
+                    },
+                    {
+                        "uuid": "2ce7f002-67a5-476e-a558-7f9e6af6e479",
+                        "zoneName": "Zona3"
+                    }
+                ]
+            },
+            {
+                "uuid": "5f31d4fb-bdc7-43e4-8363-3b19575334d1",
+                "name": "Plaza Oriente",
+                "zones": [
+                    {
+                        "uuid": "267d1838-50a4-4d0e-b982-e60d209c44d9",
+                        "zoneName": "Zona1"
+                    },
+                    {
+                        "uuid": "a1ee8c11-74e5-4b04-8a37-783c8aa5a742",
+                        "zoneName": "Zona2"
+                    },
+                    {
+                        "uuid": "15f72bc9-f429-4356-8c19-0b8d4c00424e",
+                        "zoneName": "Zona3"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "uuid": "9c125faa-5c10-4ac2-87d2-c98426b80dbc",
+        "name": "Grupo Monterrey",
+        "locations": [
+            {
+                "uuid": "5449908c-c9c0-4663-a115-c5bac7aad3e1",
+                "name": "Puerta principal",
+                "zones": []
+            },
+            {
+                "uuid": "889cf2a3-4a86-41a9-a233-a0af7eba6be4",
+                "name": "Pasillo central",
+                "zones": []
+            },
+            {
+                "uuid": "492aa92d-77b9-4dfc-8146-76bcc54d9b69",
+                "name": "Garage principal",
+                "zones": []
+            },
+            {
+                "uuid": "270ac419-48ef-446e-b652-3bcd8cf6c370",
+                "name": "Restaurante el mariachi",
+                "zones": []
+            },
+            {
+                "uuid": "8af150b4-7331-49cf-a658-7333b5a0f0bd",
+                "name": "Puerta principal C2",
+                "zones": []
+            },
+            {
+                "uuid": "114b2c90-6f2f-45ee-8baf-51ad50463d3c",
+                "name": "Restaurante Mariachi",
+                "zones": []
+            }
+        ]
+    },
+    {
+        "uuid": "6a7903a3-d606-4698-b6f2-72ef74ce8fad",
+        "name": "Toyota - Medimotors",
+        "locations": [
+            {
+                "uuid": "c59f3c44-921a-4f73-85e0-f79990b5812d",
+                "name": "Alicante Lexus",
+                "zones": []
+            },
+            {
+                "uuid": "636affd2-7f74-45dd-8a56-f93b96177392",
+                "name": "Alicante Toyota",
+                "zones": []
+            },
+            {
+                "uuid": "071cd541-6801-4519-a50d-7efe138bd061",
+                "name": "Elche VO",
+                "zones": []
+            },
+            {
+                "uuid": "4a85b71e-c67b-4c4e-9268-d1ecbc7f50f9",
+                "name": "Elche Lexus",
+                "zones": []
+            },
+            {
+                "uuid": "82bffb0e-8446-4bb3-a951-6b2350519a2d",
+                "name": "Elche Toyota",
+                "zones": []
+            },
+            {
+                "uuid": "6cc271b5-4c84-4355-8f1f-887fc8086aa0",
+                "name": "Alicante VO",
+                "zones": []
+            }
+        ]
+    },
+    {
+        "uuid": "5dc7afbd-3078-4572-8a43-77ac8e81942e",
+        "name": "Asefarma Santa Engracia 56",
+        "locations": [
+            {
+                "uuid": "cffd267d-8e11-4aa0-8bc9-7b4d699b3576",
+                "name": "Farmacia Santa Engracia 56",
+                "zones": [
+                    {
+                        "uuid": "f632673e-89fc-4d21-b32c-676e60fdf661",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "427b6474-715f-4760-bdfb-4d0bb5799c6c",
+                        "zoneName": "Farmacia "
+                    },
+                    {
+                        "uuid": "a3d0bdb3-294e-45e8-bade-9c7202673978",
+                        "zoneName": "Exterior"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "uuid": "5345a134-3495-4884-a780-c9b37a50df20",
+        "name": "Mi Kiosko",
+        "locations": [
+            {
+                "uuid": "0121c181-991d-4021-ab98-c2d58e33bd12",
+                "name": "Colima",
+                "zones": [
+                    {
+                        "uuid": "656e16fd-76d2-4908-9e79-7aa0b2b6fe6f",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "49b955be-ff8f-4cfa-a59f-e144ec80bf7a",
+                        "zoneName": "Tienda"
+                    },
+                    {
+                        "uuid": "5cd6845d-f2b0-45ee-b9f8-8721792659e5",
+                        "zoneName": "Exterior"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "uuid": "89c22b61-b3e6-4cbf-b162-65a3ac92d148",
+        "name": "Asefarma Vallecas ",
+        "locations": [
+            {
+                "uuid": "77429c4c-4a31-48ed-b2e0-9138b0e8c4bd",
+                "name": "San Jaime 7 ",
+                "zones": [
+                    {
+                        "uuid": "4629ce0f-55d5-4834-a418-b0caa92e125e",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "1d4c822a-065b-49a8-a562-ef36dfa5b8bf",
+                        "zoneName": "Farmacia"
+                    },
+                    {
+                        "uuid": "ea4d6fa0-9a9e-4849-ad9b-c04b012c859b",
+                        "zoneName": "Exterior"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "uuid": "570944c8-1abc-4200-894d-35a61d75074c",
+        "name": "Asefarma Alcobendas",
+        "locations": [
+            {
+                "uuid": "b3408174-56b0-401e-9699-3eca568b17dc",
+                "name": "Alcobendas",
+                "zones": [
+                    {
+                        "uuid": "6de574f7-765d-4db3-93bb-8440c364dd01",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "aeb1cc7c-fbbd-4359-bee8-1287ca0d343a",
+                        "zoneName": "Farmacia"
+                    },
+                    {
+                        "uuid": "747bc694-ecb9-4221-b67f-da063223fe22",
+                        "zoneName": "Exterior"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "uuid": "f72bf0d6-e9ac-4fd1-95bf-3e87dce7fb66",
+        "name": "Scotta",
+        "locations": [
+            {
+                "uuid": "92a5af6f-5fd1-43a3-a6ef-99360fd1f049",
+                "name": "Madrid - Jorge Juan 31",
+                "zones": [
+                    {
+                        "uuid": "bbd7b2ee-d5b2-44e9-839b-a25fca83cd17",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "4e3122d7-30b2-4349-8bec-f96ccc081afa",
+                        "zoneName": "Tienda"
+                    },
+                    {
+                        "uuid": "a2465e46-ce3d-4ed8-900c-5cecc7f0fa20",
+                        "zoneName": "Exterior"
+                    },
+                    {
+                        "uuid": "7a0d7e54-2d91-4d6a-9bf2-a463dbb5be9f",
+                        "zoneName": "Frontal"
+                    },
+                    {
+                        "uuid": "4297f77d-4d45-44a5-9eed-3244048c8b06",
+                        "zoneName": "Fondo"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "uuid": "1ee91603-8e5b-49eb-88cd-0c90776d7821",
+        "name": "The Phone House",
+        "locations": [
+            {
+                "uuid": "0b73f779-5b3f-440a-9069-ce636013bc52",
+                "name": "Centro Comercial Plenilunio",
+                "zones": [
+                    {
+                        "uuid": "c583e8dc-a8f5-42ea-98ff-537ff0fa7a40",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "2318b41d-b84e-4c64-ac50-c9531dc55641",
+                        "zoneName": "Tienda"
+                    },
+                    {
+                        "uuid": "855adf68-e0ff-49e3-aef7-48da43b2256b",
+                        "zoneName": "Calle"
+                    }
+                ]
+            },
+            {
+                "uuid": "96136557-21ae-4293-a83e-48a776fb5fe7",
+                "name": "Centro comercial Rio 2",
+                "zones": [
+                    {
+                        "uuid": "9a876b94-4803-4e9b-9289-02f79655bf09",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "b93fc405-c089-4134-a1ad-f9d50cf15e25",
+                        "zoneName": "Tienda"
+                    },
+                    {
+                        "uuid": "cbba8fa7-0f97-45d3-9f9b-22c735605ffb",
+                        "zoneName": "Calle"
+                    }
+                ]
+            },
+            {
+                "uuid": "ce86e8a6-6166-4dd0-a77e-d8027ff3fc02",
+                "name": "Móstoles",
+                "zones": [
+                    {
+                        "uuid": "a81adb06-64a7-423a-8fc3-777c908a334c",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "66003e0c-f1da-4b9c-aa67-f6baa15750ec",
+                        "zoneName": "Tienda"
+                    },
+                    {
+                        "uuid": "03be2e6c-2afb-4f19-8222-eb2bed905e66",
+                        "zoneName": "Calle"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "uuid": "224e4c85-533c-42ec-958e-04964a3639e6",
+        "name": "Ale-Hop",
+        "locations": [
+            {
+                "uuid": "ee204471-ee67-4338-8bcc-8847ad999f76",
+                "name": "AH316 Valencia",
+                "zones": []
+            }
+        ]
+    },
+    {
+        "uuid": "ff823e37-826f-4a58-8859-ae181ac3eb1a",
+        "name": "Ploom - Cheques Gourmet",
+        "locations": []
+    },
+    {
+        "uuid": "f565e525-738e-442e-b2cd-5c3bd8d1959e",
+        "name": "AhorraMas",
+        "locations": []
+    },
+    {
+        "uuid": "799c9afb-60d1-4268-b339-83e1a720f4a1",
+        "name": "BM Uvesco",
+        "locations": []
+    }
+]
