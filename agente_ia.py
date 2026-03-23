@@ -12,11 +12,11 @@ from dotenv import load_dotenv
 import subprocess
 
 load_dotenv()
-
 motor = MotorPredictivo()
 
-def herramienta_predecir_trafico(location_id: str, zone: str, fecha_futura: str) -> str:
-    print(f"[HERRAMIENTA ACTIVADA] Tienda: {location_id} | Zona: {zone} | Fecha: {fecha_futura}")
+def herramienta_predecir_metrica(location_id: str, zone: str, fecha_futura: str, metrica: str) -> str:
+    """Predice una metrica especifica (total_visits, unique_visitors, attraction_rate, etc.) para una fecha futura."""
+    print(f"[HERRAMIENTA ACTIVADA] Metrica: {metrica} | Tienda: {location_id} | Zona: {zone} | Fecha: {fecha_futura}")
     try:
         df_historico = pd.read_csv('dataset_global_raw.csv')
         df_historico['fecha'] = pd.to_datetime(df_historico['fecha'])
@@ -24,9 +24,9 @@ def herramienta_predecir_trafico(location_id: str, zone: str, fecha_futura: str)
         
         if df_filtro.empty:
             print("[HERRAMIENTA ERROR] No hay datos en el CSV para esa tienda/zona.")
-            return "Error: No hay datos historicos suficientes."
+            return "Error: No hay datos historicos suficientes para esa ubicacion y zona."
 
-        df_diario = df_filtro.groupby('fecha')['total_visits'].sum().reset_index()
+        df_diario = df_filtro.groupby('fecha')[metrica].mean().reset_index()
         df_diario = df_diario.set_index('fecha')
         target_date = datetime.strptime(fecha_futura, "%Y-%m-%d")
         
@@ -34,54 +34,64 @@ def herramienta_predecir_trafico(location_id: str, zone: str, fecha_futura: str)
         hace_7_dias = target_date - timedelta(days=7)
         hace_14_dias = target_date - timedelta(days=14)
         
-        def obtener_visitas_o_imputar(fecha_busqueda):
+        def obtener_valor_o_imputar(fecha_busqueda):
             if fecha_busqueda in df_diario.index:
-                return float(df_diario.loc[fecha_busqueda, 'total_visits'])
+                return float(df_diario.loc[fecha_busqueda, metrica])
             
             dia_semana = fecha_busqueda.weekday()
             df_mismo_dia = df_diario[df_diario.index.weekday == dia_semana]
             
             if not df_mismo_dia.empty:
-                return float(df_mismo_dia['total_visits'].mean())
-            
+                return float(df_mismo_dia[metrica].mean())
             elif not df_diario.empty:
-                return float(df_diario['total_visits'].mean())
-            
+                return float(df_diario[metrica].mean())
             return 0.0
             
-        visitas_ayer = obtener_visitas_o_imputar(ayer)
-        visitas_7 = obtener_visitas_o_imputar(hace_7_dias)
-        visitas_14 = obtener_visitas_o_imputar(hace_14_dias)
+        valor_ayer = obtener_valor_o_imputar(ayer)
+        valor_7 = obtener_valor_o_imputar(hace_7_dias)
+        valor_14 = obtener_valor_o_imputar(hace_14_dias)
         
         fecha_inicio_semana = target_date - timedelta(days=7)
-        datos_semana = df_diario.loc[fecha_inicio_semana:ayer, 'total_visits']
+        datos_semana = df_diario.loc[fecha_inicio_semana:ayer, metrica]
         
         if len(datos_semana) > 0:
             media_7 = float(datos_semana.mean())
             std_7 = float(datos_semana.std())
             if pd.isna(std_7): std_7 = 0.0
         elif not df_diario.empty:
-            media_7 = float(df_diario['total_visits'].mean())
-            std_7 = float(df_diario['total_visits'].std())
+            media_7 = float(df_diario[metrica].mean())
+            std_7 = float(df_diario[metrica].std())
             if pd.isna(std_7): std_7 = 0.0
         else:
-            media_7 = 0.0
-            std_7 = 0.0
+            media_7, std_7 = 0.0, 0.0
 
-        prediccion = motor.predecir_trafico(
-            location_id, str(zone), fecha_futura, 
-            visitas_ayer, visitas_7, visitas_14, media_7, std_7
+        prediccion = motor.predecir_metrica(
+            location_id, str(zone), fecha_futura, metrica,
+            valor_ayer, valor_7, valor_14, media_7, std_7
         )
         
         if prediccion == -1:
-            print("[HERRAMIENTA ERROR] El motor devolvio -1.")
-            return "Error interno en el calculo de la prediccion."
+            print("[HERRAMIENTA ERROR] El motor devolvio -1. Modelo no encontrado.")
+            return f"Error: No existe un modelo entrenado para la metrica '{metrica}' en esa zona."
             
-        print(f"[HERRAMIENTA EXITO] Prediccion: {prediccion}")
-        return f"Prediccion final para el {fecha_futura}: {prediccion} visitantes."
+        if metrica in ['total_visits', 'unique_visitors', 'new_visitors']:
+            resultado_final = int(prediccion)
+            unidad = "personas"
+        elif metrica == 'attraction_rate':
+            resultado_final = round(prediccion, 2)
+            unidad = "%"
+        elif metrica == 'dwell_time':
+            resultado_final = round(prediccion, 2)
+            unidad = "minutos"
+        else:
+            resultado_final = round(prediccion, 2)
+            unidad = ""
+            
+        print(f"[HERRAMIENTA EXITO] Prediccion: {resultado_final} {unidad}")
+        return f"Prediccion final de {metrica} para el {fecha_futura}: {resultado_final} {unidad}."
     except Exception as e:
         print(f"[HERRAMIENTA CRASH] Fallo: {str(e)}")
-        return f"Error en la herramienta: {str(e)}"
+        return f"Error interno en la herramienta: {str(e)}"
 
 texto_tiendas = ""
 try:
@@ -103,9 +113,10 @@ except Exception as e:
 
 hoy_str = datetime.now().strftime("%Y-%m-%d")
 
+# 4. Instrucciones del Sistema para Gemini
 instrucciones_sistema = f"""
-Eres Valdi, el asistente de inteligencia artificial predictiva. Eres directo y profesional. 
-Usa SIEMPRE tu herramienta de prediccion cuando te pregunten por el futuro o previsiones.
+Eres Valdi, el analista de inteligencia artificial predictiva avanzado del sector retail. 
+Eres directo, profesional y muy preciso. Usa SIEMPRE tu herramienta de prediccion cuando te pregunten por el futuro o previsiones.
 
 FECHA ACTUAL: 
 Hoy es {hoy_str}. Usa esta fecha como referencia matematica para calcular exactamente que dia es "mañana", "pasado mañana", etc. y pasale a la herramienta SIEMPRE el formato YYYY-MM-DD.
@@ -115,18 +126,25 @@ El usuario usara el nombre de la ubicacion o de la empresa. La herramienta neces
 Busca en esta estructura el UUID correspondiente a la ubicacion solicitada:
 {texto_tiendas}
 
-ZONAS DE LA HERRAMIENTA (Debes pasarle a la herramienta SOLO el numero en formato texto):
+ZONAS (Debes pasarle a la herramienta SOLO el numero en formato texto):
 - "Caja", "Pagos" o "Cobro" -> "0"
 - "Tienda", "Interior" o "Dentro" -> "1"
 - "Calle", "Escaparate" o "Exterior" -> "2"
 - "Extra" u "Otros" -> "3"
+
+METRICAS DISPONIBLES (El parametro 'metrica' debe ser EXACTAMENTE uno de estos textos):
+- "total_visits" -> Úsalo si preguntan por trafico general, visitas o afluencia.
+- "unique_visitors" -> Úsalo si preguntan por visitantes unicos.
+- "new_visitors" -> Úsalo si preguntan por clientes nuevos.
+- "attraction_rate" -> Úsalo si preguntan por ratio de atraccion o captacion de escaparate.
+- "dwell_time" -> Úsalo si preguntan por tiempo de estancia o cuanto se quedan.
 """
 
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 config = types.GenerateContentConfig(
     system_instruction=instrucciones_sistema,
-    tools=[herramienta_predecir_trafico],
+    tools=[herramienta_predecir_metrica],
     temperature=0.2,
     automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=False)
 )
@@ -134,7 +152,7 @@ config = types.GenerateContentConfig(
 chat_session = client.chats.create(model="gemini-2.5-flash", config=config)
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.LUX])
-app.title = "Valdi IA"
+app.title = "Valdi IA - Multimétrica"
 
 app.layout = dbc.Container([
     html.Br(),
@@ -174,7 +192,7 @@ app.layout = dbc.Container([
         dbc.Col(
             dbc.Input(
                 id="user-input", 
-                placeholder="Pregunta por la prevision de trafico...", 
+                placeholder="Ej: ¿Cual sera el tiempo de estancia en Gran Via interior mañana?", 
                 type="text", 
                 n_submit=0,
                 style={"borderRadius": "25px", "padding": "12px 20px"}
@@ -194,6 +212,7 @@ app.layout = dbc.Container([
     ])
 ], fluid=True, style={"maxWidth": "1000px", "paddingTop": "20px"})
 
+# 7. Callbacks
 @app.callback(
     Output("sync-status", "children"),
     Input("btn-sync", "n_clicks"),
@@ -203,8 +222,8 @@ def run_sync(n_clicks):
     global motor
     try:
         subprocess.run(["python", "update_and_train.py"], check=True)
-        motor = MotorPredictivo()
-        return "Sincronizacion finalizada: Datos al dia y modelos actualizados."
+        motor = MotorPredictivo() # Recarga los modelos nuevos en memoria
+        return "Sincronizacion finalizada: Todos los modelos multimétrica han sido reentrenados."
     except subprocess.CalledProcessError:
         return "Error en el script de actualizacion. Revisa la consola."
     except Exception as e:
@@ -241,20 +260,20 @@ def update_chat(n_clicks, n_submit, user_input, chat_history):
     chat_history.append(burbuja_usuario)
 
     try:
-        print(f"\n[USUARIO HA ESCRITO]: {user_input}")
+        print(f"\n[USUARIO]: {user_input}")
         respuesta = chat_session.send_message(user_input)
         texto_respuesta = respuesta.text
         
         if not texto_respuesta:
             if respuesta.function_calls:
-                texto_respuesta = "Fallo del SDK: La IA intento usar la herramienta pero no se ejecuto de forma automatica."
+                texto_respuesta = "Fallo del SDK: La IA intento usar la herramienta pero no obtuvo retorno automatico."
             else:
-                texto_respuesta = f"Gemini devolvio una respuesta vacia. Crudo: {respuesta}"
+                texto_respuesta = f"Respuesta vacia o bloqueada por seguridad."
                 
-        print(f"[RESPUESTA GEMINI]: {texto_respuesta}")
+        print(f"[VALDI]: {texto_respuesta}")
         
     except Exception as e:
-        texto_respuesta = f"Error critico de conexion con IA: {str(e)}"
+        texto_respuesta = f"Error critico de conexion con Gemini: {str(e)}"
         print(f"[ERROR IA]: {str(e)}")
 
     burbuja_bot = html.Div([

@@ -11,7 +11,7 @@ __pycache__/
 # Datos (Estos son los que pesan más de 100MB)
 *.csv
 dataset_global_raw.csv
-todas_las_ubicaciones.json
+!todas_las_ubicaciones.json
 # Modelos y Encoders (Se generan localmente al entrenar)
 models/
 *.pkl
