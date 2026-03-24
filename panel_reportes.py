@@ -2,6 +2,7 @@ import os
 import json
 import pandas as pd
 import io
+import traceback
 from datetime import datetime, timedelta
 import dash
 from dash import html, dcc, Input, Output, State
@@ -9,6 +10,8 @@ import dash_bootstrap_components as dbc
 from sincronizar_datos import actualizar_datos_csv
 from excels.generador_embudos import generar_excel_embudos
 from excels.generador_operativo import generar_excel_operativo
+from auditor_datos import generar_tabla_auditoria
+from analizador_anomalias import generar_panel_anomalias
 
 with open('todas_las_ubicaciones.json', 'r', encoding='utf-8') as f:
     datos_loc = json.load(f)
@@ -40,8 +43,8 @@ app.title = "Panel Analítico - Valdi"
 app.layout = dbc.Container([
     html.Br(),
     dbc.Row([
-        dbc.Col(html.H2("Reportes Ejecutivos", className="fw-bold"), width=8),
-        dbc.Col(dbc.Button("Sincronizar", id="btn-sync", color="dark", className="w-100 fw-bold"), width=4)
+        dbc.Col(html.H2("Panel central analítico", className="fw-bold"), width=8),
+        dbc.Col(dbc.Button("Sincronizar", id="btn-sync", style={"backgroundColor": "#203764", "color": "white", "border": "none"}, className="w-100 fw-bold"), width=4)
     ], className="mb-4"),
     html.Div(id="sync-status", className="text-success fw-bold text-end"),
     
@@ -59,7 +62,7 @@ app.layout = dbc.Container([
 
         dbc.Row([
             dbc.Col([
-                html.Label("1. Período a analizar en el Excel:", className="fw-bold mb-2 text-primary"),
+                html.Label("Período a analizar:", className="fw-bold mb-2 text-primary"),
                 dbc.RadioItems(
                     id="tipo-fecha",
                     options=[
@@ -92,34 +95,53 @@ app.layout = dbc.Container([
                     ),
                     id="contenedor-dia", style={"display": "none"}
                 )
-            ], width=6),
-            dbc.Col([
-                html.Label("2. Adjuntar KPIs Oficiales de la plataforma:", className="fw-bold mb-2 text-success"),
-                dbc.Checklist(
-                    id="kpis-oficiales", 
-                    options=[
-                        {"label": "7 días", "value": "7d"},
-                        {"label": "28 días", "value": "28d"},
-                        {"label": "Mes actual", "value": "month"},
-                        {"label": "Año actual", "value": "year"}
-                    ], 
-                    value=["7d", "28d"], 
-                    inline=True, 
-                    className="mb-4"
-                ),
-                
-                html.Label("3. Modelo de reporte:", className="fw-bold mb-2"),
-                dbc.RadioItems(id="tipo-reporte", options=[
-                    {"label": "Operativo (Días, Únicos, Estancia y Horas)", "value": "operativo"},
-                    {"label": "Embudos Dinámicos (Zonas completas)", "value": "embudos"}
-                ], value="operativo", inline=False)
-            ], width=6)
-        ], className="mb-5"),
-        
-        dbc.Button("Descargar Excel", id="btn-descargar", color="primary", className="w-100 fw-bold"),
-        dcc.Download(id="download-excel")
-    ]), className="shadow-lg border-0", style={"padding": "30px"})
-], fluid=True)
+            ], width=12)
+        ], className="mb-4"),
+
+        dcc.Tabs(id="tabs-panel", value='tab-reportes', children=[
+            dcc.Tab(label='Generador de reportes', value='tab-reportes', children=[
+                html.Br(),
+                dbc.Row([
+                    dbc.Col([
+                        html.Label("Adjuntar kpis oficiales:", className="fw-bold mb-2 text-success"),
+                        dbc.Checklist(
+                            id="kpis-oficiales", 
+                            options=[
+                                {"label": "7 días", "value": "7d"},
+                                {"label": "28 días", "value": "28d"},
+                                {"label": "Mes actual", "value": "month"},
+                                {"label": "Año actual", "value": "year"}
+                            ], 
+                            value=["7d", "28d"], 
+                            inline=True, 
+                            className="mb-4"
+                        )
+                    ], width=6),
+                    dbc.Col([
+                        html.Label("Modelo de reporte:", className="fw-bold mb-2"),
+                        dbc.RadioItems(id="tipo-reporte", options=[
+                            {"label": "Operativo (días, visitantes, estancia y horas)", "value": "operativo"},
+                            {"label": "Embudos dinámicos (flujos completos)", "value": "embudos"}
+                        ], value="operativo", inline=False)
+                    ], width=6)
+                ]),
+                dbc.Button("Descargar excel", id="btn-descargar", style={"backgroundColor": "#375623", "color": "white", "border": "none"}, className="w-100 fw-bold mt-4 mb-2"),
+                html.Div(id="error-msg", className="text-danger fw-bold mt-3 text-center fs-5"),
+                dcc.Download(id="download-excel")
+            ]),
+            
+            dcc.Tab(label='Auditoría e inteligencia', value='tab-auditoria', children=[
+                html.Br(),
+                dbc.Row([
+                    dbc.Col(dbc.Button("Auditar calidad de datos", id="btn-auditar", style={"backgroundColor": "#595959", "color": "white", "border": "none"}, className="w-100 fw-bold mb-4"), width=6),
+                    dbc.Col(dbc.Button("Analizar anomalías operativas", id="btn-anomalias", style={"backgroundColor": "#2f75b5", "color": "white", "border": "none"}, className="w-100 fw-bold mb-4"), width=6)
+                ]),
+                html.Div(id="audit-results", className="mb-5"),
+                html.Div(id="anomalias-results")
+            ])
+        ])
+    ]), className="shadow-lg border-0", style={"padding": "50px", "borderRadius": "12px"})
+], fluid=True, style={"padding": "30px"})
 
 @app.callback(
     Output("contenedor-rango", "style"), Output("contenedor-dia", "style"), Input("tipo-fecha", "value")
@@ -140,8 +162,37 @@ def sync_datos(n_clicks, locs):
     actualizar_datos_csv(locs if locs else [])
     return "Sincronizado correctamente."
 
+def filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs):
+    if not os.path.exists('dataset_global_raw.csv'): 
+        return None, "No se encuentra el archivo, sincroniza primero."
+        
+    df = pd.read_csv('dataset_global_raw.csv')
+    df['fecha'] = pd.to_datetime(df['fecha'])
+    
+    hoy = datetime.today().date()
+    if tipo_fecha == "ayer": start = end = pd.to_datetime(hoy - timedelta(days=1))
+    elif tipo_fecha == "7d_rel": start, end = pd.to_datetime(hoy - timedelta(days=7)), pd.to_datetime(hoy - timedelta(days=1))
+    elif tipo_fecha == "28d_rel": start, end = pd.to_datetime(hoy - timedelta(days=28)), pd.to_datetime(hoy - timedelta(days=1))
+    elif tipo_fecha == "dia" and dia_unico: start = end = pd.to_datetime(dia_unico)
+    elif tipo_fecha == "rango" and start_rango and end_rango: start, end = pd.to_datetime(start_rango), pd.to_datetime(end_rango)
+    else: return None, "Selecciona un rango válido."
+        
+    df_filt = df[(df['fecha'] >= start) & (df['fecha'] <= end)].copy()
+    if locs: df_filt = df_filt[df_filt['location_id'].isin(locs)]
+    
+    if df_filt.empty: return None, "No hay datos en las fechas seleccionadas."
+
+    df_filt['Ubicación'] = df_filt['location_id'].map(mapa_tiendas).fillna('Desconocida')
+    if 'zone_uuid' in df_filt.columns:
+        df_filt['Zona'] = df_filt['zone_uuid'].map(mapa_zonas).fillna('SinNombre')
+    else:
+        df_filt['Zona'] = 'SinNombre'
+        
+    return df_filt, start
+
 @app.callback(
     Output("download-excel", "data"),
+    Output("error-msg", "children"), 
     Input("btn-descargar", "n_clicks"),
     State("drop-locs", "value"), 
     State("tipo-fecha", "value"), 
@@ -153,49 +204,61 @@ def sync_datos(n_clicks, locs):
     prevent_initial_call=True
 )
 def generar_excel(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, kpis_oficiales, tipo_reporte):
-    if not os.path.exists('dataset_global_raw.csv'): return dash.no_update
-    df = pd.read_csv('dataset_global_raw.csv')
-    df['fecha'] = pd.to_datetime(df['fecha'])
-    
-    hoy = datetime.today().date()
-    if tipo_fecha == "ayer": start = end = pd.to_datetime(hoy - timedelta(days=1))
-    elif tipo_fecha == "7d_rel": start, end = pd.to_datetime(hoy - timedelta(days=7)), pd.to_datetime(hoy - timedelta(days=1))
-    elif tipo_fecha == "28d_rel": start, end = pd.to_datetime(hoy - timedelta(days=28)), pd.to_datetime(hoy - timedelta(days=1))
-    elif tipo_fecha == "dia" and dia_unico: start = end = pd.to_datetime(dia_unico)
-    elif tipo_fecha == "rango" and start_rango and end_rango: start, end = pd.to_datetime(start_rango), pd.to_datetime(end_rango)
-    else: return dash.no_update
-        
-    df_filt = df[(df['fecha'] >= start) & (df['fecha'] <= end)].copy()
-    if locs: df_filt = df_filt[df_filt['location_id'].isin(locs)]
-    if df_filt.empty: return dash.no_update
+    df_filt, err_or_start = filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs)
+    if df_filt is None: return dash.no_update, err_or_start
 
-    df_filt['Ubicación'] = df_filt['location_id'].map(mapa_tiendas).fillna('Desconocida')
-    
-    if 'zone_uuid' in df_filt.columns:
-        df_filt['Zona'] = df_filt['zone_uuid'].map(mapa_zonas).fillna('SinNombre')
-    elif 'zone' in df_filt.columns:
-        df_filt['Zona'] = df_filt['zone'].astype(str).map({'0': 'Caja', '1': 'Tienda', '2': 'Exterior', '3': 'Extra'}).fillna('SinNombre')
-    else:
-        df_filt['Zona'] = 'SinNombre'
-    
     df_filt = df_filt[~df_filt['Zona'].str.contains('Extra', case=False, na=False)]
     df_filt['Día semana'] = pd.Categorical(df_filt['fecha'].dt.dayofweek.map(dias_semana_es), categories=orden_dias, ordered=True)
-
     if 'dwell_time' in df_filt.columns: df_filt['dwell_time'] = df_filt['dwell_time'] / 60.0
 
-    df_filt['Día del periodo'] = (df_filt['fecha'] - start).dt.days
+    df_filt['Día del periodo'] = (df_filt['fecha'] - err_or_start).dt.days
     df_filt['Semana del periodo'] = "Semana " + ((df_filt['Día del periodo'] // 7) + 1).astype(str)
 
-    output = io.BytesIO()
-    writer = pd.ExcelWriter(output, engine='xlsxwriter')
-    workbook = writer.book
+    try:
+        output = io.BytesIO()
+        writer = pd.ExcelWriter(output, engine='xlsxwriter')
+        workbook = writer.book
 
-    if tipo_reporte == "embudos": generar_excel_embudos(df_filt, writer, workbook)
-    else: generar_excel_operativo(df_filt, writer, workbook, kpis_oficiales)
+        if tipo_reporte == "embudos": generar_excel_embudos(df_filt, writer, workbook)
+        else: generar_excel_operativo(df_filt, writer, workbook, kpis_oficiales)
 
-    workbook.close()
-    output.seek(0)
-    return dcc.send_bytes(output.getvalue(), f"Reporte_{tipo_reporte}.xlsx")
+        workbook.close()
+        output.seek(0)
+        return dcc.send_bytes(output.getvalue(), f"Reporte_{tipo_reporte}.xlsx"), ""
+    except Exception as e:
+        traceback.print_exc()
+        return dash.no_update, f"Error generando el excel: {str(e)}"
+
+@app.callback(
+    Output("audit-results", "children"),
+    Input("btn-auditar", "n_clicks"),
+    State("drop-locs", "value"), 
+    State("tipo-fecha", "value"), 
+    State("date-rango", "start_date"),
+    State("date-rango", "end_date"),
+    State("date-dia", "date"),
+    prevent_initial_call=True
+)
+def auditar_datos(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico):
+    df_filt, err_or_start = filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs)
+    if df_filt is None: return dbc.Alert(err_or_start, color="warning")
+    return generar_tabla_auditoria(df_filt)
+
+@app.callback(
+    Output("anomalias-results", "children"),
+    Input("btn-anomalias", "n_clicks"),
+    State("drop-locs", "value"), 
+    State("tipo-fecha", "value"), 
+    State("date-rango", "start_date"),
+    State("date-rango", "end_date"),
+    State("date-dia", "date"),
+    prevent_initial_call=True
+)
+def analizar_anomalias(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico):
+    df_filt, err_or_start = filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs)
+    if df_filt is None: return dbc.Alert(err_or_start, color="warning")
+    if 'dwell_time' in df_filt.columns: df_filt['dwell_time'] = df_filt['dwell_time'] / 60.0
+    return generar_panel_anomalias(df_filt)
 
 if __name__ == "__main__":
     app.run(debug=True, port=8051)
