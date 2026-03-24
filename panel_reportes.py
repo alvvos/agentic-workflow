@@ -103,7 +103,7 @@ app.layout = dbc.Container([
                         {"label": "Mes actual", "value": "month"},
                         {"label": "Año actual", "value": "year"}
                     ], 
-                    value=["7d", "28d"], # Por defecto marcamos 7 y 28 a la vez
+                    value=["7d", "28d"], 
                     inline=True, 
                     className="mb-4"
                 ),
@@ -157,7 +157,6 @@ def generar_excel(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico,
     df = pd.read_csv('dataset_global_raw.csv')
     df['fecha'] = pd.to_datetime(df['fecha'])
     
-    # 1. DETERMINAR LAS FECHAS DEL EXCEL DE FORMA INDEPENDIENTE A LOS KPIS
     hoy = datetime.today().date()
     if tipo_fecha == "ayer": start = end = pd.to_datetime(hoy - timedelta(days=1))
     elif tipo_fecha == "7d_rel": start, end = pd.to_datetime(hoy - timedelta(days=7)), pd.to_datetime(hoy - timedelta(days=1))
