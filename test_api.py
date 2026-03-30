@@ -23,7 +23,7 @@ def guardar_json_prueba(loc_id, fecha_str):
         print(f"Error en la peticion: {e}")
 
 if __name__ == "__main__":
-    UBICACION_PRUEBA = "251e7f40-95c7-4678-aa48-df1b90e3461c"
-    FECHA_PRUEBA = "2026-01-6"
+    UBICACION_PRUEBA = "67034276-0d01-4c90-a363-fa75699a19a4"
+    FECHA_PRUEBA = "2026-03-29"
     
     guardar_json_prueba(UBICACION_PRUEBA, FECHA_PRUEBA)

@@ -1,228 +1,311 @@
 import pandas as pd
 import ast
+from datetime import datetime
 
-def generar_excel_operativo(df_filt, writer, workbook, kpis_oficiales=None):
-    if kpis_oficiales is None: kpis_oficiales = []
-    
-    fmt_h = workbook.add_format({'bold': True, 'bg_color': '#203764', 'font_color': 'white', 'border': 1, 'align': 'center'})
-    fmt_h_z_uni = workbook.add_format({'bold': True, 'bg_color': '#C6E0B4', 'font_color': 'black', 'border': 1, 'align': 'left'})
-    fmt_h_z_new = workbook.add_format({'bold': True, 'bg_color': '#E4DFEC', 'font_color': 'black', 'border': 1, 'align': 'left'}) 
-    fmt_h_z_dwl = workbook.add_format({'bold': True, 'bg_color': '#D9E1F2', 'font_color': 'black', 'border': 1, 'align': 'left'})
-    
+def safely_eval_hours(x):
+    try:
+        if isinstance(x, str): return ast.literal_eval(x)
+        if isinstance(x, list): return x
+    except: pass
+    return [0]*24
+
+def safely_eval_dwell_dict(x):
+    try:
+        if isinstance(x, str): return ast.literal_eval(x)
+        if isinstance(x, dict): return x
+    except: pass
+    return {}
+
+def generar_excel_operativo(df_filt, writer, workbook, kpis_oficiales):
+    fmt_title = workbook.add_format({'bold': True, 'size': 12, 'font_color': '#203764'})
+    fmt_header = workbook.add_format({'bold': True, 'bg_color': '#203764', 'font_color': 'white', 'border': 1, 'align': 'center'})
     fmt_int = workbook.add_format({'num_format': '#,##0', 'align': 'center', 'border': 1})
     fmt_float = workbook.add_format({'num_format': '0.0', 'align': 'center', 'border': 1})
+    fmt_pct = workbook.add_format({'num_format': '0.0%', 'align': 'center', 'border': 1})
     
-    fmt_kpi_h = workbook.add_format({'bold': True, 'bg_color': '#FFC000', 'font_color': 'black', 'border': 1, 'align': 'center', 'size': 11})
-    fmt_kpi_val = workbook.add_format({'bold': True, 'font_color': '#C65911', 'border': 1, 'align': 'center', 'size': 12, 'num_format': '#,##0'})
-    fmt_kpi_freq = workbook.add_format({'bold': True, 'font_color': '#203764', 'border': 1, 'align': 'center', 'size': 12, 'num_format': '0.00'})
+    orden_dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+    hoy = datetime.today()
     
-    mapa_cols_kpi = {
-        "7d": [("Visitantes (7d)", "uv_7d"), ("Frecuencia (7d)", "freq_7d")],
-        "28d": [("Visitantes (28d)", "uv_28d"), ("Frecuencia (28d)", "freq_28d")],
-        "month": [("Visitantes (Mes)", "uv_month"), ("Frecuencia (Mes)", "freq_month")],
-        "year": [("Visitantes (Año)", "uv_year"), ("Frecuencia (Año)", "freq_year")]
-    }
-    
-    def safely_eval_hours(x):
-        try:
-            if isinstance(x, str): return ast.literal_eval(x)
-            if isinstance(x, list): return x
-        except: pass
-        return [0]*24
-
-    def parse_dwell_hist(x):
-        try:
-            hist = ast.literal_eval(x) if isinstance(x, str) else x
-            if isinstance(hist, list): return {d.get('minutes', 'unknown'): d.get('value', 0) for d in hist}
-        except: pass
-        return {}
-
-    rename_hist = {
-        'd_000_002': 'Rebote (0-2 min)', 'd_002_005': '2 a 5 min', 'd_005_010': '5 a 10 min',
-        'd_010_030': '10 a 30 min', 'd_010_060': '10 a 60 min', 'd_030_060': '30 a 60 min',
-        'd_060_120': '1 a 2 horas', 'd_120_240': 'Más de 2h'
-    }
-
     for loc in df_filt['Ubicación'].unique():
         df_loc = df_filt[df_filt['Ubicación'] == loc]
         sheet_name = str(loc)[:31].replace(':', '').replace('/', '')
-        zonas_loc = df_loc['Zona'].unique()
-        start_row = 1
+        ws = workbook.add_worksheet(sheet_name)
+        writer.sheets[sheet_name] = ws
         
-        if kpis_oficiales:
-            ws = workbook.add_worksheet(sheet_name)
-            writer.sheets[sheet_name] = ws
-            ultima_fecha = df_loc['fecha'].max()
-            df_ultimo_dia = df_loc[df_loc['fecha'] == ultima_fecha]
-            
-            ws.write(0, 0, f"KPIs OFICIALES DE LA PLATAFORMA (Datos consolidados a fecha {ultima_fecha.strftime('%d-%m-%Y')})", workbook.add_format({'bold': True, 'size': 13, 'font_color': '#C65911'}))
-            
-            ws.write(1, 0, "Zona", fmt_kpi_h)
-            col_idx = 1
-            for kpi_key in kpis_oficiales:
-                for titulo, _ in mapa_cols_kpi[kpi_key]:
-                    ws.write(1, col_idx, titulo, fmt_kpi_h)
-                    ws.set_column(col_idx, col_idx, 18)
-                    col_idx += 1
-            
-            fila_kpi = 2
-            for _, row in df_ultimo_dia.iterrows():
-                ws.write(fila_kpi, 0, row['Zona'], fmt_h)
-                c_idx = 1
-                for kpi_key in kpis_oficiales:
-                    for _, col_db in mapa_cols_kpi[kpi_key]:
-                        valor = row[col_db] if col_db in row.index else 0
-                        formato = fmt_kpi_freq if 'freq' in col_db else fmt_kpi_val
-                        ws.write(fila_kpi, c_idx, valor, formato)
-                        c_idx += 1
-                fila_kpi += 1
-            start_row = fila_kpi + 2
-
-        df_day = df_loc.pivot_table(index='Día semana', columns='Zona', values='total_visits', aggfunc='mean', observed=True).fillna(0).round(0).reset_index()
+        ws.set_column('A:A', 25)
+        ws.set_column('B:AE', 18)
         
-        if start_row == 1:
-            df_day.to_excel(writer, sheet_name=sheet_name, startrow=start_row, index=False)
-            ws = writer.sheets[sheet_name]
-        else:
-            for j, c in enumerate(df_day.columns): ws.write(start_row, j, c, fmt_h)
-            for r_idx, r in df_day.iterrows():
-                for c_idx, val in enumerate(r): ws.write(start_row + 1 + r_idx, c_idx, val)
-
-        ws.write(start_row-1, 0, f"Visitas medias por Día (Volumen bruto)", workbook.add_format({'bold': True, 'size': 12}))
-        ws.set_column('A:A', 18, fmt_int)
-        for i, col in enumerate(df_day.columns):
-            ws.write(start_row, i, col, fmt_h)
-            if i > 0:
-                ws.set_column(i, i, 14, fmt_int)
-                ws.conditional_format(start_row+1, i, start_row+1+len(df_day), i, {'type': 'data_bar', 'bar_color': '#D9E1F2'})
-
-        chart_day = workbook.add_chart({'type': 'column'})
-        for i in range(1, len(df_day.columns)):
-            chart_day.add_series({
-                'name': [sheet_name, start_row, i],
-                'categories': [sheet_name, start_row+1, 0, start_row+len(df_day), 0],
-                'values': [sheet_name, start_row+1, i, start_row+len(df_day), i]
+        fila = 0
+        
+        ws.write(fila, 0, f"Kpis oficiales de la plataforma (datos consolidados a fecha {hoy.strftime('%d-%m-%Y')})", fmt_title)
+        fila += 1
+        
+        kpi_cols = ['Zona']
+        if '7d' in kpis_oficiales:
+            kpi_cols += ['Visitantes (7d)', 'Frecuencia (7d)']
+        if '28d' in kpis_oficiales:
+            kpi_cols += ['Visitantes (28d)', 'Frecuencia (28d)']
+        if 'month' in kpis_oficiales:
+            kpi_cols += ['Visitantes (mes en curso)', 'Frecuencia (mes en curso)']
+        if 'year' in kpis_oficiales:
+            kpi_cols += ['Visitantes (año en curso)', 'Frecuencia (año en curso)']
+            
+        for c_idx, col_name in enumerate(kpi_cols):
+            ws.write(fila, c_idx, col_name, fmt_header)
+        fila += 1
+        
+        zonas = sorted(df_loc['Zona'].unique())
+        for z in zonas:
+            df_z = df_loc[df_loc['Zona'] == z].copy()
+            row_data = [z]
+            
+            for col in kpi_cols[1:]:
+                val = ''
+                col_buscar = None
+                
+                if '7d' in col:
+                    col_buscar = 'uv_7d' if 'Visitantes' in col else 'freq_7d'
+                elif '28d' in col:
+                    col_buscar = 'uv_28d' if 'Visitantes' in col else 'freq_28d'
+                elif 'mes' in col.lower():
+                    col_buscar = 'uv_month' if 'Visitantes' in col else 'freq_month'
+                elif 'año' in col.lower():
+                    col_buscar = 'uv_year' if 'Visitantes' in col else 'freq_year'
+                
+                if col_buscar and col_buscar in df_z.columns:
+                    serie_limpia = df_z[col_buscar].dropna()
+                    if not serie_limpia.empty:
+                        val = serie_limpia.iloc[-1]
+                            
+                row_data.append(val)
+                
+            for c_idx, val in enumerate(row_data):
+                fmt = fmt_float if isinstance(val, float) else fmt_int
+                ws.write(fila, c_idx, val, fmt)
+            fila += 1
+            
+        fila += 2
+        
+        ws.write(fila, 0, "Visitas medias por día (volumen bruto)", fmt_title)
+        fila += 1
+        
+        df_dia = df_loc.pivot_table(index='Día semana', columns='Zona', values='total_visits', aggfunc='mean', observed=True)
+        df_dia = df_dia.reindex(orden_dias).fillna(0)
+        
+        ws.write(fila, 0, "Día semana", fmt_header)
+        for c_idx, z in enumerate(df_dia.columns):
+            ws.write(fila, c_idx + 1, z, fmt_header)
+        fila += 1
+        
+        fila_inicio_dia = fila
+        for r_idx, (dia, row_data) in enumerate(df_dia.iterrows()):
+            ws.write(fila, 0, dia, fmt_header)
+            for c_idx, val in enumerate(row_data):
+                ws.write(fila, c_idx + 1, val, fmt_int)
+            fila += 1
+            
+        col_calle = [i for i, z in enumerate(df_dia.columns) if 'calle' in str(z).lower() or 'exterior' in str(z).lower()]
+        col_int = [i for i, z in enumerate(df_dia.columns) if 'calle' not in str(z).lower() and 'exterior' not in str(z).lower()]
+        
+        offset_chart_row = fila_inicio_dia - 1
+        
+        if col_int:
+            chart_int = workbook.add_chart({'type': 'column'})
+            for i in col_int:
+                chart_int.add_series({
+                    'name': [sheet_name, fila_inicio_dia - 1, i + 1],
+                    'categories': [sheet_name, fila_inicio_dia, 0, fila_inicio_dia + 6, 0],
+                    'values': [sheet_name, fila_inicio_dia, i + 1, fila_inicio_dia + 6, i + 1],
+                })
+            chart_int.set_title({'name': 'Visitas medias por día (interior)', 'name_font': {'size': 14}})
+            chart_int.set_size({'width': 1200, 'height': 350})
+            ws.insert_chart(offset_chart_row, len(df_dia.columns) + 2, chart_int)
+            offset_chart_row += 20
+            
+        if col_calle:
+            chart_ext = workbook.add_chart({'type': 'column'})
+            for i in col_calle:
+                chart_ext.add_series({
+                    'name': [sheet_name, fila_inicio_dia - 1, i + 1],
+                    'categories': [sheet_name, fila_inicio_dia, 0, fila_inicio_dia + 6, 0],
+                    'values': [sheet_name, fila_inicio_dia, i + 1, fila_inicio_dia + 6, i + 1],
+                })
+            chart_ext.set_title({'name': 'Visitas medias por día (exterior)', 'name_font': {'size': 14}})
+            chart_ext.set_size({'width': 1200, 'height': 350})
+            ws.insert_chart(offset_chart_row, len(df_dia.columns) + 2, chart_ext)
+            
+        fila = max(fila + 3, offset_chart_row + 20)
+        
+        ws.write(fila, 0, "Mapas de calor: captación y calidad diaria", fmt_title)
+        fila += 2
+        
+        def dibujar_mapa(df_mapa, titulo, fila_actual, tipo_val, color_scale, chart_type='line'):
+            ws.write(fila_actual, 0, titulo, fmt_title)
+            fila_actual += 1
+            
+            df_mapa = df_mapa.reindex(columns=orden_dias).fillna(0)
+            df_mapa['Promedio de semana'] = df_mapa.mean(axis=1)
+            
+            headers = ['Semana del periodo'] + list(df_mapa.columns)
+            for c_idx, h in enumerate(headers):
+                ws.write(fila_actual, c_idx, h, fmt_header)
+            fila_actual += 1
+            
+            fila_inicio_mapa = fila_actual
+            for r_idx, (sem, row_data) in enumerate(df_mapa.iterrows()):
+                ws.write(fila_actual, 0, sem, fmt_header)
+                for c_idx, val in enumerate(row_data):
+                    if tipo_val == 'pct': fmt = fmt_pct
+                    elif tipo_val == 'float': fmt = fmt_float
+                    else: fmt = fmt_int
+                    ws.write(fila_actual, c_idx + 1, val, fmt)
+                fila_actual += 1
+                
+            num_cols_dias = len(orden_dias)
+            ws.conditional_format(fila_inicio_mapa, 1, fila_actual - 1, num_cols_dias, {
+                'type': '3_color_scale', 'min_color': color_scale[0], 'mid_color': color_scale[1], 'max_color': color_scale[2]
             })
-        chart_day.set_title({'name': 'Volumen medio por día', 'name_font': {'size': 11}})
-        chart_day.set_size({'width': 480, 'height': 250})
-        ws.insert_chart(f'J{start_row+1}', chart_day)
-
-        start_u = start_row + len(df_day) + 3
-        ws.write(start_u, 0, "Mapas de Calor: Captación y Calidad Diaria", workbook.add_format({'bold': True, 'size': 12, 'font_color': '#375623'}))
-        start_u += 2
-        
-        for zona in zonas_loc:
-            df_z = df_loc[df_loc['Zona'] == zona]
-            df_cal_unicos = df_z.pivot_table(index='Semana del periodo', columns='Día semana', values='unique_visitors', aggfunc='mean', observed=True).fillna(0).round(0).reset_index()
+            ws.conditional_format(fila_inicio_mapa, num_cols_dias + 1, fila_actual - 1, num_cols_dias + 1, {
+                'type': '3_color_scale', 'min_color': "#FFFFFF", 'mid_color': "#D9D9D9", 'max_color': "#808080"
+            })
             
-            ws.write(start_u, 0, f"Zona: {zona} (Visitantes Totales)", fmt_h_z_uni)
-            for j, c in enumerate(df_cal_unicos.columns): ws.write(start_u+1, j, c, fmt_h)
-            for r_idx, r in df_cal_unicos.iterrows():
-                for c_idx, val in enumerate(r): ws.write(start_u + 2 + r_idx, c_idx, val, fmt_int)
-            for i in range(1, len(df_cal_unicos.columns)):
-                ws.conditional_format(start_u+2, i, start_u+1+len(df_cal_unicos), i, {'type': '3_color_scale', 'min_color': "#FFFFFF", 'mid_color': "#C6E0B4", 'max_color': "#548235"})
+            chart = workbook.add_chart({'type': chart_type})
             
-            chart_u = workbook.add_chart({'type': 'line'})
-            for r_idx in range(len(df_cal_unicos)):
-                chart_u.add_series({'name': [sheet_name, start_u + 2 + r_idx, 0], 'categories': [sheet_name, start_u + 1, 1, start_u + 1, len(df_cal_unicos.columns) - 1], 'values': [sheet_name, start_u + 2 + r_idx, 1, start_u + 2 + r_idx, len(df_cal_unicos.columns) - 1], 'marker': {'type': 'circle', 'size': 5}})
-            chart_u.set_title({'name': f'Visitantes Totales - {zona}', 'name_font': {'size': 10}})
-            chart_u.set_size({'width': 480, 'height': 220})
-            ws.insert_chart(f'J{start_u+1}', chart_u)
-            start_u += max(len(df_cal_unicos) + 4, 12)
+            if tipo_val == 'pct':
+                chart.set_y_axis({'num_format': '0%'})
 
-            if 'new_visitors' in df_z.columns:
-                df_cal_new = df_z.pivot_table(index='Semana del periodo', columns='Día semana', values='new_visitors', aggfunc='mean', observed=True).fillna(0).round(0).reset_index()
-                ws.write(start_u, 0, f"Zona: {zona} (Nuevos Visitantes)", fmt_h_z_new)
-                for j, c in enumerate(df_cal_new.columns): ws.write(start_u+1, j, c, fmt_h)
-                for r_idx, r in df_cal_new.iterrows():
-                    for c_idx, val in enumerate(r): ws.write(start_u + 2 + r_idx, c_idx, val, fmt_int)
-                for i in range(1, len(df_cal_new.columns)):
-                    ws.conditional_format(start_u+2, i, start_u+1+len(df_cal_new), i, {'type': '3_color_scale', 'min_color': "#FFFFFF", 'mid_color': "#E4DFEC", 'max_color': "#7030A0"}) 
+            for r_idx in range(len(df_mapa)):
+                chart.add_series({
+                    'name': [sheet_name, fila_inicio_mapa + r_idx, 0],
+                    'categories': [sheet_name, fila_inicio_mapa - 1, 1, fila_inicio_mapa - 1, num_cols_dias],
+                    'values': [sheet_name, fila_inicio_mapa + r_idx, 1, fila_inicio_mapa + r_idx, num_cols_dias],
+                })
+            chart.set_title({'name': titulo, 'name_font': {'size': 14}})
+            chart.set_size({'width': 1200, 'height': 350})
+            ws.insert_chart(fila_inicio_mapa - 1, len(df_mapa.columns) + 2, chart)
+            
+            return max(fila_actual + 2, fila_inicio_mapa + 20)
+
+        for z in zonas:
+            df_z = df_loc[df_loc['Zona'] == z]
+            
+            if 'total_visits' in df_z.columns:
+                df_tot = df_z.pivot_table(index='Semana del periodo', columns='Día semana', values='total_visits', aggfunc='sum', observed=True)
+                fila = dibujar_mapa(df_tot, f"Zona: {z.lower()} (visitantes totales)", fila, 'int', ["#FFFFFF", "#C6E0B4", "#548235"], 'line')
                 
-                chart_n = workbook.add_chart({'type': 'line'})
-                for r_idx in range(len(df_cal_new)):
-                    chart_n.add_series({'name': [sheet_name, start_u + 2 + r_idx, 0], 'categories': [sheet_name, start_u + 1, 1, start_u + 1, len(df_cal_new.columns) - 1], 'values': [sheet_name, start_u + 2 + r_idx, 1, start_u + 2 + r_idx, len(df_cal_new.columns) - 1], 'marker': {'type': 'circle', 'size': 5}})
-                chart_n.set_title({'name': f'Nuevos Visitantes - {zona}', 'name_font': {'size': 10}})
-                chart_n.set_size({'width': 480, 'height': 220})
-                ws.insert_chart(f'J{start_u+1}', chart_n)
-                start_u += max(len(df_cal_new) + 4, 12)
-
-        start_d = start_u
-        ws.write(start_d, 0, "Mapas de Calor: Tiempo de Estancia en Minutos", workbook.add_format({'bold': True, 'size': 12, 'font_color': '#2F75B5'}))
-        start_d += 2
-        
-        for zona in zonas_loc:
-            df_z = df_loc[df_loc['Zona'] == zona]
-            df_cal_dwell = df_z.pivot_table(index='Semana del periodo', columns='Día semana', values='dwell_time', aggfunc='mean', observed=True).fillna(0).round(1).reset_index()
-            ws.write(start_d, 0, f"Zona: {zona} (Minutos)", fmt_h_z_dwl)
-            for j, c in enumerate(df_cal_dwell.columns): ws.write(start_d+1, j, c, fmt_h)
-            for r_idx, r in df_cal_dwell.iterrows():
-                for c_idx, val in enumerate(r): ws.write(start_d + 2 + r_idx, c_idx, val, fmt_int if c_idx == 0 else fmt_float)
-            for i in range(1, len(df_cal_dwell.columns)):
-                ws.conditional_format(start_d+2, i, start_d+1+len(df_cal_dwell), i, {'type': '3_color_scale', 'min_color': "#FFFFFF", 'mid_color': "#9BC2E6", 'max_color': "#2F75B5"})
+            df_uni = None
+            if 'unique_visitors' in df_z.columns:
+                df_uni = df_z.pivot_table(index='Semana del periodo', columns='Día semana', values='unique_visitors', aggfunc='sum', observed=True)
+                fila = dibujar_mapa(df_uni, f"Zona: {z.lower()} (visitantes únicos)", fila, 'int', ["#FFFFFF", "#C6E0B4", "#375623"], 'line')
             
-            chart_d = workbook.add_chart({'type': 'line'})
-            for r_idx in range(len(df_cal_dwell)):
-                chart_d.add_series({'name': [sheet_name, start_d + 2 + r_idx, 0], 'categories': [sheet_name, start_d + 1, 1, start_d + 1, len(df_cal_dwell.columns) - 1], 'values': [sheet_name, start_d + 2 + r_idx, 1, start_d + 2 + r_idx, len(df_cal_dwell.columns) - 1], 'marker': {'type': 'circle', 'size': 5}})
-            chart_d.set_title({'name': f'Tendencia Estancia - {zona}', 'name_font': {'size': 10}})
-            chart_d.set_size({'width': 480, 'height': 220})
-            ws.insert_chart(f'J{start_d+1}', chart_d)
-            start_d += max(len(df_cal_dwell) + 4, 12)
-
-        if 'dwell_hist' in df_loc.columns:
-            start_hist = start_d
-            ws.write(start_hist, 0, "Distribución de Estancia Acumulada (Fidelidad de clientes)", workbook.add_format({'bold': True, 'size': 12, 'font_color': '#595959'}))
-            
-            hist_series = df_loc['dwell_hist'].apply(parse_dwell_hist)
-            df_hist = pd.DataFrame(hist_series.tolist(), index=df_loc.index).fillna(0)
-            df_calor_hist = pd.concat([df_loc[['Zona']], df_hist], axis=1)
-            
-            df_hist_grouped = df_calor_hist.groupby('Zona').sum(numeric_only=True).reset_index()
-            df_hist_grouped.rename(columns=rename_hist, inplace=True)
-            
-            cols_ordenadas = ['Zona'] + [v for k, v in rename_hist.items() if v in df_hist_grouped.columns]
-            df_hist_grouped = df_hist_grouped[cols_ordenadas]
-            
-            for j, c in enumerate(df_hist_grouped.columns): ws.write(start_hist+1, j, c, fmt_h)
-            for r_idx, r in df_hist_grouped.iterrows():
-                for c_idx, val in enumerate(r): ws.write(start_hist + 2 + r_idx, c_idx, val, fmt_int)
+            if 'new_visitors' in df_z.columns and df_uni is not None:
+                df_new = df_z.pivot_table(index='Semana del periodo', columns='Día semana', values='new_visitors', aggfunc='sum', observed=True)
+                df_new_pct = df_new.div(df_uni.replace(0, pd.NA)).fillna(0)
+                fila = dibujar_mapa(df_new_pct, f"Zona: {z.lower()} (% nuevos visitantes)", fila, 'pct', ["#FFFFFF", "#E4DFEC", "#7030A0"], 'column')
                 
-            for i in range(1, len(df_hist_grouped.columns)):
-                ws.conditional_format(start_hist+2, i, start_hist+1+len(df_hist_grouped), i, {'type': 'data_bar', 'bar_color': '#A6A6A6'})
-            
-            start_d = start_hist + len(df_hist_grouped) + 4
+        ws.write(fila, 0, "Mapas de calor: tiempo de estancia en minutos", fmt_title)
+        fila += 2
+        for z in zonas:
+            df_z = df_loc[df_loc['Zona'] == z]
+            if 'dwell_time' in df_z.columns:
+                df_d = df_z.pivot_table(index='Semana del periodo', columns='Día semana', values='dwell_time', aggfunc='mean', observed=True)
+                fila = dibujar_mapa(df_d, f"Zona: {z.lower()} (minutos)", fila, 'float', ["#FFFFFF", "#9BC2E6", "#2F75B5"], 'line')
 
+        col_dist = 'dwell_hist' if 'dwell_hist' in df_loc.columns else ('dwell_distribution' if 'dwell_distribution' in df_loc.columns else ('dwell_dict' if 'dwell_dict' in df_loc.columns else None))
+        if col_dist:
+            ws.write(fila, 0, "Distribución de estancia acumulada (fidelidad de clientes)", fmt_title)
+            fila += 1
+            dist_data = []
+            for z in zonas:
+                df_z = df_loc[df_loc['Zona'] == z]
+                sum_dict = {}
+                for d in df_z[col_dist].dropna():
+                    parsed = safely_eval_dwell_dict(d)
+                    if isinstance(parsed, dict):
+                        for k, v in parsed.items():
+                            sum_dict[k] = sum_dict.get(k, 0) + int(v)
+                    elif isinstance(parsed, list):
+                        mapa_nombres = {
+                            'd_000_002': 'Rebote (0-2 min)', 'd_002_005': '2 a 5 min', 
+                            'd_005_010': '5 a 10 min', 'd_010_030': '10 a 30 min', 
+                            'd_010_060': '10 a 60 min', 'd_030_060': '30 a 60 min', 
+                            'd_060_120': '1 a 2 horas', 'd_120_240': 'Más de 2h'
+                        }
+                        for item in parsed:
+                            if isinstance(item, dict) and 'minutes' in item:
+                                k = mapa_nombres.get(item['minutes'], item['minutes'])
+                                sum_dict[k] = sum_dict.get(k, 0) + int(item.get('value', 0))
+                sum_dict['Zona'] = z
+                dist_data.append(sum_dict)
+                
+            if dist_data:
+                df_dist = pd.DataFrame(dist_data).fillna(0).set_index('Zona')
+                pos_cols = ['Rebote (0-2 min)', '2 a 5 min', '5 a 10 min', '10 a 30 min', '10 a 60 min', '30 a 60 min', '1 a 2 horas', 'Más de 2h']
+                cols_present = [c for c in pos_cols if c in df_dist.columns]
+                oth_cols = [c for c in df_dist.columns if c not in pos_cols]
+                df_dist = df_dist[cols_present + oth_cols]
+                
+                ws.write(fila, 0, "Zona", fmt_header)
+                for c_idx, c in enumerate(df_dist.columns):
+                    ws.write(fila, c_idx + 1, c, fmt_header)
+                fila += 1
+                
+                for r_idx, (z, row_data) in enumerate(df_dist.iterrows()):
+                    ws.write(fila, 0, z, fmt_header)
+                    for c_idx, val in enumerate(row_data):
+                        ws.write(fila, c_idx + 1, val, fmt_int)
+                    fila += 1
+                fila += 3
+
+        ws.write(fila, 0, "Tráfico medio por hora", fmt_title)
+        fila += 1
+        
         horas_exp = pd.DataFrame(df_loc['hourly_visits'].apply(safely_eval_hours).to_list(), index=df_loc.index)
         horas_exp.columns = [f"{i:02d}:00" for i in range(24)]
         df_calor = pd.concat([df_loc[['Zona']], horas_exp], axis=1)
+        df_hora = df_calor.groupby('Zona').mean().T.round(0).fillna(0)
         
-        df_hour = df_calor.groupby('Zona').mean().T.round(0).reset_index()
-        df_hour.rename(columns={'index': 'Hora'}, inplace=True)
+        ws.write(fila, 0, "Hora", fmt_header)
+        for c_idx, z in enumerate(df_hora.columns):
+            ws.write(fila, c_idx + 1, z, fmt_header)
+        fila += 1
         
-        start_h = start_d + 1
-        ws.write(start_h, 0, "Tráfico medio por Hora", workbook.add_format({'bold': True, 'size': 12}))
-        
-        for j, c in enumerate(df_hour.columns): ws.write(start_h+1, j, c, fmt_h)
-        for r_idx, r in df_hour.iterrows():
-            for c_idx, val in enumerate(r): ws.write(start_h + 2 + r_idx, c_idx, val, fmt_int)
-
-        for i in range(1, len(df_hour.columns)):
-            ws.conditional_format(start_h+2, i, start_h+1+len(df_hour), i, {'type': '3_color_scale', 'min_color': "#FFFFFF", 'mid_color': "#FFE082", 'max_color': "#F44336"})
-
-        chart_h = workbook.add_chart({'type': 'line'})
-        for i in range(1, len(df_hour.columns)):
-            nombre_zona = str(df_hour.columns[i]).lower()
+        fila_inicio_hora = fila
+        for r_idx, (hora, row_data) in enumerate(df_hora.iterrows()):
+            ws.write(fila, 0, hora, fmt_header)
+            for c_idx, val in enumerate(row_data):
+                ws.write(fila, c_idx + 1, val, fmt_int)
+            fila += 1
             
-            if any(palabra in nombre_zona for palabra in ['calle', 'exterior']):
-                continue
-                
-            chart_h.add_series({
-                'name': [sheet_name, start_h+1, i],
-                'categories': [sheet_name, start_h+2, 0, start_h+1+len(df_hour), 0],
-                'values': [sheet_name, start_h+2, i, start_h+1+len(df_hour), i],
-                'line': {'width': 2.2}
-            })
+        ws.conditional_format(fila_inicio_hora, 1, fila - 1, len(df_hora.columns), {
+            'type': '3_color_scale', 'min_color': "#FFFFFF", 'mid_color': "#FFE082", 'max_color': "#F44336"
+        })
             
-        chart_h.set_title({'name': 'Curva horaria por zona (Interior)', 'name_font': {'size': 11}})
-        chart_h.set_size({'width': 800, 'height': 380})
-        ws.insert_chart(f'J{start_h+1}', chart_h)
+        col_calle_hora = [i for i, z in enumerate(df_hora.columns) if 'calle' in str(z).lower() or 'exterior' in str(z).lower()]
+        col_int_hora = [i for i, z in enumerate(df_hora.columns) if 'calle' not in str(z).lower() and 'exterior' not in str(z).lower()]
+        
+        offset_chart_row = fila_inicio_hora - 1
+        if col_int_hora:
+            chart_hora_int = workbook.add_chart({'type': 'line'})
+            for i in col_int_hora:
+                chart_hora_int.add_series({
+                    'name': [sheet_name, fila_inicio_hora - 1, i + 1],
+                    'categories': [sheet_name, fila_inicio_hora, 0, fila_inicio_hora + 23, 0],
+                    'values': [sheet_name, fila_inicio_hora, i + 1, fila_inicio_hora + 23, i + 1],
+                })
+            chart_hora_int.set_title({'name': 'Tráfico medio por hora (interior)', 'name_font': {'size': 14}})
+            chart_hora_int.set_size({'width': 1200, 'height': 350})
+            ws.insert_chart(offset_chart_row, len(df_hora.columns) + 2, chart_hora_int)
+            offset_chart_row += 20
+            
+        if col_calle_hora:
+            chart_hora_ext = workbook.add_chart({'type': 'line'})
+            for i in col_calle_hora:
+                chart_hora_ext.add_series({
+                    'name': [sheet_name, fila_inicio_hora - 1, i + 1],
+                    'categories': [sheet_name, fila_inicio_hora, 0, fila_inicio_hora + 23, 0],
+                    'values': [sheet_name, fila_inicio_hora, i + 1, fila_inicio_hora + 23, i + 1],
+                })
+            chart_hora_ext.set_title({'name': 'Tráfico medio por hora (exterior)', 'name_font': {'size': 14}})
+            chart_hora_ext.set_size({'width': 1200, 'height': 350})
+            ws.insert_chart(offset_chart_row, len(df_hora.columns) + 2, chart_hora_ext)

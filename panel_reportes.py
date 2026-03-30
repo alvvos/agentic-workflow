@@ -38,13 +38,14 @@ dias_semana_es = {0: 'Lunes', 1: 'Martes', 2: 'Miércoles', 3: 'Jueves', 4: 'Vie
 orden_dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.LUX])
-app.title = "Panel Analítico - Valdi"
+app.title = "Panel analítico - Valdi"
 
 app.layout = dbc.Container([
     html.Br(),
     dbc.Row([
-        dbc.Col(html.H2("Panel central analítico", className="fw-bold"), width=8),
-        dbc.Col(dbc.Button("Sincronizar", id="btn-sync", style={"backgroundColor": "#203764", "color": "white", "border": "none"}, className="w-100 fw-bold"), width=4)
+        dbc.Col(html.H2("Panel central analítico", className="fw-bold"), width=6),
+        dbc.Col(dbc.Button("Sincronizar", id="btn-sync", style={"backgroundColor": "#203764", "color": "white", "border": "none"}, className="w-100 fw-bold"), width=3),
+        dbc.Col(dbc.Button("Flush data", id="btn-flush", style={"backgroundColor": "#c00000", "color": "white", "border": "none"}, className="w-100 fw-bold"), width=3)
     ], className="mb-4"),
     html.Div(id="sync-status", className="text-success fw-bold text-end"),
     
@@ -133,8 +134,14 @@ app.layout = dbc.Container([
             dcc.Tab(label='Auditoría e inteligencia', value='tab-auditoria', children=[
                 html.Br(),
                 dbc.Row([
-                    dbc.Col(dbc.Button("Auditar calidad de datos", id="btn-auditar", style={"backgroundColor": "#595959", "color": "white", "border": "none"}, className="w-100 fw-bold mb-4"), width=6),
-                    dbc.Col(dbc.Button("Analizar anomalías operativas", id="btn-anomalias", style={"backgroundColor": "#2f75b5", "color": "white", "border": "none"}, className="w-100 fw-bold mb-4"), width=6)
+                    dbc.Col([
+                        dbc.Button("Sistema de alertas", id="btn-auditar", style={"backgroundColor": "#595959", "color": "white", "border": "none"}, className="w-100 fw-bold mb-2"),
+                        dbc.Button("Minimizar tabla", id="btn-min-auditoria", color="light", size="sm", className="w-100 mb-4 text-muted border-0")
+                    ], width=6),
+                    dbc.Col([
+                        dbc.Button("Visualizar gráficas", id="btn-anomalias", style={"backgroundColor": "#2f75b5", "color": "white", "border": "none"}, className="w-100 fw-bold mb-2"),
+                        dbc.Button("Minimizar gráficos", id="btn-min-anomalias", color="light", size="sm", className="w-100 mb-4 text-muted border-0")
+                    ], width=6)
                 ]),
                 html.Div(id="audit-results", className="mb-5"),
                 html.Div(id="anomalias-results")
@@ -157,8 +164,20 @@ def actualizar_locs(org_uuid):
     opciones = mapa_locs_por_org.get(org_uuid, [])
     return opciones, [opc['value'] for opc in opciones]
 
-@app.callback(Output("sync-status", "children"), Input("btn-sync", "n_clicks"), State("drop-locs", "value"), prevent_initial_call=True)
-def sync_datos(n_clicks, locs):
+@app.callback(
+    Output("sync-status", "children"), 
+    Input("btn-sync", "n_clicks"), 
+    Input("btn-flush", "n_clicks"), 
+    State("drop-locs", "value"), 
+    prevent_initial_call=True
+)
+def sync_datos(n_sync, n_flush, locs):
+    if dash.ctx.triggered_id == "btn-flush":
+        if os.path.exists('dataset_global_raw.csv'):
+            os.remove('dataset_global_raw.csv')
+        actualizar_datos_csv(locs if locs else [])
+        return "Datos borrados y resincronizados desde cero."
+        
     actualizar_datos_csv(locs if locs else [])
     return "Sincronizado correctamente."
 
@@ -232,6 +251,7 @@ def generar_excel(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico,
 @app.callback(
     Output("audit-results", "children"),
     Input("btn-auditar", "n_clicks"),
+    Input("btn-min-auditoria", "n_clicks"),
     State("drop-locs", "value"), 
     State("tipo-fecha", "value"), 
     State("date-rango", "start_date"),
@@ -239,7 +259,10 @@ def generar_excel(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico,
     State("date-dia", "date"),
     prevent_initial_call=True
 )
-def auditar_datos(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico):
+def auditar_datos(n_auditar, n_min, locs, tipo_fecha, start_rango, end_rango, dia_unico):
+    if dash.ctx.triggered_id == "btn-min-auditoria":
+        return ""
+    
     df_filt, err_or_start = filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs)
     if df_filt is None: return dbc.Alert(err_or_start, color="warning")
     return generar_tabla_auditoria(df_filt)
@@ -247,6 +270,7 @@ def auditar_datos(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico)
 @app.callback(
     Output("anomalias-results", "children"),
     Input("btn-anomalias", "n_clicks"),
+    Input("btn-min-anomalias", "n_clicks"),
     State("drop-locs", "value"), 
     State("tipo-fecha", "value"), 
     State("date-rango", "start_date"),
@@ -254,7 +278,10 @@ def auditar_datos(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico)
     State("date-dia", "date"),
     prevent_initial_call=True
 )
-def analizar_anomalias(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico):
+def analizar_anomalias(n_anomalias, n_min, locs, tipo_fecha, start_rango, end_rango, dia_unico):
+    if dash.ctx.triggered_id == "btn-min-anomalias":
+        return ""
+        
     df_filt, err_or_start = filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs)
     if df_filt is None: return dbc.Alert(err_or_start, color="warning")
     if 'dwell_time' in df_filt.columns: df_filt['dwell_time'] = df_filt['dwell_time'] / 60.0
