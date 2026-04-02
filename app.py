@@ -3,6 +3,7 @@ import json
 import pandas as pd
 import io
 import traceback
+import uuid
 from datetime import datetime, timedelta
 import dash
 from dash import html, dcc, Input, Output, State
@@ -13,6 +14,7 @@ from excels.generador_operativo import generar_excel_operativo
 from auditor_datos import generar_tabla_auditoria
 from analizador_anomalias import generar_panel_anomalias
 
+# Carga de datos
 with open('todas_las_ubicaciones.json', 'r', encoding='utf-8') as f:
     datos_loc = json.load(f)
 
@@ -43,118 +45,136 @@ app = dash.Dash(
     suppress_callback_exceptions=True
 )
 app.title = "Panel analítico - Valdi"
-
 server = app.server
 
-app.layout = dbc.Container([
-    html.Br(),
-    dbc.Row([
-        dbc.Col(html.H2("Panel central analítico", className="fw-bold"), width=6),
-        dbc.Col(dbc.Button("Sincronizar", id="btn-sync", style={"backgroundColor": "#203764", "color": "white", "border": "none"}, className="w-100 fw-bold"), width=3),
-        dbc.Col(dbc.Button("Flush data", id="btn-flush", style={"backgroundColor": "#c00000", "color": "white", "border": "none"}, className="w-100 fw-bold"), width=3)
-    ], className="mb-4"),
-    html.Div(id="sync-status", className="text-success fw-bold text-end"),
+# Convertimos el layout en una función para generar un UUID nuevo cada vez que se carga la página
+def serve_layout():
+    session_id = str(uuid.uuid4())
     
-    dbc.Card(dbc.CardBody([
-        dbc.Row([
-            dbc.Col([
-                html.Label("Organización:", className="fw-bold"),
-                dcc.Dropdown(id="drop-org", options=opciones_orgs)
-            ], width=6),
-            dbc.Col([
-                html.Label("Ubicaciones:", className="fw-bold"),
-                dcc.Dropdown(id="drop-locs", multi=True)
-            ], width=6)
-        ], className="mb-4"),
+    return dbc.Container([
+        # Memoria invisible para el ID de sesión del usuario
+        dcc.Store(id='session-id', data=session_id),
+        
+        # Pop-up de notificaciones (Toast)
+        dbc.Toast(
+            id="toast-notificacion",
+            header="Notificación",
+            is_open=False,
+            dismissable=True,
+            icon="info",
+            duration=4000,
+            style={"position": "fixed", "top": 20, "right": 20, "width": 350, "zIndex": 9999, "fontSize": "15px"}
+        ),
 
+        html.Br(),
         dbc.Row([
-            dbc.Col([
-                html.Label("Período a analizar:", className="fw-bold mb-2 text-primary"),
-                dbc.RadioItems(
-                    id="tipo-fecha",
-                    options=[
-                        {"label": "Ayer", "value": "ayer"},
-                        {"label": "Últimos 7 días", "value": "7d_rel"},
-                        {"label": "Últimos 28 días", "value": "28d_rel"},
-                        {"label": "Día concreto", "value": "dia"},
-                        {"label": "Rango temporal", "value": "rango"}
-                    ],
-                    value="7d_rel",
-                    inline=True,
-                    className="mb-3"
-                ),
-                html.Div(
-                    dcc.DatePickerRange(
-                        id='date-rango',
-                        start_date=datetime(2025, 9, 1).date(),
-                        end_date=datetime.today().date(),
-                        display_format='YYYY-MM-DD',
-                        className="w-100"
-                    ),
-                    id="contenedor-rango", style={"display": "none"}
-                ),
-                html.Div(
-                    dcc.DatePickerSingle(
-                        id='date-dia',
-                        date=datetime.today().date(),
-                        display_format='YYYY-MM-DD',
-                        className="w-100"
-                    ),
-                    id="contenedor-dia", style={"display": "none"}
-                )
-            ], width=12)
+            dbc.Col(html.H2("Panel central analítico", className="fw-bold"), width=6),
+            dbc.Col(dbc.Button("Sincronizar", id="btn-sync", style={"backgroundColor": "#203764", "color": "white", "border": "none"}, className="w-100 fw-bold"), width=3),
+            dbc.Col(dbc.Button("Flush data", id="btn-flush", style={"backgroundColor": "#c00000", "color": "white", "border": "none"}, className="w-100 fw-bold"), width=3)
         ], className="mb-4"),
+        
+        dbc.Card(dbc.CardBody([
+            dbc.Row([
+                dbc.Col([
+                    html.Label("Organización:", className="fw-bold"),
+                    dcc.Dropdown(id="drop-org", options=opciones_orgs)
+                ], width=6),
+                dbc.Col([
+                    html.Label("Ubicaciones:", className="fw-bold"),
+                    dcc.Dropdown(id="drop-locs", multi=True)
+                ], width=6)
+            ], className="mb-4"),
 
-        dcc.Tabs(id="tabs-panel", value='tab-reportes', children=[
-            dcc.Tab(label='Generador de reportes', value='tab-reportes', children=[
-                html.Br(),
-                dbc.Row([
-                    dbc.Col([
-                        html.Label("Adjuntar kpis oficiales:", className="fw-bold mb-2 text-success"),
-                        dbc.Checklist(
-                            id="kpis-oficiales", 
-                            options=[
-                                {"label": "7 días", "value": "7d"},
-                                {"label": "28 días", "value": "28d"},
-                                {"label": "Mes actual", "value": "month"},
-                                {"label": "Año actual", "value": "year"}
-                            ], 
-                            value=["7d", "28d"], 
-                            inline=True, 
-                            className="mb-4"
-                        )
-                    ], width=6),
-                    dbc.Col([
-                        html.Label("Modelo de reporte:", className="fw-bold mb-2"),
-                        dbc.RadioItems(id="tipo-reporte", options=[
-                            {"label": "Operativo (días, visitantes, estancia y horas)", "value": "operativo"},
-                            {"label": "Embudos dinámicos (flujos completos)", "value": "embudos"}
-                        ], value="operativo", inline=False)
-                    ], width=6)
+            dbc.Row([
+                dbc.Col([
+                    html.Label("Período a analizar:", className="fw-bold mb-2 text-primary"),
+                    dbc.RadioItems(
+                        id="tipo-fecha",
+                        options=[
+                            {"label": "Ayer", "value": "ayer"},
+                            {"label": "Últimos 7 días", "value": "7d_rel"},
+                            {"label": "Últimos 28 días", "value": "28d_rel"},
+                            {"label": "Día concreto", "value": "dia"},
+                            {"label": "Rango temporal", "value": "rango"}
+                        ],
+                        value="7d_rel",
+                        inline=True,
+                        className="mb-3"
+                    ),
+                    html.Div(
+                        dcc.DatePickerRange(
+                            id='date-rango',
+                            start_date=datetime(2025, 9, 1).date(),
+                            end_date=datetime.today().date(),
+                            display_format='YYYY-MM-DD',
+                            className="w-100"
+                        ),
+                        id="contenedor-rango", style={"display": "none"}
+                    ),
+                    html.Div(
+                        dcc.DatePickerSingle(
+                            id='date-dia',
+                            date=datetime.today().date(),
+                            display_format='YYYY-MM-DD',
+                            className="w-100"
+                        ),
+                        id="contenedor-dia", style={"display": "none"}
+                    )
+                ], width=12)
+            ], className="mb-4"),
+
+            dcc.Tabs(id="tabs-panel", value='tab-reportes', children=[
+                dcc.Tab(label='Generador de reportes', value='tab-reportes', children=[
+                    html.Br(),
+                    dbc.Row([
+                        dbc.Col([
+                            html.Label("Adjuntar kpis oficiales:", className="fw-bold mb-2 text-success"),
+                            dbc.Checklist(
+                                id="kpis-oficiales", 
+                                options=[
+                                    {"label": "7 días", "value": "7d"},
+                                    {"label": "28 días", "value": "28d"},
+                                    {"label": "Mes actual", "value": "month"},
+                                    {"label": "Año actual", "value": "year"}
+                                ], 
+                                value=["7d", "28d"], 
+                                inline=True, 
+                                className="mb-4"
+                            )
+                        ], width=6),
+                        dbc.Col([
+                            html.Label("Modelo de reporte:", className="fw-bold mb-2"),
+                            dbc.RadioItems(id="tipo-reporte", options=[
+                                {"label": "Operativo (días, visitantes, estancia y horas)", "value": "operativo"},
+                                {"label": "Embudos dinámicos (flujos completos)", "value": "embudos"}
+                            ], value="operativo", inline=False)
+                        ], width=6)
+                    ]),
+                    dbc.Button("Descargar excel", id="btn-descargar", style={"backgroundColor": "#375623", "color": "white", "border": "none"}, className="w-100 fw-bold mt-4 mb-2"),
+                    html.Div(id="error-msg", className="text-danger fw-bold mt-3 text-center fs-5"),
+                    dcc.Download(id="download-excel")
                 ]),
-                dbc.Button("Descargar excel", id="btn-descargar", style={"backgroundColor": "#375623", "color": "white", "border": "none"}, className="w-100 fw-bold mt-4 mb-2"),
-                html.Div(id="error-msg", className="text-danger fw-bold mt-3 text-center fs-5"),
-                dcc.Download(id="download-excel")
-            ]),
-            
-            dcc.Tab(label='Radar de datos', value='tab-auditoria', children=[
-                html.Br(),
-                dbc.Row([
-                    dbc.Col([
-                        dbc.Button("Sistema de alertas", id="btn-auditar", style={"backgroundColor": "#595959", "color": "white", "border": "none"}, className="w-100 fw-bold mb-2"),
-                        dbc.Button("Minimizar tabla", id="btn-min-auditoria", color="light", size="sm", className="w-100 mb-4 text-muted border-0")
-                    ], width=6),
-                    dbc.Col([
-                        dbc.Button("Visualizar gráficas", id="btn-anomalias", style={"backgroundColor": "#2f75b5", "color": "white", "border": "none"}, className="w-100 fw-bold mb-2"),
-                        dbc.Button("Minimizar gráficos", id="btn-min-anomalias", color="light", size="sm", className="w-100 mb-4 text-muted border-0")
-                    ], width=6)
-                ]),
-                html.Div(id="audit-results", className="mb-5"),
-                html.Div(id="anomalias-results")
+                
+                dcc.Tab(label='Radar de datos', value='tab-auditoria', children=[
+                    html.Br(),
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Button("Sistema de alertas", id="btn-auditar", style={"backgroundColor": "#595959", "color": "white", "border": "none"}, className="w-100 fw-bold mb-2"),
+                            dbc.Button("Minimizar tabla", id="btn-min-auditoria", color="light", size="sm", className="w-100 mb-4 text-muted border-0")
+                        ], width=6),
+                        dbc.Col([
+                            dbc.Button("Visualizar gráficas", id="btn-anomalias", style={"backgroundColor": "#2f75b5", "color": "white", "border": "none"}, className="w-100 fw-bold mb-2"),
+                            dbc.Button("Minimizar gráficos", id="btn-min-anomalias", color="light", size="sm", className="w-100 mb-4 text-muted border-0")
+                        ], width=6)
+                    ]),
+                    html.Div(id="audit-results", className="mb-5"),
+                    html.Div(id="anomalias-results")
+                ])
             ])
-        ])
-    ]), className="shadow-lg border-0", style={"padding": "50px", "borderRadius": "12px"})
-], fluid=True, style={"padding": "30px"})
+        ]), className="shadow-lg border-0", style={"padding": "50px", "borderRadius": "12px"})
+    ], fluid=True, style={"padding": "30px"})
+
+app.layout = serve_layout
 
 @app.callback(
     Output("contenedor-rango", "style"), Output("contenedor-dia", "style"), Input("tipo-fecha", "value")
@@ -171,27 +191,40 @@ def actualizar_locs(org_uuid):
     return opciones, [opc['value'] for opc in opciones]
 
 @app.callback(
-    Output("sync-status", "children"), 
+    Output("toast-notificacion", "is_open"),
+    Output("toast-notificacion", "children"),
+    Output("toast-notificacion", "icon"),
+    Output("toast-notificacion", "header"),
     Input("btn-sync", "n_clicks"), 
     Input("btn-flush", "n_clicks"), 
-    State("drop-locs", "value"), 
+    State("drop-locs", "value"),
+    State("session-id", "data"),
     prevent_initial_call=True
 )
-def sync_datos(n_sync, n_flush, locs):
+def sync_datos(n_sync, n_flush, locs, session_id):
+    archivo_usuario = f'dataset_{session_id}.csv'
+    
     if dash.ctx.triggered_id == "btn-flush":
-        if os.path.exists('dataset_global_raw.csv'):
-            os.remove('dataset_global_raw.csv')
-        actualizar_datos_csv(locs if locs else [])
-        return "Datos borrados y resincronizados desde cero."
+        if os.path.exists(archivo_usuario):
+            os.remove(archivo_usuario)
+        return True, "Memoria limpiada con éxito.", "danger", "Flush Data"
         
-    actualizar_datos_csv(locs if locs else [])
-    return "Sincronizado correctamente."
+    actualizar_datos_csv(locs if locs else [], archivo_usuario)
+        
+    return True, "Datos sincronizados correctamente.", "success", "Sincronización finalizada"
+    
+    if os.path.exists('dataset_global_raw.csv'):
+        os.rename('dataset_global_raw.csv', archivo_usuario)
+        
+    return True, "Datos sincronizados correctamente.", "success", "Sincronización finalizada"
 
-def filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs):
-    if not os.path.exists('dataset_global_raw.csv'): 
-        return None, "No se encuentra el archivo, sincroniza primero."
+def filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs, session_id):
+    archivo_usuario = f'dataset_{session_id}.csv'
+    
+    if not os.path.exists(archivo_usuario): 
+        return None, "No se encuentra la base de datos de tu sesión. Pulsa en Sincronizar."
         
-    df = pd.read_csv('dataset_global_raw.csv')
+    df = pd.read_csv(archivo_usuario)
     df['fecha'] = pd.to_datetime(df['fecha'])
     
     hoy = datetime.today().date()
@@ -226,10 +259,11 @@ def filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs):
     State("date-dia", "date"),
     State("kpis-oficiales", "value"),
     State("tipo-reporte", "value"),
+    State("session-id", "data"),
     prevent_initial_call=True
 )
-def generar_excel(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, kpis_oficiales, tipo_reporte):
-    df_filt, err_or_start = filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs)
+def generar_excel(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, kpis_oficiales, tipo_reporte, session_id):
+    df_filt, err_or_start = filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs, session_id)
     if df_filt is None: return dash.no_update, err_or_start
 
     df_filt = df_filt[~df_filt['Zona'].str.contains('Extra', case=False, na=False)]
@@ -263,13 +297,14 @@ def generar_excel(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico,
     State("date-rango", "start_date"),
     State("date-rango", "end_date"),
     State("date-dia", "date"),
+    State("session-id", "data"),
     prevent_initial_call=True
 )
-def auditar_datos(n_auditar, n_min, locs, tipo_fecha, start_rango, end_rango, dia_unico):
+def auditar_datos(n_auditar, n_min, locs, tipo_fecha, start_rango, end_rango, dia_unico, session_id):
     if dash.ctx.triggered_id == "btn-min-auditoria":
         return ""
     
-    df_filt, err_or_start = filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs)
+    df_filt, err_or_start = filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs, session_id)
     if df_filt is None: return dbc.Alert(err_or_start, color="warning")
     return generar_tabla_auditoria(df_filt)
 
@@ -282,13 +317,14 @@ def auditar_datos(n_auditar, n_min, locs, tipo_fecha, start_rango, end_rango, di
     State("date-rango", "start_date"),
     State("date-rango", "end_date"),
     State("date-dia", "date"),
+    State("session-id", "data"),
     prevent_initial_call=True
 )
-def analizar_anomalias(n_anomalias, n_min, locs, tipo_fecha, start_rango, end_rango, dia_unico):
+def analizar_anomalias(n_anomalias, n_min, locs, tipo_fecha, start_rango, end_rango, dia_unico, session_id):
     if dash.ctx.triggered_id == "btn-min-anomalias":
         return ""
         
-    df_filt, err_or_start = filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs)
+    df_filt, err_or_start = filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs, session_id)
     if df_filt is None: return dbc.Alert(err_or_start, color="warning")
     if 'dwell_time' in df_filt.columns: df_filt['dwell_time'] = df_filt['dwell_time'] / 60.0
     return generar_panel_anomalias(df_filt)

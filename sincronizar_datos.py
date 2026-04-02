@@ -7,7 +7,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 load_dotenv()
 AITANNA_API_KEY = os.getenv("AITANNA_API_KEY")
-CSV_PATH = "dataset_global_raw.csv"
 
 def obtener_uuids_completos():
     url = "https://platform.aitanna.ai/api/v1/get-all-locations-and-zones"
@@ -34,9 +33,9 @@ def peticion_dia(loc_id, fecha_str):
     except Exception as e:
         return fecha_str, None, f"Exception: {str(e)}"
 
-def actualizar_datos_csv(ubicaciones_seleccionadas=None):
-    if os.path.exists(CSV_PATH):
-        df_master = pd.read_csv(CSV_PATH)
+def actualizar_datos_csv(ubicaciones_seleccionadas=None, archivo_destino="dataset_global_raw.csv"):
+    if os.path.exists(archivo_destino):
+        df_master = pd.read_csv(archivo_destino)
         df_master['fecha'] = pd.to_datetime(df_master['fecha'])
         print(f"Archivo detectado con {len(df_master)} registros.")
     else:
@@ -81,20 +80,20 @@ def actualizar_datos_csv(ubicaciones_seleccionadas=None):
                             "zone_uuid": zona.get("zoneUUID", ""),
                             "total_visits": zona.get("totalVisits", 0),
                             "unique_visitors": zona.get("uniqueVisitor", 0),
-                            "new_visitors": zona.get("newVisitor", 0), # NUEVOS VISITANTES
+                            "new_visitors": zona.get("newVisitor", 0), 
                             
                             "uv_7d": zona.get("uniqueVisitorLast7days", 0),
                             "uv_28d": zona.get("uniqueVisitorLast28days", 0),
                             "uv_month": zona.get("uniqueVisitorCurrentMonth", 0),
                             "uv_year": zona.get("uniqueVisitorCurrentYear", 0),
                             
-                            "freq_7d": zona.get("frequencyLast7days", 0.0), # FRECUENCIA
+                            "freq_7d": zona.get("frequencyLast7days", 0.0), 
                             "freq_28d": zona.get("frequencyLast28days", 0.0),
                             "freq_month": zona.get("frequencyCurrentMonth", 0.0),
                             "freq_year": zona.get("frequencyCurrentYear", 0.0),
                             
                             "dwell_time": zona.get("dwellTime", 0.0),
-                            "dwell_hist": str(zona.get("dwellTimeHistogram", [])), # HISTOGRAMA DE ESTANCIA
+                            "dwell_hist": str(zona.get("dwellTimeHistogram", [])), 
                             "hourly_visits": str(hourly_array)
                         })
 
@@ -102,7 +101,7 @@ def actualizar_datos_csv(ubicaciones_seleccionadas=None):
             df_new = pd.DataFrame(filas_buffer)
             df_new['fecha'] = pd.to_datetime(df_new['fecha'])
             df_master = pd.concat([df_master, df_new]).drop_duplicates(subset=['fecha', 'location_id', 'zone_uuid'])
-            df_master.to_csv(CSV_PATH, index=False)
+            df_master.to_csv(archivo_destino, index=False)
             registros_nuevos_totales += len(df_new)
             print(f"[{idx:02d}/{total_locs}] UUID: {loc_id[:8]}... | Guardado ({len(df_new):03d} regs).")
         else:
