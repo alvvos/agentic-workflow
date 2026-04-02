@@ -37,8 +37,14 @@ for org in datos_loc:
 dias_semana_es = {0: 'Lunes', 1: 'Martes', 2: 'Miércoles', 3: 'Jueves', 4: 'Viernes', 5: 'Sábado', 6: 'Domingo'}
 orden_dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.LUX])
+app = dash.Dash(
+    __name__, 
+    external_stylesheets=[dbc.themes.LUX, dbc.icons.FONT_AWESOME],
+    suppress_callback_exceptions=True
+)
 app.title = "Panel analítico - Valdi"
+
+server = app.server
 
 app.layout = dbc.Container([
     html.Br(),
@@ -131,7 +137,7 @@ app.layout = dbc.Container([
                 dcc.Download(id="download-excel")
             ]),
             
-            dcc.Tab(label='Auditoría e inteligencia', value='tab-auditoria', children=[
+            dcc.Tab(label='Radar de datos', value='tab-auditoria', children=[
                 html.Br(),
                 dbc.Row([
                     dbc.Col([
