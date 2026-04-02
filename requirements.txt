@@ -5,3 +5,4 @@ plotly
 holidays
 gunicorn
 numpy
+dotenv
