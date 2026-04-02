@@ -14,7 +14,6 @@ from excels.generador_operativo import generar_excel_operativo
 from auditor_datos import generar_tabla_auditoria
 from analizador_anomalias import generar_panel_anomalias
 
-# Carga de datos
 with open('todas_las_ubicaciones.json', 'r', encoding='utf-8') as f:
     datos_loc = json.load(f)
 
@@ -47,15 +46,21 @@ app = dash.Dash(
 app.title = "Panel analítico - Valdi"
 server = app.server
 
-# Convertimos el layout en una función para generar un UUID nuevo cada vez que se carga la página
 def serve_layout():
     session_id = str(uuid.uuid4())
     
     return dbc.Container([
-        # Memoria invisible para el ID de sesión del usuario
         dcc.Store(id='session-id', data=session_id),
         
-        # Pop-up de notificaciones (Toast)
+        dbc.Modal([
+            dbc.ModalBody([
+                html.Div([
+                    dbc.Spinner(color="primary", size="lg"),
+                    html.H5("Descargando registros desde la API...", className="ms-3 mb-0 text-primary fw-bold")
+                ], className="d-flex align-items-center p-3")
+            ])
+        ], id="modal-sync", is_open=False, backdrop="static", keyboard=False, centered=True),
+        
         dbc.Toast(
             id="toast-notificacion",
             header="Notificación",
@@ -191,38 +196,60 @@ def actualizar_locs(org_uuid):
     return opciones, [opc['value'] for opc in opciones]
 
 @app.callback(
-    Output("toast-notificacion", "is_open"),
-    Output("toast-notificacion", "children"),
-    Output("toast-notificacion", "icon"),
-    Output("toast-notificacion", "header"),
-    Input("btn-sync", "n_clicks"), 
-    Input("btn-flush", "n_clicks"), 
+    Output("modal-sync", "is_open", allow_duplicate=True),
+    Input("btn-sync", "n_clicks"),
+    prevent_initial_call=True
+)
+def abrir_modal_sincronizacion(n):
+    return True
+
+@app.callback(
+    Output("modal-sync", "is_open", allow_duplicate=True),
+    Output("toast-notificacion", "is_open", allow_duplicate=True),
+    Output("toast-notificacion", "children", allow_duplicate=True),
+    Output("toast-notificacion", "icon", allow_duplicate=True),
+    Output("toast-notificacion", "header", allow_duplicate=True),
+    Input("modal-sync", "is_open"), 
     State("drop-locs", "value"),
     State("session-id", "data"),
     prevent_initial_call=True
 )
-def sync_datos(n_sync, n_flush, locs, session_id):
+def ejecutar_sincronizacion(is_open, locs, session_id):
+    if not is_open:
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        
     archivo_usuario = f'dataset_{session_id}.csv'
     
-    if dash.ctx.triggered_id == "btn-flush":
+    try:
+        actualizar_datos_csv(locs if locs else [], archivo_usuario)
+        return False, True, "Datos sincronizados correctamente.", "success", "Sincronización finalizada"
+    except Exception as e:
+        mensaje_error = f"Error al descargar datos: {str(e)}"
+        return False, True, mensaje_error, "danger", "Error de Sincronización"
+
+@app.callback(
+    Output("toast-notificacion", "is_open", allow_duplicate=True),
+    Output("toast-notificacion", "children", allow_duplicate=True),
+    Output("toast-notificacion", "icon", allow_duplicate=True),
+    Output("toast-notificacion", "header", allow_duplicate=True),
+    Input("btn-flush", "n_clicks"),
+    State("session-id", "data"),
+    prevent_initial_call=True
+)
+def limpiar_memoria(n, session_id):
+    archivo_usuario = f'dataset_{session_id}.csv'
+    try:
         if os.path.exists(archivo_usuario):
             os.remove(archivo_usuario)
-        return True, "Memoria limpiada con éxito.", "danger", "Flush Data"
-        
-    actualizar_datos_csv(locs if locs else [], archivo_usuario)
-        
-    return True, "Datos sincronizados correctamente.", "success", "Sincronización finalizada"
-    
-    if os.path.exists('dataset_global_raw.csv'):
-        os.rename('dataset_global_raw.csv', archivo_usuario)
-        
-    return True, "Datos sincronizados correctamente.", "success", "Sincronización finalizada"
+        return True, "Memoria limpiada con éxito.", "success", "Flush Data"
+    except Exception as e:
+        return True, f"Error al limpiar memoria: {str(e)}", "danger", "Error"
 
 def filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs, session_id):
     archivo_usuario = f'dataset_{session_id}.csv'
     
     if not os.path.exists(archivo_usuario): 
-        return None, "No se encuentra la base de datos de tu sesión. Pulsa en Sincronizar."
+        return None, "No se encuentra la base de datos de la sesión. Es necesario pulsar en Sincronizar."
         
     df = pd.read_csv(archivo_usuario)
     df['fecha'] = pd.to_datetime(df['fecha'])
@@ -233,7 +260,7 @@ def filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs, sessi
     elif tipo_fecha == "28d_rel": start, end = pd.to_datetime(hoy - timedelta(days=28)), pd.to_datetime(hoy - timedelta(days=1))
     elif tipo_fecha == "dia" and dia_unico: start = end = pd.to_datetime(dia_unico)
     elif tipo_fecha == "rango" and start_rango and end_rango: start, end = pd.to_datetime(start_rango), pd.to_datetime(end_rango)
-    else: return None, "Selecciona un rango válido."
+    else: return None, "Se debe seleccionar un rango válido."
         
     df_filt = df[(df['fecha'] >= start) & (df['fecha'] <= end)].copy()
     if locs: df_filt = df_filt[df_filt['location_id'].isin(locs)]
