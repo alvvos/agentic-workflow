@@ -8,12 +8,22 @@ from datetime import datetime, timedelta
 import dash
 from dash import html, dcc, Input, Output, State
 import dash_bootstrap_components as dbc
-from sincronizar_datos import actualizar_datos_csv
-from excels.generador_embudos import generar_excel_embudos
-from excels.generador_operativo import generar_excel_operativo
-from auditor_datos import generar_tabla_auditoria
-from analizador_anomalias import generar_panel_anomalias
 
+# Importaciones de los módulos del proyecto
+from src.data_ingestion.sincronizador import actualizar_datos_csv
+from src.reporting.generador_embudos import generar_excel_embudos
+from src.reporting.generador_operativo import generar_excel_operativo
+#from src.reporting.pdf_builder import generar_documento_pdf
+from src.reporting.ml_dashboard import generar_panel_ml
+from src.data_processing.data_radar import generar_tabla_auditoria
+from src.data_processing.feature_engineering import enriquecer_dataset_ml
+from src.models.anomalys import generar_panel_anomalias
+from src.models.forecaster import entrenar_modelo_volumen, calcular_anomalias_predictivas, predecir_manana
+from src.llm_agents.insights_agent import generar_insight_predictivo
+
+MODO_DESARROLLO = True
+
+# Carga de la estructura de ubicaciones
 with open('todas_las_ubicaciones.json', 'r', encoding='utf-8') as f:
     datos_loc = json.load(f)
 
@@ -43,11 +53,14 @@ app = dash.Dash(
     external_stylesheets=[dbc.themes.LUX, dbc.icons.FONT_AWESOME],
     suppress_callback_exceptions=True
 )
-app.title = "Panel analítico - Valdi"
+app.title = "Panel analítico predictivo"
 server = app.server
 
 def serve_layout():
-    session_id = str(uuid.uuid4())
+    if MODO_DESARROLLO:
+        session_id = "local_dev"
+    else:
+        session_id = str(uuid.uuid4())
     
     return dbc.Container([
         dcc.Store(id='session-id', data=session_id),
@@ -56,11 +69,11 @@ def serve_layout():
             dbc.ModalBody([
                 html.Div([
                     dbc.Spinner(color="primary", size="lg"),
-                    html.H5("Descargando registros desde la API...", className="ms-3 mb-0 text-primary fw-bold")
+                    html.H5("Procesando...", className="ms-3 mb-0 text-primary fw-bold")
                 ], className="d-flex align-items-center p-3")
             ])
         ], id="modal-sync", is_open=False, backdrop="static", keyboard=False, centered=True),
-        
+
         dbc.Toast(
             id="toast-notificacion",
             header="Notificación",
@@ -73,7 +86,7 @@ def serve_layout():
 
         html.Br(),
         dbc.Row([
-            dbc.Col(html.H2("Panel central analítico", className="fw-bold"), width=6),
+            dbc.Col(html.H2("Panel central predictivo", className="fw-bold"), width=6),
             dbc.Col(dbc.Button("Sincronizar", id="btn-sync", style={"backgroundColor": "#203764", "color": "white", "border": "none"}, className="w-100 fw-bold"), width=3),
             dbc.Col(dbc.Button("Flush data", id="btn-flush", style={"backgroundColor": "#c00000", "color": "white", "border": "none"}, className="w-100 fw-bold"), width=3)
         ], className="mb-4"),
@@ -92,7 +105,7 @@ def serve_layout():
 
             dbc.Row([
                 dbc.Col([
-                    html.Label("Período a analizar:", className="fw-bold mb-2 text-primary"),
+                    html.Label("Período a visualizar:", className="fw-bold mb-2 text-primary"),
                     dbc.RadioItems(
                         id="tipo-fecha",
                         options=[
@@ -155,31 +168,70 @@ def serve_layout():
                             ], value="operativo", inline=False)
                         ], width=6)
                     ]),
-                    dbc.Button("Descargar excel", id="btn-descargar", style={"backgroundColor": "#375623", "color": "white", "border": "none"}, className="w-100 fw-bold mt-4 mb-2"),
+                    dbc.Row([
+                        dbc.Col(dbc.Button("Descargar excel", id="btn-descargar", style={"backgroundColor": "#375623", "color": "white", "border": "none"}, className="w-100 fw-bold mt-4 mb-2"), width=6),
+                        dbc.Col(dbc.Button("Descargar pdf ejecutivo ia", id="btn-descargar-pdf", style={"backgroundColor": "#8e44ad", "color": "white", "border": "none"}, className="w-100 fw-bold mt-4 mb-2"), width=6)
+                    ]),
                     html.Div(id="error-msg", className="text-danger fw-bold mt-3 text-center fs-5"),
-                    dcc.Download(id="download-excel")
+                    dcc.Download(id="download-excel"),
+                    dcc.Download(id="download-pdf")
                 ]),
                 
                 dcc.Tab(label='Radar de datos', value='tab-auditoria', children=[
                     html.Br(),
                     dbc.Row([
-                        dbc.Col([
-                            dbc.Button("Sistema de alertas", id="btn-auditar", style={"backgroundColor": "#595959", "color": "white", "border": "none"}, className="w-100 fw-bold mb-2"),
-                            dbc.Button("Minimizar tabla", id="btn-min-auditoria", color="light", size="sm", className="w-100 mb-4 text-muted border-0")
-                        ], width=6),
-                        dbc.Col([
-                            dbc.Button("Visualizar gráficas", id="btn-anomalias", style={"backgroundColor": "#2f75b5", "color": "white", "border": "none"}, className="w-100 fw-bold mb-2"),
-                            dbc.Button("Minimizar gráficos", id="btn-min-anomalias", color="light", size="sm", className="w-100 mb-4 text-muted border-0")
-                        ], width=6)
+                        dbc.Col(dbc.Button("Sistema de alertas", id="btn-auditar", style={"backgroundColor": "#595959", "color": "white", "border": "none"}, className="w-100 fw-bold mb-2"), width=4),
+                        dbc.Col(dbc.Button("Visualizar gráficas", id="btn-anomalias", style={"backgroundColor": "#2f75b5", "color": "white", "border": "none"}, className="w-100 fw-bold mb-2"), width=4),
+                        dbc.Col(dbc.Button("Generar insight ia", id="btn-ejecutar-ia", style={"backgroundColor": "#8e44ad", "color": "white", "border": "none"}, className="w-100 fw-bold mb-2"), width=4)
                     ]),
-                    html.Div(id="audit-results", className="mb-5"),
-                    html.Div(id="anomalias-results")
+                    
+                    dbc.Spinner(html.Div(id="ia-results", className="mb-4 mt-3"), color="primary"),
+                    html.Div(id="audit-results", className="mb-5 mt-3"),
+                    html.Div(id="anomalias-results", className="mt-3")
+                ]),
+
+                dcc.Tab(label='Auditoría predictiva (ML)', value='tab-ml', children=[
+                    html.Br(),
+                    dbc.Row([
+                        dbc.Col(dbc.Button("Entrenar algoritmo y evaluar", id="btn-evaluar-ml", style={"backgroundColor": "#16a085", "color": "white", "border": "none"}, className="w-100 fw-bold mb-4"), width=12)
+                    ]),
+                    dbc.Spinner(html.Div(id="ml-results", className="mb-4"), color="success")
                 ])
             ])
         ]), className="shadow-lg border-0", style={"padding": "50px", "borderRadius": "12px"})
     ], fluid=True, style={"padding": "30px"})
 
 app.layout = serve_layout
+
+# --- FUNCIONES AUXILIARES ---
+
+def leer_dataset_completo(locs, session_id):
+    archivo_usuario = os.path.join('data', 'raw', f'dataset_{session_id}.csv')
+    if not os.path.exists(archivo_usuario): return None
+    df = pd.read_csv(archivo_usuario)
+    if locs: df = df[df['location_id'].isin(locs)]
+    df['Ubicación'] = df['location_id'].map(mapa_tiendas).fillna('Desconocida')
+    if 'zone_uuid' in df.columns:
+        df['Zona'] = df['zone_uuid'].map(mapa_zonas).fillna('SinNombre')
+    else:
+        df['Zona'] = 'SinNombre'
+    return df
+
+def filtrar_dataframe_fechas(df, tipo_fecha, start_rango, end_rango, dia_unico):
+    df['fecha'] = pd.to_datetime(df['fecha'])
+    hoy = datetime.today().date()
+    if tipo_fecha == "ayer": start = end = pd.to_datetime(hoy - timedelta(days=1))
+    elif tipo_fecha == "7d_rel": start, end = pd.to_datetime(hoy - timedelta(days=7)), pd.to_datetime(hoy - timedelta(days=1))
+    elif tipo_fecha == "28d_rel": start, end = pd.to_datetime(hoy - timedelta(days=28)), pd.to_datetime(hoy - timedelta(days=1))
+    elif tipo_fecha == "dia" and dia_unico: start = end = pd.to_datetime(dia_unico)
+    elif tipo_fecha == "rango" and start_rango and end_rango: start, end = pd.to_datetime(start_rango), pd.to_datetime(end_rango)
+    else: return None, "Rango temporal inválido."
+        
+    df_filt = df[(df['fecha'] >= start) & (df['fecha'] <= end)].copy()
+    if df_filt.empty: return None, "No hay datos en las fechas seleccionadas."
+    return df_filt, start
+
+# --- CALLBACKS DE UI BASE ---
 
 @app.callback(
     Output("contenedor-rango", "style"), Output("contenedor-dia", "style"), Input("tipo-fecha", "value")
@@ -200,7 +252,7 @@ def actualizar_locs(org_uuid):
     Input("btn-sync", "n_clicks"),
     prevent_initial_call=True
 )
-def abrir_modal_sincronizacion(n):
+def abrir_modal_carga(n_clicks):
     return True
 
 @app.callback(
@@ -218,14 +270,18 @@ def ejecutar_sincronizacion(is_open, locs, session_id):
     if not is_open:
         return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
         
-    archivo_usuario = f'dataset_{session_id}.csv'
+    ruta_raw = os.path.join('data', 'raw')
+    archivo_usuario = os.path.join(ruta_raw, f'dataset_{session_id}.csv')
     
     try:
+        if not os.path.exists(ruta_raw):
+            os.makedirs(ruta_raw, exist_ok=True)
+            
         actualizar_datos_csv(locs if locs else [], archivo_usuario)
         return False, True, "Datos sincronizados correctamente.", "success", "Sincronización finalizada"
     except Exception as e:
-        mensaje_error = f"Error al descargar datos: {str(e)}"
-        return False, True, mensaje_error, "danger", "Error de Sincronización"
+        traceback.print_exc()
+        return False, True, f"Error al descargar datos: {str(e)}", "danger", "Error de sincronización"
 
 @app.callback(
     Output("toast-notificacion", "is_open", allow_duplicate=True),
@@ -237,47 +293,144 @@ def ejecutar_sincronizacion(is_open, locs, session_id):
     prevent_initial_call=True
 )
 def limpiar_memoria(n, session_id):
-    archivo_usuario = f'dataset_{session_id}.csv'
+    archivo_usuario = os.path.join('data', 'raw', f'dataset_{session_id}.csv')
     try:
         if os.path.exists(archivo_usuario):
             os.remove(archivo_usuario)
-        return True, "Memoria limpiada con éxito.", "success", "Flush Data"
+        return True, "Memoria limpiada con éxito.", "success", "Flush data"
     except Exception as e:
         return True, f"Error al limpiar memoria: {str(e)}", "danger", "Error"
 
-def filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs, session_id):
-    archivo_usuario = f'dataset_{session_id}.csv'
-    
-    if not os.path.exists(archivo_usuario): 
-        return None, "No se encuentra la base de datos de la sesión. Es necesario pulsar en Sincronizar."
-        
-    df = pd.read_csv(archivo_usuario)
-    df['fecha'] = pd.to_datetime(df['fecha'])
-    
-    hoy = datetime.today().date()
-    if tipo_fecha == "ayer": start = end = pd.to_datetime(hoy - timedelta(days=1))
-    elif tipo_fecha == "7d_rel": start, end = pd.to_datetime(hoy - timedelta(days=7)), pd.to_datetime(hoy - timedelta(days=1))
-    elif tipo_fecha == "28d_rel": start, end = pd.to_datetime(hoy - timedelta(days=28)), pd.to_datetime(hoy - timedelta(days=1))
-    elif tipo_fecha == "dia" and dia_unico: start = end = pd.to_datetime(dia_unico)
-    elif tipo_fecha == "rango" and start_rango and end_rango: start, end = pd.to_datetime(start_rango), pd.to_datetime(end_rango)
-    else: return None, "Se debe seleccionar un rango válido."
-        
-    df_filt = df[(df['fecha'] >= start) & (df['fecha'] <= end)].copy()
-    if locs: df_filt = df_filt[df_filt['location_id'].isin(locs)]
-    
-    if df_filt.empty: return None, "No hay datos en las fechas seleccionadas."
+# --- CALLBACKS DE NEGOCIO Y ML ---
 
-    df_filt['Ubicación'] = df_filt['location_id'].map(mapa_tiendas).fillna('Desconocida')
-    if 'zone_uuid' in df_filt.columns:
-        df_filt['Zona'] = df_filt['zone_uuid'].map(mapa_zonas).fillna('SinNombre')
-    else:
-        df_filt['Zona'] = 'SinNombre'
+@app.callback(
+    Output("ml-results", "children"),
+    Input("btn-evaluar-ml", "n_clicks"),
+    State("drop-locs", "value"),
+    State("tipo-fecha", "value"),
+    State("date-rango", "start_date"),
+    State("date-rango", "end_date"),
+    State("date-dia", "date"),
+    State("session-id", "data"),
+    prevent_initial_call=True
+)
+def ejecutar_pipeline_ml(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, session_id):
+    df_completo = leer_dataset_completo(locs, session_id)
+    if df_completo is None:
+        return dbc.Alert("No hay datos cargados en sesión. Ejecuta una sincronización.", color="warning")
         
-    return df_filt, start
+    try:
+        # 1. Preparar datos
+        df_ml = enriquecer_dataset_ml(df_completo)
+        
+        # 2. Entrenar y extraer validación cruzada (ahora devuelve métricas)
+        modelo, features, metricas = entrenar_modelo_volumen(df_ml)
+        
+        # 3. Calcular residuos en el histórico
+        df_resultados = calcular_anomalias_predictivas(df_ml, modelo, features)
+        
+        # 4. Proyectar vector sintético para mañana
+        df_proyeccion = predecir_manana(df_ml, modelo, features)
+        
+        # 5. Filtrar visualización
+        df_resultados['fecha'] = pd.to_datetime(df_resultados['fecha'])
+        filtro_resultado = filtrar_dataframe_fechas(df_resultados, tipo_fecha, start_rango, end_rango, dia_unico)
+        
+        df_mostrar = filtro_resultado[0] if filtro_resultado[0] is not None else df_resultados
+
+        return generar_panel_ml(df_mostrar, metricas, df_proyeccion)
+    except Exception as e:
+        traceback.print_exc()
+        return dbc.Alert(f"Error crítico en la capa predictiva: {str(e)}", color="danger")
+
+@app.callback(
+    Output("ia-results", "children"),
+    Input("btn-ejecutar-ia", "n_clicks"),
+    State("drop-locs", "value"), 
+    State("tipo-fecha", "value"), 
+    State("date-rango", "start_date"),
+    State("date-rango", "end_date"),
+    State("date-dia", "date"),
+    State("session-id", "data"),
+    prevent_initial_call=True
+)
+def solicitar_insight(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, session_id):
+    df_completo = leer_dataset_completo(locs, session_id)
+    if df_completo is None:
+        return dbc.Alert("No hay datos cargados en sesión. Ejecuta una sincronización.", color="warning")
+        
+    try:
+        df_ml = enriquecer_dataset_ml(df_completo)
+        modelo, features, metricas = entrenar_modelo_volumen(df_ml)
+        df_resultados = calcular_anomalias_predictivas(df_ml, modelo, features)
+        
+        df_resultados['fecha'] = pd.to_datetime(df_resultados['fecha'])
+        filtro_resultado = filtrar_dataframe_fechas(df_resultados, tipo_fecha, start_rango, end_rango, dia_unico)
+        
+        if filtro_resultado[0] is None:
+            return dbc.Alert(filtro_resultado[1], color="warning")
+            
+        texto_insight = generar_insight_predictivo(filtro_resultado[0])
+        
+        return dbc.Card([
+            dbc.CardHeader(html.H6("Conclusión predictiva de inteligencia artificial", className="mb-0 fw-bold", style={'color': '#2c3e50'})),
+            dbc.CardBody(dcc.Markdown(texto_insight, className="mb-0", style={'fontSize': '15px'}))
+        ], className="shadow-sm border-primary", style={'borderWidth': '1px'})
+        
+    except Exception as e:
+        traceback.print_exc()
+        return dbc.Alert(f"Error generando insight: {str(e)}", color="danger")
+
+@app.callback(
+    Output("audit-results", "children"),
+    Input("btn-auditar", "n_clicks"),
+    State("drop-locs", "value"), 
+    State("tipo-fecha", "value"), 
+    State("date-rango", "start_date"),
+    State("date-rango", "end_date"),
+    State("date-dia", "date"),
+    State("session-id", "data"),
+    prevent_initial_call=True
+)
+def auditar_datos(n_auditar, locs, tipo_fecha, start_rango, end_rango, dia_unico, session_id):
+    df_completo = leer_dataset_completo(locs, session_id)
+    if df_completo is None:
+        return dbc.Alert("No hay datos cargados en sesión. Ejecuta una sincronización.", color="warning")
+        
+    df_filt, err_or_start = filtrar_dataframe_fechas(df_completo.copy(), tipo_fecha, start_rango, end_rango, dia_unico)
+    if df_filt is None:
+        return dbc.Alert(err_or_start, color="warning")
+        
+    return generar_tabla_auditoria(df_filt)
+
+@app.callback(
+    Output("anomalias-results", "children"),
+    Input("btn-anomalias", "n_clicks"),
+    State("drop-locs", "value"), 
+    State("tipo-fecha", "value"), 
+    State("date-rango", "start_date"),
+    State("date-rango", "end_date"),
+    State("date-dia", "date"),
+    State("session-id", "data"),
+    prevent_initial_call=True
+)
+def analizar_anomalias(n_anomalias, locs, tipo_fecha, start_rango, end_rango, dia_unico, session_id):
+    df_completo = leer_dataset_completo(locs, session_id)
+    if df_completo is None:
+        return dbc.Alert("No hay datos cargados en sesión. Ejecuta una sincronización.", color="warning")
+        
+    df_filt, err_or_start = filtrar_dataframe_fechas(df_completo.copy(), tipo_fecha, start_rango, end_rango, dia_unico)
+    if df_filt is None:
+        return dbc.Alert(err_or_start, color="warning")
+        
+    if 'dwell_time' in df_filt.columns:
+        df_filt['dwell_time'] = df_filt['dwell_time'] / 60.0
+        
+    return generar_panel_anomalias(df_filt)
 
 @app.callback(
     Output("download-excel", "data"),
-    Output("error-msg", "children"), 
+    Output("error-msg", "children", allow_duplicate=True), 
     Input("btn-descargar", "n_clicks"),
     State("drop-locs", "value"), 
     State("tipo-fecha", "value"), 
@@ -290,12 +443,19 @@ def filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs, sessi
     prevent_initial_call=True
 )
 def generar_excel(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, kpis_oficiales, tipo_reporte, session_id):
-    df_filt, err_or_start = filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs, session_id)
-    if df_filt is None: return dash.no_update, err_or_start
+    df_completo = leer_dataset_completo(locs, session_id)
+    if df_completo is None:
+        return dash.no_update, "Sincroniza los datos primero."
+        
+    df_filt, err_or_start = filtrar_dataframe_fechas(df_completo.copy(), tipo_fecha, start_rango, end_rango, dia_unico)
+    if df_filt is None:
+        return dash.no_update, err_or_start
 
     df_filt = df_filt[~df_filt['Zona'].str.contains('Extra', case=False, na=False)]
     df_filt['Día semana'] = pd.Categorical(df_filt['fecha'].dt.dayofweek.map(dias_semana_es), categories=orden_dias, ordered=True)
-    if 'dwell_time' in df_filt.columns: df_filt['dwell_time'] = df_filt['dwell_time'] / 60.0
+    
+    if 'dwell_time' in df_filt.columns:
+        df_filt['dwell_time'] = df_filt['dwell_time'] / 60.0
 
     df_filt['Día del periodo'] = (df_filt['fecha'] - err_or_start).dt.days
     df_filt['Semana del periodo'] = "Semana " + ((df_filt['Día del periodo'] // 7) + 1).astype(str)
@@ -305,8 +465,10 @@ def generar_excel(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico,
         writer = pd.ExcelWriter(output, engine='xlsxwriter')
         workbook = writer.book
 
-        if tipo_reporte == "embudos": generar_excel_embudos(df_filt, writer, workbook)
-        else: generar_excel_operativo(df_filt, writer, workbook, kpis_oficiales)
+        if tipo_reporte == "embudos":
+            generar_excel_embudos(df_filt, writer, workbook)
+        else:
+            generar_excel_operativo(df_filt, writer, workbook, kpis_oficiales)
 
         workbook.close()
         output.seek(0)
@@ -316,9 +478,10 @@ def generar_excel(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico,
         return dash.no_update, f"Error generando el excel: {str(e)}"
 
 @app.callback(
-    Output("audit-results", "children"),
-    Input("btn-auditar", "n_clicks"),
-    Input("btn-min-auditoria", "n_clicks"),
+    Output("download-pdf", "data"),
+    Output("error-msg", "children", allow_duplicate=True),
+    Output("modal-sync", "is_open", allow_duplicate=True),
+    Input("btn-descargar-pdf", "n_clicks"),
     State("drop-locs", "value"), 
     State("tipo-fecha", "value"), 
     State("date-rango", "start_date"),
@@ -327,34 +490,21 @@ def generar_excel(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico,
     State("session-id", "data"),
     prevent_initial_call=True
 )
-def auditar_datos(n_auditar, n_min, locs, tipo_fecha, start_rango, end_rango, dia_unico, session_id):
-    if dash.ctx.triggered_id == "btn-min-auditoria":
-        return ""
-    
-    df_filt, err_or_start = filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs, session_id)
-    if df_filt is None: return dbc.Alert(err_or_start, color="warning")
-    return generar_tabla_auditoria(df_filt)
-
-@app.callback(
-    Output("anomalias-results", "children"),
-    Input("btn-anomalias", "n_clicks"),
-    Input("btn-min-anomalias", "n_clicks"),
-    State("drop-locs", "value"), 
-    State("tipo-fecha", "value"), 
-    State("date-rango", "start_date"),
-    State("date-rango", "end_date"),
-    State("date-dia", "date"),
-    State("session-id", "data"),
-    prevent_initial_call=True
-)
-def analizar_anomalias(n_anomalias, n_min, locs, tipo_fecha, start_rango, end_rango, dia_unico, session_id):
-    if dash.ctx.triggered_id == "btn-min-anomalias":
-        return ""
+def descargar_pdf_ejecutivo(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, session_id):
+    df_completo = leer_dataset_completo(locs, session_id)
+    if df_completo is None:
+        return dash.no_update, "Sincroniza los datos primero.", False
         
-    df_filt, err_or_start = filtrar_dataframe(tipo_fecha, start_rango, end_rango, dia_unico, locs, session_id)
-    if df_filt is None: return dbc.Alert(err_or_start, color="warning")
-    if 'dwell_time' in df_filt.columns: df_filt['dwell_time'] = df_filt['dwell_time'] / 60.0
-    return generar_panel_anomalias(df_filt)
+    df_filt, err_or_start = filtrar_dataframe_fechas(df_completo.copy(), tipo_fecha, start_rango, end_rango, dia_unico)
+    if df_filt is None:
+        return dash.no_update, err_or_start, False
+
+    try:
+        pdf_bytes = generar_documento_pdf(df_filt)
+        return dcc.send_bytes(pdf_bytes, "Reporte_ejecutivo_ia.pdf"), "", False
+    except Exception as e:
+        traceback.print_exc()
+        return dash.no_update, f"Error generando pdf: {str(e)}", False
 
 if __name__ == "__main__":
     app.run(debug=True, port=8051)

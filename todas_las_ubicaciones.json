@@ -450,78 +450,6 @@
         ]
     },
     {
-        "uuid": "9c125faa-5c10-4ac2-87d2-c98426b80dbc",
-        "name": "Grupo Monterrey",
-        "locations": [
-            {
-                "uuid": "5449908c-c9c0-4663-a115-c5bac7aad3e1",
-                "name": "Puerta principal",
-                "zones": []
-            },
-            {
-                "uuid": "889cf2a3-4a86-41a9-a233-a0af7eba6be4",
-                "name": "Pasillo central",
-                "zones": []
-            },
-            {
-                "uuid": "492aa92d-77b9-4dfc-8146-76bcc54d9b69",
-                "name": "Garage principal",
-                "zones": []
-            },
-            {
-                "uuid": "270ac419-48ef-446e-b652-3bcd8cf6c370",
-                "name": "Restaurante el mariachi",
-                "zones": []
-            },
-            {
-                "uuid": "8af150b4-7331-49cf-a658-7333b5a0f0bd",
-                "name": "Puerta principal C2",
-                "zones": []
-            },
-            {
-                "uuid": "114b2c90-6f2f-45ee-8baf-51ad50463d3c",
-                "name": "Restaurante Mariachi",
-                "zones": []
-            }
-        ]
-    },
-    {
-        "uuid": "6a7903a3-d606-4698-b6f2-72ef74ce8fad",
-        "name": "Toyota - Medimotors",
-        "locations": [
-            {
-                "uuid": "c59f3c44-921a-4f73-85e0-f79990b5812d",
-                "name": "Alicante Lexus",
-                "zones": []
-            },
-            {
-                "uuid": "636affd2-7f74-45dd-8a56-f93b96177392",
-                "name": "Alicante Toyota",
-                "zones": []
-            },
-            {
-                "uuid": "071cd541-6801-4519-a50d-7efe138bd061",
-                "name": "Elche VO",
-                "zones": []
-            },
-            {
-                "uuid": "4a85b71e-c67b-4c4e-9268-d1ecbc7f50f9",
-                "name": "Elche Lexus",
-                "zones": []
-            },
-            {
-                "uuid": "82bffb0e-8446-4bb3-a951-6b2350519a2d",
-                "name": "Elche Toyota",
-                "zones": []
-            },
-            {
-                "uuid": "6cc271b5-4c84-4355-8f1f-887fc8086aa0",
-                "name": "Alicante VO",
-                "zones": []
-            }
-        ]
-    },
-    {
         "uuid": "5dc7afbd-3078-4572-8a43-77ac8e81942e",
         "name": "Asefarma Santa Engracia 56",
         "locations": [
@@ -547,7 +475,7 @@
     },
     {
         "uuid": "5345a134-3495-4884-a780-c9b37a50df20",
-        "name": "Mi Kiosko",
+        "name": "Kiosko MX",
         "locations": [
             {
                 "uuid": "0121c181-991d-4021-ab98-c2d58e33bd12",
@@ -563,6 +491,24 @@
                     },
                     {
                         "uuid": "5cd6845d-f2b0-45ee-b9f8-8721792659e5",
+                        "zoneName": "Exterior"
+                    }
+                ]
+            },
+            {
+                "uuid": "2ee8181c-4fb4-4fa5-9e80-0aa660a80fc8",
+                "name": "Manzanillo",
+                "zones": [
+                    {
+                        "uuid": "351acef9-9b17-4b56-a42f-8436bfa02a43",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "7338f285-ab06-48c0-ae11-138c29fe246b",
+                        "zoneName": "Tienda"
+                    },
+                    {
+                        "uuid": "2ef74d7d-89ba-45d4-aaf2-8c920e05db86",
                         "zoneName": "Exterior"
                     }
                 ]

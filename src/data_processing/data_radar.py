@@ -7,7 +7,6 @@ import calendar
 from collections import defaultdict
 import hashlib
 
-# --- GENERADOR INTELIGENTE DE FESTIVOS (NACIONALES Y AUTONÓMICOS) ---
 years_list = [2024, 2025, 2026]
 es_national = holidays.ES(years=years_list)
 fechas_info = defaultdict(lambda: defaultdict(list))

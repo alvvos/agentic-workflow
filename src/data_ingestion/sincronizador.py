@@ -33,7 +33,7 @@ def peticion_dia(loc_id, fecha_str):
     except Exception as e:
         return fecha_str, None, f"Exception: {str(e)}"
 
-def actualizar_datos_csv(ubicaciones_seleccionadas=None, archivo_destino="dataset_global_raw.csv"):
+def actualizar_datos_csv(ubicaciones_seleccionadas=None, archivo_destino="/datadataset_global_raw.csv"):
     if os.path.exists(archivo_destino):
         df_master = pd.read_csv(archivo_destino)
         df_master['fecha'] = pd.to_datetime(df_master['fecha'])
