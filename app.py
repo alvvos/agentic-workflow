@@ -195,6 +195,20 @@ def serve_layout():
                     dbc.Row([
                         dbc.Col(dbc.Button("Entrenar algoritmo y evaluar", id="btn-evaluar-ml", style={"backgroundColor": "#16a085", "color": "white", "border": "none"}, className="w-100 fw-bold mb-4"), width=12)
                     ]),
+                    dbc.Row([
+                        dbc.Col([
+                            html.Label("Horizonte de predicción (Días hacia el futuro):", className="fw-bold mb-2 text-primary"),
+                            dcc.Slider(
+                                id='slider-horizonte',
+                                min=1,
+                                max=14,
+                                step=1,
+                                value=3,
+                                marks={i: f'{i}d' for i in [1, 3, 7, 10, 14]},
+                                className="mb-4"
+                            )
+                        ], width=12)
+                    ]),
                     dbc.Spinner(html.Div(id="ml-results", className="mb-4"), color="success")
                 ])
             ])
@@ -306,6 +320,7 @@ def limpiar_memoria(n, session_id):
 @app.callback(
     Output("ml-results", "children"),
     Input("btn-evaluar-ml", "n_clicks"),
+    State("slider-horizonte", "value"), 
     State("drop-locs", "value"),
     State("tipo-fecha", "value"),
     State("date-rango", "start_date"),
@@ -314,34 +329,29 @@ def limpiar_memoria(n, session_id):
     State("session-id", "data"),
     prevent_initial_call=True
 )
-def ejecutar_pipeline_ml(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, session_id):
+def ejecutar_pipeline_ml(n_clicks, dias_futuros, locs, tipo_fecha, start_rango, end_rango, dia_unico, session_id):
     df_completo = leer_dataset_completo(locs, session_id)
     if df_completo is None:
-        return dbc.Alert("No hay datos cargados en sesión. Ejecuta una sincronización.", color="warning")
+        return dbc.Alert("Sincroniza los datos primero.", color="warning")
         
     try:
-        # 1. Preparar datos
         df_ml = enriquecer_dataset_ml(df_completo)
-        
-        # 2. Entrenar y extraer validación cruzada (ahora devuelve métricas)
         modelo, features, metricas = entrenar_modelo_volumen(df_ml)
-        
-        # 3. Calcular residuos en el histórico
         df_resultados = calcular_anomalias_predictivas(df_ml, modelo, features)
         
-        # 4. Proyectar vector sintético para mañana
-        df_proyeccion = predecir_manana(df_ml, modelo, features)
+        # Invocación de la nueva función de periodo futuro
+        from src.models.forecaster import predecir_periodo_futuro
+        df_proyeccion = predecir_periodo_futuro(df_ml, modelo, features, dias_a_predecir=dias_futuros)
         
-        # 5. Filtrar visualización
         df_resultados['fecha'] = pd.to_datetime(df_resultados['fecha'])
         filtro_resultado = filtrar_dataframe_fechas(df_resultados, tipo_fecha, start_rango, end_rango, dia_unico)
-        
         df_mostrar = filtro_resultado[0] if filtro_resultado[0] is not None else df_resultados
 
         return generar_panel_ml(df_mostrar, metricas, df_proyeccion)
     except Exception as e:
+        import traceback
         traceback.print_exc()
-        return dbc.Alert(f"Error crítico en la capa predictiva: {str(e)}", color="danger")
+        return dbc.Alert(f"Error en el motor: {str(e)}", color="danger")
 
 @app.callback(
     Output("ia-results", "children"),

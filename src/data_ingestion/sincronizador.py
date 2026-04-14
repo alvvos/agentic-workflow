@@ -1,4 +1,5 @@
 import os
+import json
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
@@ -8,18 +9,19 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 load_dotenv()
 AITANNA_API_KEY = os.getenv("AITANNA_API_KEY")
 
-def obtener_uuids_completos():
-    url = "https://platform.aitanna.ai/api/v1/get-all-locations-and-zones"
-    headers = {"x-api-key": AITANNA_API_KEY}
-    res = requests.get(url, headers=headers)
-    if res.status_code != 200:
-        print(f"Error obteniendo UUIDs. Código: {res.status_code}")
+def obtener_uuids_geolocalizados(ruta_json="todas_las_ubicaciones.json"):
+    if not os.path.exists(ruta_json):
+        print(f"Error: No se encuentra el archivo {ruta_json}")
         return []
-    datos = res.json()
+        
+    with open(ruta_json, 'r', encoding='utf-8') as f:
+        datos = json.load(f)
+        
     uuids = set()
     for org in datos:
         for loc in org.get("locations", []):
-            if loc.get("uuid"): uuids.add(loc.get("uuid"))
+            if 'postal_code' in loc and 'lat' in loc and 'lon' in loc and 'uuid' in loc:
+                uuids.add(loc["uuid"])
     return list(uuids)
 
 def peticion_dia(loc_id, fecha_str):
@@ -33,7 +35,9 @@ def peticion_dia(loc_id, fecha_str):
     except Exception as e:
         return fecha_str, None, f"Exception: {str(e)}"
 
-def actualizar_datos_csv(ubicaciones_seleccionadas=None, archivo_destino="/datadataset_global_raw.csv"):
+def actualizar_datos_csv(ubicaciones_seleccionadas=None, archivo_destino="data/dataset_global_raw.csv"):
+    os.makedirs(os.path.dirname(archivo_destino), exist_ok=True)
+    
     if os.path.exists(archivo_destino):
         df_master = pd.read_csv(archivo_destino)
         df_master['fecha'] = pd.to_datetime(df_master['fecha'])
@@ -42,19 +46,20 @@ def actualizar_datos_csv(ubicaciones_seleccionadas=None, archivo_destino="/datad
         df_master = pd.DataFrame()
         print("Empezando descarga masiva desde cero...")
 
-    location_ids = ubicaciones_seleccionadas if ubicaciones_seleccionadas else obtener_uuids_completos()
-    if not location_ids: return df_master
+    location_ids = ubicaciones_seleccionadas if ubicaciones_seleccionadas else obtener_uuids_geolocalizados()
+    if not location_ids: 
+        print("No hay ubicaciones geolocalizadas para sincronizar.")
+        return df_master
 
     fecha_hoy = datetime.today()
     total_locs = len(location_ids)
-
     registros_nuevos_totales = 0
 
     for idx, loc_id in enumerate(location_ids, 1):
         if not df_master.empty and 'location_id' in df_master.columns and loc_id in df_master['location_id'].values:
             ultima_fecha_loc = df_master[df_master['location_id'] == loc_id]['fecha'].max()
         else:
-            ultima_fecha_loc = datetime.strptime("2025-09-01", "%Y-%m-%d")
+            ultima_fecha_loc = datetime.strptime("2024-01-01", "%Y-%m-%d")
 
         dias_diferencia = (fecha_hoy - ultima_fecha_loc).days
         if dias_diferencia <= 0: continue

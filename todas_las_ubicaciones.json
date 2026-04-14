@@ -160,20 +160,48 @@
         "name": "TSE Showroom MX - ShopeakMedia",
         "locations": [
             {
-                "uuid": "80e6fffd-3ddf-4562-9795-49f9a87ae15d",
+                "uuid": "83b0a376-dc5b-42f5-8ddd-d88feae22f92",
                 "name": "Oficina ShopeakMedia",
                 "zones": [
                     {
-                        "uuid": "f394a5a8-3b26-4f0c-b3f7-c5b1a2a9cce4",
+                        "uuid": "c6a48295-02b5-47d3-8c2e-757f746db381",
                         "zoneName": "Caja"
                     },
                     {
-                        "uuid": "d92a9f33-6845-46e8-8f33-9ac32c542a9f",
+                        "uuid": "28bc93d7-03be-4d46-8381-6865716651b9",
                         "zoneName": "Tienda"
                     },
                     {
-                        "uuid": "54db72c0-37a0-431f-931f-191c88272ef8",
+                        "uuid": "3e3c6561-7850-461f-a760-0b27d6231fa1",
                         "zoneName": "Exterior"
+                    },
+                    {
+                        "uuid": "1c4fbbd4-d4f1-4e77-82d1-9cd0ada92bf7",
+                        "zoneName": "Calle"
+                    },
+                    {
+                        "uuid": "0b93d703-bbbe-4381-849b-6f0892f80770",
+                        "zoneName": "Planta 0"
+                    },
+                    {
+                        "uuid": "6ab715fa-730a-41fd-a7ee-83e6e1e2fd8e",
+                        "zoneName": "Planta 1"
+                    },
+                    {
+                        "uuid": "629d1ad3-7065-46ad-b5dd-7e92e2a928ac",
+                        "zoneName": "Tienda PL0"
+                    },
+                    {
+                        "uuid": "af6508aa-e99a-40ff-ad28-db726925ef0f",
+                        "zoneName": "Tienda PL1"
+                    },
+                    {
+                        "uuid": "2108a556-b27f-4a45-80aa-8d6ea864190a",
+                        "zoneName": "Caja 0"
+                    },
+                    {
+                        "uuid": "be57e397-38d6-4598-b0f7-8590abdd60c8",
+                        "zoneName": "Caja 1"
                     }
                 ]
             }
@@ -199,7 +227,12 @@
                         "uuid": "79c9c568-41e1-43b3-84d4-e413630fa58a",
                         "zoneName": "Calle"
                     }
-                ]
+                ],
+                "postal_code": "29016",
+                "region_code": "AN",
+                "country_code": "ES",
+                "lat": 36.7186,
+                "lon": -4.4131
             },
             {
                 "uuid": "db01e2ed-3bbb-4c6f-8bbe-9b73762f473d",
@@ -217,7 +250,12 @@
                         "uuid": "ad0a5f72-a9ff-4ed1-ad94-b58395038eab",
                         "zoneName": "Calle"
                     }
-                ]
+                ],
+                "postal_code": "46960",
+                "region_code": "VC",
+                "country_code": "ES",
+                "lat": 39.4756,
+                "lon": -0.4851
             },
             {
                 "uuid": "251e7f40-95c7-4678-aa48-df1b90e3461c",
@@ -263,7 +301,12 @@
                         "uuid": "fc932020-1935-4a1c-a47b-2915345ecb35",
                         "zoneName": "Calle."
                     }
-                ]
+                ],
+                "postal_code": "28013",
+                "region_code": "MD",
+                "country_code": "ES",
+                "lat": 40.4203,
+                "lon": -3.7038
             }
         ]
     },
@@ -272,9 +315,50 @@
         "name": "TSE Showroom MX Barracuda Media",
         "locations": [
             {
-                "uuid": "845b6172-a478-4307-9344-04749ecd3c2e",
+                "uuid": "146d410b-1ff5-4739-a67d-54d470fc159d",
                 "name": "Oficina Barracuda MX",
-                "zones": []
+                "zones": [
+                    {
+                        "uuid": "e28ad04c-585c-4ca4-87b0-e77c5dd5eafe",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "bb3ea3ec-6eb2-4627-9514-42cf63f3572c",
+                        "zoneName": "Tienda"
+                    },
+                    {
+                        "uuid": "7b6a803a-9546-4cd6-90f7-b2a8822555bc",
+                        "zoneName": "Calle"
+                    },
+                    {
+                        "uuid": "6f97b360-668b-47a5-955d-dc09aa84b9d9",
+                        "zoneName": "Calle"
+                    },
+                    {
+                        "uuid": "3c8c40b0-4e3f-4c13-86d8-33dd7057995e",
+                        "zoneName": "Planta 0"
+                    },
+                    {
+                        "uuid": "a44d6ede-5ac2-482a-9546-f84eea02426a",
+                        "zoneName": "Planta 1"
+                    },
+                    {
+                        "uuid": "54b10f3b-36fc-44ec-8462-7a9cfba49d14",
+                        "zoneName": "Tienda PL 0"
+                    },
+                    {
+                        "uuid": "bf9042c2-ec5e-4b80-89ab-d3d1005bdcd3",
+                        "zoneName": "Tienda PL 1"
+                    },
+                    {
+                        "uuid": "b0dcaf9a-d5c5-456d-b642-07bcf24008d7",
+                        "zoneName": "Caja 0"
+                    },
+                    {
+                        "uuid": "4fe6f210-23a8-4d12-91e5-3eb1357b934b",
+                        "zoneName": "Caja 1"
+                    }
+                ]
             }
         ]
     },
@@ -591,7 +675,12 @@
                         "uuid": "4297f77d-4d45-44a5-9eed-3244048c8b06",
                         "zoneName": "Fondo"
                     }
-                ]
+                ],
+                "postal_code": "28001",
+                "region_code": "MD",
+                "country_code": "ES",
+                "lat": 40.4235,
+                "lon": -3.6844
             }
         ]
     },
@@ -680,5 +769,29 @@
         "uuid": "799c9afb-60d1-4268-b339-83e1a720f4a1",
         "name": "BM Uvesco",
         "locations": []
+    },
+    {
+        "uuid": "53e569e6-a884-4041-9265-9ee51d7b3dd5",
+        "name": "Pemex MX",
+        "locations": [
+            {
+                "uuid": "73aa8a8d-dc93-4017-8761-c89e05766d5b",
+                "name": "Pemex - Marina Nacional",
+                "zones": [
+                    {
+                        "uuid": "dab20986-9882-4cf8-b982-fc42be99e9f1",
+                        "zoneName": "Caja"
+                    },
+                    {
+                        "uuid": "455434e8-40e8-409f-9cfa-d8ba02494988",
+                        "zoneName": "Tienda"
+                    },
+                    {
+                        "uuid": "5f257325-59e3-49df-9ee4-af60c5e3e8fc",
+                        "zoneName": "Exterior"
+                    }
+                ]
+            }
+        ]
     }
 ]
