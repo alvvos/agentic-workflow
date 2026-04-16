@@ -31,7 +31,7 @@ def descargar_maestro_ubicaciones():
 
     url = "https://platform.aitanna.ai/api/v1/get-all-locations-and-zones"
     headers = {"x-api-key": api_key}
-    ruta_json = 'todas_las_ubicaciones.json'
+    ruta_json = '../todas_las_ubicaciones.json'
     
     print("Conectando con la API de Aitanna para descargar el árbol de ubicaciones...")
     

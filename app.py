@@ -19,12 +19,11 @@ from src.data_processing.data_radar import generar_tabla_auditoria
 from src.data_processing.feature_engineering import enriquecer_dataset_ml
 from src.models.anomalys import generar_panel_anomalias
 from src.models.forecaster import entrenar_modelo_volumen, calcular_anomalias_predictivas, predecir_manana
-from src.llm_agents.insights_agent import generar_insight_predictivo
 
 MODO_DESARROLLO = True
 
 # Carga de la estructura de ubicaciones
-with open('todas_las_ubicaciones.json', 'r', encoding='utf-8') as f:
+with open('src/todas_las_ubicaciones.json', 'r', encoding='utf-8') as f:
     datos_loc = json.load(f)
 
 opciones_orgs = []
@@ -191,25 +190,7 @@ def serve_layout():
                 ]),
 
                 dcc.Tab(label='Auditoría predictiva (ML)', value='tab-ml', children=[
-                    html.Br(),
-                    dbc.Row([
-                        dbc.Col(dbc.Button("Entrenar algoritmo y evaluar", id="btn-evaluar-ml", style={"backgroundColor": "#16a085", "color": "white", "border": "none"}, className="w-100 fw-bold mb-4"), width=12)
-                    ]),
-                    dbc.Row([
-                        dbc.Col([
-                            html.Label("Horizonte de predicción (Días hacia el futuro):", className="fw-bold mb-2 text-primary"),
-                            dcc.Slider(
-                                id='slider-horizonte',
-                                min=1,
-                                max=14,
-                                step=1,
-                                value=3,
-                                marks={i: f'{i}d' for i in [1, 3, 7, 10, 14]},
-                                className="mb-4"
-                            )
-                        ], width=12)
-                    ]),
-                    dbc.Spinner(html.Div(id="ml-results", className="mb-4"), color="success")
+                    generar_panel_ml()
                 ])
             ])
         ]), className="shadow-lg border-0", style={"padding": "50px", "borderRadius": "12px"})
@@ -317,18 +298,6 @@ def limpiar_memoria(n, session_id):
 
 # --- CALLBACKS DE NEGOCIO Y ML ---
 
-@app.callback(
-    Output("ml-results", "children"),
-    Input("btn-evaluar-ml", "n_clicks"),
-    State("slider-horizonte", "value"), 
-    State("drop-locs", "value"),
-    State("tipo-fecha", "value"),
-    State("date-rango", "start_date"),
-    State("date-rango", "end_date"),
-    State("date-dia", "date"),
-    State("session-id", "data"),
-    prevent_initial_call=True
-)
 def ejecutar_pipeline_ml(n_clicks, dias_futuros, locs, tipo_fecha, start_rango, end_rango, dia_unico, session_id):
     df_completo = leer_dataset_completo(locs, session_id)
     if df_completo is None:
