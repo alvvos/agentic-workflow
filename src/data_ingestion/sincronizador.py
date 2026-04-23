@@ -35,7 +35,7 @@ def peticion_dia(loc_id, fecha_str):
     except Exception as e:
         return fecha_str, None, f"Exception: {str(e)}"
 
-def actualizar_datos_csv(ubicaciones_seleccionadas=None, archivo_destino="data/dataset_global_raw.csv"):
+def actualizar_datos_csv(ubicaciones_seleccionadas=None, archivo_destino="src/data/dataset_global_raw.csv"):
     os.makedirs(os.path.dirname(archivo_destino), exist_ok=True)
     
     if os.path.exists(archivo_destino):

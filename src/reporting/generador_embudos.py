@@ -3,6 +3,7 @@ import numpy as np
 import ast
 
 def generar_excel_embudos(df_filt, writer, workbook):
+    # Conservamos exactamente los mismos colores y formatos que definiste
     fmt_h_uni = workbook.add_format({'bold': True, 'bg_color': '#375623', 'font_color': 'white', 'border': 1, 'align': 'center'})
     fmt_h_pct = workbook.add_format({'bold': True, 'bg_color': '#C65911', 'font_color': 'white', 'border': 1, 'align': 'center'})
     fmt_h_hora = workbook.add_format({'bold': True, 'bg_color': '#203764', 'font_color': 'white', 'border': 1, 'align': 'center'})
@@ -19,6 +20,17 @@ def generar_excel_embudos(df_filt, writer, workbook):
         except: pass
         return [0]*24
 
+    # 1. Preparación para las agrupaciones condicionales
+    df_filt = df_filt.copy()
+    df_filt['fecha'] = pd.to_datetime(df_filt['fecha'])
+    dias_periodo = (df_filt['fecha'].max() - df_filt['fecha'].min()).days
+    mas_de_un_mes = dias_periodo > 31
+
+    if mas_de_un_mes:
+        # Formatos: Año-Mes (2024-05) y Año-Semana (2024-W15)
+        df_filt['Mes'] = df_filt['fecha'].dt.strftime('%Y-%m')
+        df_filt['Semana'] = df_filt['fecha'].dt.strftime('%Y-W%W') 
+
     for loc in df_filt['Ubicación'].unique():
         df_loc = df_filt[df_filt['Ubicación'] == loc]
         sheet_name = str(loc)[:31].replace(':', '').replace('/', '')
@@ -28,6 +40,11 @@ def generar_excel_embudos(df_filt, writer, workbook):
             
         df_fecha = df_loc.pivot_table(index='fecha', columns='Zona', values='unique_visitors', aggfunc='sum', observed=True).fillna(0).reset_index()
         
+        # Agrupaciones condicionales si el periodo es > 1 mes
+        if mas_de_un_mes:
+            df_semana_cal = df_loc.pivot_table(index='Semana', columns='Zona', values='unique_visitors', aggfunc='sum', observed=True).fillna(0).reset_index()
+            df_mes = df_loc.pivot_table(index='Mes', columns='Zona', values='unique_visitors', aggfunc='sum', observed=True).fillna(0).reset_index()
+            
         df_semana = df_loc.pivot_table(index='Día semana', columns='Zona', values='unique_visitors', aggfunc='mean', observed=True).fillna(0).round(0).reset_index()
         
         horas_exp = pd.DataFrame(df_loc['hourly_visits'].apply(safely_eval_hours).to_list(), index=df_loc.index)
@@ -86,6 +103,12 @@ def generar_excel_embudos(df_filt, writer, workbook):
             
             return fila_inicio + len(df_final) + 4
         
+        # 2. Imprimimos las tablas en cascada
         fila_actual = escribir_tabla_embudo(df_fecha, "EMBUDO POR FECHAS (Visitantes Diarios)", fila_actual, fmt_h_uni, 'fecha')
+        
+        if mas_de_un_mes:
+            fila_actual = escribir_tabla_embudo(df_semana_cal, "EMBUDO POR SEMANAS (Visitantes Totales)", fila_actual, fmt_h_uni, 'Semana')
+            fila_actual = escribir_tabla_embudo(df_mes, "EMBUDO POR MESES (Visitantes Totales)", fila_actual, fmt_h_uni, 'Mes')
+            
         fila_actual = escribir_tabla_embudo(df_semana, "EMBUDO POR DÍA DE LA SEMANA (Media de Visitantes)", fila_actual, fmt_h_uni, 'Día semana')
         fila_actual = escribir_tabla_embudo(df_hora, "EMBUDO POR HORA (Media de Visitas Totales)", fila_actual, fmt_h_hora, 'Hora')

@@ -273,43 +273,48 @@
                 "zones": [
                     {
                         "uuid": "81d9af64-1341-4862-ae11-0e2bdd8e1361",
-                        "zoneName": "Caja"
+                        "zoneName": "Caja",
+                        "zoneType": "last_zone"
                     },
                     {
                         "uuid": "765797b7-6ca1-4b29-8949-d843634c5b5e",
-                        "zoneName": "Tienda"
+                        "zoneName": "Tienda",
+                        "zoneType": "last_zone"
                     },
                     {
                         "uuid": "1a958277-8b5e-48ca-a20b-183e2833d47e",
-                        "zoneName": "Calle"
+                        "zoneName": "Calle",
+                        "zoneType": "last_zone"
                     },
                     {
                         "uuid": "66ce4df8-f7df-445c-a356-6b1ff90ddf15",
-                        "zoneName": "Planta 0"
+                        "zoneName": "Planta 0",
+                        "zoneType": "end_zone"
                     },
                     {
                         "uuid": "697eb389-4c37-40f6-a4a3-11035a15a874",
-                        "zoneName": "Tienda PL 0"
+                        "zoneName": "Tienda PL 0",
+                        "zoneType": "end_zone"
                     },
                     {
                         "uuid": "8b7e2246-8d76-41c0-9fd6-aec26c55ff7e",
-                        "zoneName": "Planta 1"
+                        "zoneName": "Planta 1",
+                        "zoneType": "end_zone"
                     },
                     {
                         "uuid": "1925fb2c-06be-4de2-abb3-65d4aa39e75f",
-                        "zoneName": "Tienda PL 1"
+                        "zoneName": "Tienda PL 1",
+                        "zoneType": "end_zone"
                     },
                     {
                         "uuid": "8e86160e-4e95-4056-8790-955a2c5bbe00",
-                        "zoneName": "Caja 0"
+                        "zoneName": "Caja 0",
+                        "zoneType": "end_zone"
                     },
                     {
                         "uuid": "4ca3a40a-6bde-4813-b77e-cbe4bcb6b418",
-                        "zoneName": "Caja 1"
-                    },
-                    {
-                        "uuid": "fc932020-1935-4a1c-a47b-2915345ecb35",
-                        "zoneName": "Calle."
+                        "zoneName": "Caja 1",
+                        "zoneType": "end_zone"
                     }
                 ],
                 "postal_code": "28013",
