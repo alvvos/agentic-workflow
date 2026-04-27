@@ -10,19 +10,26 @@ from dash import html, dcc, Input, Output, State, ctx
 import plotly.graph_objects as go
 import dash_bootstrap_components as dbc
 
+# --- IMPORTACIONES DEL PROYECTO ---
 from src.data_ingestion.sincronizador import actualizar_datos_csv
 from src.reporting.generador_embudos import generar_excel_embudos
 from src.reporting.generador_operativo import generar_excel_operativo
 from src.reporting.ml_dashboard import generar_panel_ml
 from src.data_processing.data_radar import generar_tabla_auditoria
 from src.models.anomalys import generar_panel_bi_completo
+from src.reporting.health_check import generar_panel_ejecutivo # <- AQUÍ ESTABA EL FALLO
 
 MODO_DESARROLLO = True
 
+# --- CARGA DE DATOS MAESTROS ---
 with open('src/data/todas_las_ubicaciones.json', 'r', encoding='utf-8') as f:
     datos_loc = json.load(f)
 
-opciones_orgs, mapa_locs_por_org, mapa_tiendas, mapa_zonas, mapa_zonas_por_loc = [], {}, {}, {}, {}
+opciones_orgs = []
+mapa_locs_por_org = {}
+mapa_tiendas = {}
+mapa_zonas = {}
+mapa_zonas_por_loc = {}
 
 for org in datos_loc:
     if org.get('uuid'):
@@ -32,21 +39,34 @@ for org in datos_loc:
             if loc.get('uuid'):
                 locs_list.append({'label': loc.get('name'), 'value': loc['uuid']})
                 mapa_tiendas[loc['uuid']] = loc.get('name')
+                
                 zonas_loc = []
                 for z in loc.get('zones', []):
                     if z.get('uuid'):
-                        mapa_zonas[z['uuid']] = z['zoneName']
-                        zonas_loc.append({'label': z['zoneName'], 'value': z['zoneName'], 'tipo': z.get('zoneType', '')})
+                        nombre_zona = z.get('zoneName', 'Zona')
+                        mapa_zonas[z['uuid']] = nombre_zona
+                        zonas_loc.append({
+                            'label': nombre_zona, 
+                            'value': nombre_zona,
+                            'tipo': z.get('zoneType', '')  
+                        })
                 mapa_zonas_por_loc[loc['uuid']] = zonas_loc
+                
         mapa_locs_por_org[org['uuid']] = locs_list
 
 dias_semana_es = {0: 'Lunes', 1: 'Martes', 2: 'Miércoles', 3: 'Jueves', 4: 'Viernes', 5: 'Sábado', 6: 'Domingo'}
 orden_dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.LUX, dbc.icons.FONT_AWESOME], suppress_callback_exceptions=True)
+# --- CONFIGURACIÓN DE LA APP ---
+app = dash.Dash(
+    __name__, 
+    external_stylesheets=[dbc.themes.LUX, dbc.icons.FONT_AWESOME],
+    suppress_callback_exceptions=True
+)
 app.title = "Panel Analítico Predictivo"
 server = app.server
 
+# --- INTERFAZ VISUAL (LAYOUT) ---
 def serve_layout():
     session_id = "local_dev" if MODO_DESARROLLO else str(uuid.uuid4())
     
@@ -54,11 +74,15 @@ def serve_layout():
         dbc.Card([
             dbc.CardBody([
                 html.H5([html.I(className="fas fa-sliders-h me-2 text-primary"), "Filtros Globales"], className="fw-bold mb-4 text-dark"),
+                
                 html.Label("Organización", className="fw-bold text-muted small text-uppercase mb-1"),
-                dcc.Dropdown(id="drop-org", options=opciones_orgs, className="mb-3 shadow-sm"),
+                dcc.Dropdown(id="drop-org", options=opciones_orgs, value=opciones_orgs[0]['value'] if opciones_orgs else None, className="mb-3 shadow-sm"),
+                
                 html.Label("Ubicaciones", className="fw-bold text-muted small text-uppercase mb-1 mt-2"),
                 dcc.Dropdown(id="drop-locs", multi=True, className="mb-4 shadow-sm"),
+                
                 html.Hr(className="text-muted"),
+                
                 html.Label("Período a visualizar", className="fw-bold text-muted small text-uppercase mb-3 mt-3"),
                 dbc.RadioItems(
                     id="tipo-fecha",
@@ -69,10 +93,21 @@ def serve_layout():
                         {"label": "Día concreto", "value": "dia"},
                         {"label": "Rango temporal", "value": "rango"}
                     ],
-                    value="7d_rel", className="mb-3"
+                    value="7d_rel",
+                    className="mb-3"
                 ),
-                html.Div(dcc.DatePickerRange(id='date-rango', start_date=datetime(2025, 9, 1).date(), end_date=datetime.today().date(), display_format='YYYY-MM-DD', className="w-100 shadow-sm"), id="contenedor-rango", style={"display": "none"}),
-                html.Div(dcc.DatePickerSingle(id='date-dia', date=datetime.today().date(), display_format='YYYY-MM-DD', className="w-100 shadow-sm"), id="contenedor-dia", style={"display": "none"})
+                html.Div(
+                    dcc.DatePickerRange(
+                        id='date-rango', start_date=datetime(2025, 9, 1).date(), end_date=datetime.today().date(),
+                        display_format='YYYY-MM-DD', className="w-100 shadow-sm"
+                    ), id="contenedor-rango", style={"display": "none"}
+                ),
+                html.Div(
+                    dcc.DatePickerSingle(
+                        id='date-dia', date=datetime.today().date(), display_format='YYYY-MM-DD',
+                        className="w-100 shadow-sm"
+                    ), id="contenedor-dia", style={"display": "none"}
+                )
             ])
         ], className="border-0 shadow-sm rounded-4")
     ], className="sticky-top", style={"top": "30px", "zIndex": 1020})
@@ -88,15 +123,26 @@ def serve_layout():
         
         dbc.Card([
             dbc.CardBody([
-                dcc.Tabs(id="tabs-panel", value='tab-auditoria', className="custom-tabs", children=[
-                    dcc.Tab(label='Dashboard BI', value='tab-auditoria', className="fw-bold", children=[
+                dcc.Tabs(id="tabs-panel", value='tab-ejecutivo', className="custom-tabs", children=[
+                    
+                    # --- NUEVA PESTAÑA: RESUMEN EJECUTIVO (AQUÍ FALTABA EL ID) ---
+                    dcc.Tab(label='Resumen ejecutivo', value='tab-ejecutivo', className="fw-bold", children=[
                         html.Br(),
+                        html.Div(id="panel-ejecutivo-content")
+                    ]),
+
+                    dcc.Tab(label='Panel BI', value='tab-auditoria', className="fw-bold", children=[
+                        html.Br(),
+                        
                         html.Div(id="bi-status-visor", className="mb-4 p-3 bg-light rounded-4 border-start border-primary border-4 shadow-sm"),
                         
                         dbc.Row([
                             dbc.Col([
                                 html.Label([html.I(className="fas fa-filter me-2 text-primary"), "Zonas activas:"], className="fw-bold mb-3 text-secondary"),
-                                dbc.Checklist(id="radar-drop-zonas", options=[], value=[], inline=True, input_class_name="btn-check", label_class_name="btn btn-outline-primary mb-2 me-2 fw-bold shadow-sm rounded-pill")
+                                dbc.Checklist(
+                                    id="radar-drop-zonas", options=[], value=[], inline=True,
+                                    input_class_name="btn-check", label_class_name="btn btn-outline-primary mb-2 me-2 fw-bold shadow-sm rounded-pill"
+                                )
                             ], width=12)
                         ], className="mb-4"),
                         
@@ -110,10 +156,13 @@ def serve_layout():
                                         {"label": "vs. Semana Ant. (WoW)", "value": "wow"},
                                         {"label": "vs. Mes Ant. (MoM)", "value": "mom"},
                                         {"label": "vs. Año Ant. (YoY)", "value": "yoy"}
-                                    ], value="none", inline=True, className="mb-2"
+                                    ],
+                                    value="none", inline=True, className="mb-2"
                                 )
                             ], xs=12, lg=8),
-                            dbc.Col([dbc.Button([html.I(className="fas fa-times me-2"), "Borrar filtro cruzado"], id="btn-clear-bi", color="danger", outline=True, className="mt-lg-4 mt-2 w-100 rounded-pill fw-bold shadow-sm")], xs=12, lg=4)
+                            dbc.Col([
+                                dbc.Button([html.I(className="fas fa-times me-2"), "Borrar filtro cruzado"], id="btn-clear-bi", color="danger", outline=True, className="mt-lg-4 mt-2 w-100 rounded-pill fw-bold shadow-sm")
+                            ], xs=12, lg=4)
                         ], className="align-items-center mb-4"),
                         
                         html.Div(id="bi-dynamic-content"),
@@ -121,7 +170,7 @@ def serve_layout():
                         html.Div(id="audit-results")
                     ]),
 
-                    dcc.Tab(label='Generador de Reportes', value='tab-reportes', className="fw-bold", children=[
+                    dcc.Tab(label='Generador de reportes', value='tab-reportes', className="fw-bold", children=[
                         html.Br(),
                         dbc.Row([
                             dbc.Col([
@@ -143,9 +192,7 @@ def serve_layout():
                                                 {"label": "Mes actual", "value": "month"}, 
                                                 {"label": "Año actual", "value": "year"}
                                             ], 
-                                            value=["7d", "28d"], 
-                                            inline=True, 
-                                            input_class_name="btn-check", 
+                                            value=["7d", "28d"], inline=True, input_class_name="btn-check", 
                                             label_class_name="btn btn-outline-primary mb-2 me-2 fw-bold shadow-sm rounded-pill"
                                         )
                                     ], xs=12, xl=6, className="mb-4 mb-xl-0"),
@@ -158,30 +205,24 @@ def serve_layout():
                                                 {"label": "Operativo (Visitas, horas...)", "value": "operativo"}, 
                                                 {"label": "Embudos dinámicos", "value": "embudos"}
                                             ], 
-                                            value="operativo", 
-                                            inline=True, 
-                                            input_class_name="btn-check", 
+                                            value="operativo", inline=True, input_class_name="btn-check", 
                                             label_class_name="btn btn-outline-secondary mb-2 me-2 fw-bold shadow-sm rounded-pill"
                                         )
                                     ], xs=12, xl=6)
                                 ]),
-                                
                                 html.Hr(className="text-muted my-4"),
-                                
                                 dbc.Row([
                                     dbc.Col([
                                         dbc.Button([html.I(className="fas fa-file-excel me-2"), "Generar y Descargar Excel"], id="btn-descargar", color="success", className="w-100 fw-bold rounded-pill shadow-sm")
                                     ], xs=12, md=6, lg=4, className="mx-auto")
                                 ]),
-                                
                                 html.Div(id="error-msg", className="text-danger fw-bold mt-3 text-center small"),
                             ])
                         ], className="border-0 shadow-sm rounded-4 bg-light mb-4"),
-                        
                         dcc.Download(id="download-excel")
                     ]),
 
-                    dcc.Tab(label='Machine Learning', value='tab-ml', className="fw-bold", children=[
+                    dcc.Tab(label='Machine learning', value='tab-ml', className="fw-bold", children=[
                         html.Br(),
                         generar_panel_ml()
                     ])
@@ -199,7 +240,10 @@ def serve_layout():
             dbc.ModalBody(dcc.Graph(id="modal-bi-graph", style={"height": "75vh"})),
         ], id="modal-bi-fullscreen", size="xl", is_open=False, centered=True),
         
-        dbc.Modal([dbc.ModalBody(html.Div([dbc.Spinner(color="primary", size="lg"), html.H5("Procesando...", className="ms-3 mb-0 text-primary fw-bold")], className="d-flex align-items-center p-3"))], id="modal-sync", is_open=False, backdrop="static", keyboard=False, centered=True),
+        dbc.Modal([
+            dbc.ModalBody(html.Div([dbc.Spinner(color="primary", size="lg"), html.H5("Procesando...", className="ms-3 mb-0 text-primary fw-bold")], className="d-flex align-items-center p-3"))
+        ], id="modal-sync", is_open=False, backdrop="static", keyboard=False, centered=True),
+
         dbc.Toast(id="toast-notificacion", header="Notificación", is_open=False, dismissable=True, icon="info", duration=4000, style={"position": "fixed", "top": 20, "right": 20, "width": 350, "zIndex": 9999, "fontSize": "15px"}),
 
         dbc.Row([
@@ -284,7 +328,7 @@ def limpiar_memoria(n, session_id):
         return True, "Memoria limpiada con éxito.", "success", "Flush data"
     except Exception as e: return True, f"Error al limpiar memoria: {str(e)}", "danger", "Error"
 
-# --- LÓGICA REACTIVA DE ANALÍTICA (BI + AUDITORÍA) ---
+# --- LÓGICA REACTIVA DE ANALÍTICA (BI + AUDITORÍA + EJECUTIVO) ---
 @app.callback(
     Output("bi-filtro-zona", "data"), Input({"type": "bi-graph", "index": dash.ALL}, "clickData"),
     Input("btn-clear-bi", "n_clicks"), State("bi-filtro-zona", "data"), prevent_initial_call=True
@@ -299,25 +343,36 @@ def update_click_filter(clickData_list, clear_btn, current_filter):
     return current_filter
 
 @app.callback(
-    [Output("bi-dynamic-content", "children"), Output("bi-status-visor", "children"), Output("audit-results", "children")],
+    [Output("bi-dynamic-content", "children"), Output("bi-status-visor", "children"), 
+     Output("audit-results", "children"), Output("panel-ejecutivo-content", "children")],
     [Input("drop-locs", "value"), Input("tipo-fecha", "value"), Input("date-rango", "start_date"), 
      Input("date-rango", "end_date"), Input("radar-drop-zonas", "value"), Input("bi-comparativa", "value"),
      Input("bi-filtro-zona", "data")],
     [State("session-id", "data")], prevent_initial_call=False
 )
 def master_reactive_analytics(locs, t_f, sd, ed, zones, comp, cross, s_id):
-    if not locs: return html.Div(), "Esperando selección de ubicación...", html.Div()
+    # SALIDAS DE SEGURIDAD (Evitan que colapse)
+    if not locs: 
+        return html.Div(), "Esperando selección de ubicación...", html.Div(), html.Div()
+        
     archivo_usuario = os.path.join('data', 'raw', f'dataset_{s_id}.csv')
-    if not os.path.exists(archivo_usuario): return html.Div(), "Sincroniza para descargar datos.", html.Div()
+    if not os.path.exists(archivo_usuario): 
+        return html.Div(), "Sincroniza para descargar datos.", html.Div(), html.Div()
 
     df = pd.read_csv(archivo_usuario)
-    if df.empty: return html.Div(), "El dataset está vacío.", html.Div()
+    if df.empty: 
+        return html.Div(), "El dataset está vacío.", html.Div(), html.Div()
 
+    # LECTURA DE DATOS
     df = df[df['location_id'].isin(locs)]
     df['Ubicación'] = df['location_id'].map(mapa_tiendas).fillna('Desconocida')
     df['Zona'] = df['zone_uuid'].map(mapa_zonas).fillna('SinNombre') if 'zone_uuid' in df.columns else 'SinNombre'
     df['fecha'] = pd.to_datetime(df['fecha'])
     
+    # 1. INFORME EJECUTIVO (Usa todo el histórico)
+    informe_ejecutivo = generar_panel_ejecutivo(df, locs)
+    
+    # 2. FILTRO TEMPORAL PARA BI Y RADAR
     hoy = datetime.today().date()
     start = end = pd.to_datetime(hoy - timedelta(days=1))
     if t_f == "7d_rel": start, end = pd.to_datetime(hoy - timedelta(days=7)), pd.to_datetime(hoy - timedelta(days=1))
@@ -348,9 +403,9 @@ def master_reactive_analytics(locs, t_f, sd, ed, zones, comp, cross, s_id):
     ])
 
     bi_content = generar_panel_bi_completo(df_bi, df_bi_hist, comp, cross)
-    audit_content = generar_tabla_auditoria(df_actual) if not df_actual.empty else dbc.Alert("No hay datos para las fechas.", color="info", className="rounded-4")
+    audit_content = generar_tabla_auditoria(df_actual) if not df_actual.empty else dbc.Alert("No hay datos para el radar en estas fechas.", color="info", className="rounded-4")
 
-    return bi_content, visor, audit_content
+    return bi_content, visor, audit_content, informe_ejecutivo
 
 @app.callback(
     Output("modal-bi-fullscreen", "is_open"), Output("modal-bi-graph", "figure"), Output("modal-bi-title", "children"),
