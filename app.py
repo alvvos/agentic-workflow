@@ -114,20 +114,39 @@ def serve_layout():
 
     main_content = html.Div([
         dbc.Row([
-            dbc.Col(html.H2("Panel Analítico Predictivo", className="fw-bold text-dark mb-0"), xs=12, md=7, className="mb-3 mb-md-0"),
+            dbc.Col([
+                html.Div([
+                    html.Img(src="/assets/logo.png", style={"height": "45px", "objectFit": "contain"}, className="me-3"),
+                    html.H2("Operaciones", className="fw-bold text-dark mb-0")
+                ], className="d-flex align-items-center justify-content-center justify-content-md-start")
+            ], xs=12, md=7, className="mb-4 mb-md-0"),
             dbc.Col([
                 dbc.Button([html.I(className="fas fa-sync-alt me-2"), "Sincronizar"], id="btn-sync", color="primary", outline=True, className="fw-bold rounded-pill shadow-sm me-2"),
                 dbc.Button([html.I(className="fas fa-trash-alt me-2"), "Flush"], id="btn-flush", color="danger", outline=True, className="fw-bold rounded-pill shadow-sm")
-            ], xs=12, md=5, className="text-md-end")
-        ], className="mb-4 align-items-center"),
+            ], xs=12, md=5, className="text-center text-md-end")
+        ], id="cabecera-app", className="mb-4 align-items-center d-print-none"),
         
         dbc.Card([
             dbc.CardBody([
                 dcc.Tabs(id="tabs-panel", value='tab-ejecutivo', className="custom-tabs", children=[
-                    
-                    # --- NUEVA PESTAÑA: RESUMEN EJECUTIVO (AQUÍ FALTABA EL ID) ---
                     dcc.Tab(label='Resumen ejecutivo', value='tab-ejecutivo', className="fw-bold", children=[
                         html.Br(),
+                        dbc.Row([
+                            dbc.Col([
+                                html.Label([html.I(className="fas fa-filter me-2 text-primary"), "Zonas analíticas (Last Zones):"], className="fw-bold mb-3 text-secondary"),
+                                dbc.Checklist(
+                                    id="ejecutivo-drop-zonas", options=[], value=[], inline=True,
+                                    input_class_name="btn-check", label_class_name="btn btn-outline-primary mb-2 me-2 fw-bold shadow-sm rounded-pill"
+                                )
+                            ], xs=12, md=9),
+                            
+                            # --- BOTÓN DE PDF ---
+                            dbc.Col([
+                                dbc.Button([html.I(className="fas fa-file-pdf me-2"), "Descargar PDF"], id="btn-pdf-ejecutivo", color="danger", className="w-100 fw-bold rounded-pill shadow-sm mb-3")
+                            ], xs=12, md=3)
+                            
+                        ], className="mb-4 align-items-center"),
+                        
                         html.Div(id="panel-ejecutivo-content")
                     ]),
 
@@ -281,20 +300,33 @@ def actualizar_locs(org_uuid):
     opciones = mapa_locs_por_org.get(org_uuid, [])
     return opciones, [opc['value'] for opc in opciones]
 
+# --- NUEVO CALLBACK DE RELLENO DE ZONAS (DUAL) ---
 @app.callback(
-    [Output("radar-drop-zonas", "options"), Output("radar-drop-zonas", "value")],
+    [Output("radar-drop-zonas", "options"), Output("radar-drop-zonas", "value"),
+     Output("ejecutivo-drop-zonas", "options"), Output("ejecutivo-drop-zonas", "value")],
     [Input("drop-locs", "value")]
 )
 def auto_fill_zonas(locs):
-    if not locs: return [], []
-    opts, vals, vistos = [], [], set()
+    if not locs: return [], [], [], []
+    opts_bi, vals_bi, opts_exe, vals_exe = [], [], [], []
+    vistos_bi, vistos_exe = set(), set()
+    
     for l in locs:
         for z in mapa_zonas_por_loc.get(l, []):
-            if z['value'] not in vistos:
-                opts.append(z)
-                vistos.add(z['value'])
-                if z.get('tipo') == 'end_zone' or any(x in z['value'].lower() for x in ['tienda','caja']): vals.append(z['value'])
-    return opts, vals
+            nombre = z['value']
+            tipo = z.get('tipo', '').lower()
+            
+            if nombre not in vistos_bi:
+                opts_bi.append(z)
+                vistos_bi.add(nombre)
+                if tipo != 'end_zone': vals_bi.append(nombre)
+                
+            if tipo == 'last_zone' and nombre not in vistos_exe:
+                opts_exe.append(z)
+                vistos_exe.add(nombre)
+                vals_exe.append(nombre) 
+                
+    return opts_bi, vals_bi, opts_exe, vals_exe
 
 # --- CALLBACKS DE SISTEMA ---
 @app.callback(Output("modal-sync", "is_open", allow_duplicate=True), Input("btn-sync", "n_clicks"), prevent_initial_call=True)
@@ -328,7 +360,7 @@ def limpiar_memoria(n, session_id):
         return True, "Memoria limpiada con éxito.", "success", "Flush data"
     except Exception as e: return True, f"Error al limpiar memoria: {str(e)}", "danger", "Error"
 
-# --- LÓGICA REACTIVA DE ANALÍTICA (BI + AUDITORÍA + EJECUTIVO) ---
+
 @app.callback(
     Output("bi-filtro-zona", "data"), Input({"type": "bi-graph", "index": dash.ALL}, "clickData"),
     Input("btn-clear-bi", "n_clicks"), State("bi-filtro-zona", "data"), prevent_initial_call=True
@@ -347,10 +379,10 @@ def update_click_filter(clickData_list, clear_btn, current_filter):
      Output("audit-results", "children"), Output("panel-ejecutivo-content", "children")],
     [Input("drop-locs", "value"), Input("tipo-fecha", "value"), Input("date-rango", "start_date"), 
      Input("date-rango", "end_date"), Input("radar-drop-zonas", "value"), Input("bi-comparativa", "value"),
-     Input("bi-filtro-zona", "data")],
+     Input("bi-filtro-zona", "data"), Input("ejecutivo-drop-zonas", "value")], 
     [State("session-id", "data")], prevent_initial_call=False
 )
-def master_reactive_analytics(locs, t_f, sd, ed, zones, comp, cross, s_id):
+def master_reactive_analytics(locs, t_f, sd, ed, zones_bi, comp, cross, zones_exe, s_id): 
     # SALIDAS DE SEGURIDAD (Evitan que colapse)
     if not locs: 
         return html.Div(), "Esperando selección de ubicación...", html.Div(), html.Div()
@@ -369,8 +401,10 @@ def master_reactive_analytics(locs, t_f, sd, ed, zones, comp, cross, s_id):
     df['Zona'] = df['zone_uuid'].map(mapa_zonas).fillna('SinNombre') if 'zone_uuid' in df.columns else 'SinNombre'
     df['fecha'] = pd.to_datetime(df['fecha'])
     
-    # 1. INFORME EJECUTIVO (Usa todo el histórico)
-    informe_ejecutivo = generar_panel_ejecutivo(df, locs)
+    # 1. INFORME EJECUTIVO (Le pasamos las zonas estrictas)
+    # 1. GENERAR INFORME EJECUTIVO (Lo envolvemos en una lista para Pandas)
+    lista_zonas_exe = zones_exe if zones_exe else []
+    informe_ejecutivo = generar_panel_ejecutivo(df, locs, lista_zonas_exe)
     
     # 2. FILTRO TEMPORAL PARA BI Y RADAR
     hoy = datetime.today().date()
@@ -380,14 +414,14 @@ def master_reactive_analytics(locs, t_f, sd, ed, zones, comp, cross, s_id):
     elif t_f == "rango" and sd and ed: start, end = pd.to_datetime(sd), pd.to_datetime(ed)
     
     df_actual = df[(df['fecha'] >= start) & (df['fecha'] <= end + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))].copy()
-    if zones: df_actual = df_actual[df_actual['Zona'].isin(zones)]
+    if zones_bi: df_actual = df_actual[df_actual['Zona'].isin(zones_bi)]
     
     df_hist = pd.DataFrame()
     if comp != 'none':
         off = {'wow': 7, 'mom': 28, 'yoy': 365}[comp]
         s_h, e_h = start - pd.Timedelta(days=off), end - pd.Timedelta(days=off)
         df_hist = df[(df['fecha'] >= s_h) & (df['fecha'] <= e_h + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))].copy()
-        if zones: df_hist = df_hist[df_hist['Zona'].isin(zones)]
+        if zones_bi: df_hist = df_hist[df_hist['Zona'].isin(zones_bi)]
 
     df_bi = df_actual.copy()
     df_bi_hist = df_hist.copy()
@@ -397,7 +431,7 @@ def master_reactive_analytics(locs, t_f, sd, ed, zones, comp, cross, s_id):
     comparativa_txt = {'wow': 'vs. Semana Anterior', 'mom': 'vs. Mes Anterior', 'yoy': 'vs. Año Anterior', 'none': ''}[comp]
     visor = html.Div([
         html.Span([html.I(className="fas fa-calendar-day me-2"), f"{start.strftime('%d %b')} - {end.strftime('%d %b')}"], className="badge bg-white text-primary me-2 shadow-sm fs-6"),
-        html.Span([html.I(className="fas fa-layer-group me-2"), f"{len(zones) if zones else 'Todas las'} Zonas"], className="badge bg-white text-secondary me-2 shadow-sm fs-6"),
+        html.Span([html.I(className="fas fa-layer-group me-2"), f"{len(zones_bi) if zones_bi else 'Todas las'} Zonas"], className="badge bg-white text-secondary me-2 shadow-sm fs-6"),
         html.Span(comparativa_txt, className="badge bg-primary text-white shadow-sm fs-6") if comparativa_txt else None,
         html.Span(f" • Filtrando por: {cross}", className="ms-2 text-danger fw-bold small") if cross else None
     ])
@@ -463,6 +497,21 @@ def generar_excel(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico,
         return dcc.send_bytes(output.getvalue(), f"Reporte_{tipo_reporte}.xlsx"), ""
     except Exception as e:
         return dash.no_update, f"Error generando excel: {str(e)}"
+
+# --- CALLBACK DE DESCARGA PDF ---
+app.clientside_callback(
+    """
+    function(n_clicks) {
+        if (n_clicks > 0) {
+            window.print();
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("btn-pdf-ejecutivo", "id"),
+    Input("btn-pdf-ejecutivo", "n_clicks"),
+    prevent_initial_call=True
+)
 
 if __name__ == "__main__":
     app.run(debug=True, port=8051)

@@ -4,13 +4,11 @@ import plotly.graph_objects as go
 from datetime import date
 import os
 import json
+import pandas as pd
 from src.services.ml_predictivo import ejecutar_auditoria_predictiva
 from src.data_processing.constructor_master import cargar_csv_crudo, enriquecer_datos_ubicacion
 
-RUTA_DATASET = 'src/data/dataset_global_raw.csv'
-DF_CRUDO_GLOBAL = cargar_csv_crudo(RUTA_DATASET)
 RUTA_JSON = 'src/data/todas_las_ubicaciones.json'
-
 mapa_zonas_por_loc = {}
 
 if os.path.exists(RUTA_JSON):
@@ -28,7 +26,7 @@ def generar_panel_ml():
         dbc.Row([
             dbc.Col([
                 html.H4([html.I(className="fas fa-brain me-2 text-primary"), "Motor Predictivo (Machine Learning)"], className="fw-bold mb-1 text-dark"),
-                html.P("Entrena un modelo de forecasting al instante para predecir el flujo futuro de visitantes basado en el histórico.", className="text-muted small")
+                html.P("Entrena un modelo de forecasting al instante para predecir el flujo futuro de visitantes basado en el histórico sincronizado.", className="text-muted small")
             ], width=12)
         ], className="mb-4"),
         
@@ -84,21 +82,30 @@ def filtrar_zonas_desde_global(locs):
     [Output('ml-card-acc', 'children'), Output('ml-card-mae', 'children'), Output('ml-card-wmape', 'children'),
      Output('ml-card-iter', 'children'), Output('ml-graph-res', 'figure'), Output('ml-error-msg', 'children')],
     [Input('ml-btn-run', 'n_clicks')],
-    [State('drop-locs', 'value'), State('ml-drop-zone', 'value'), State('ml-date-falso', 'date'), State('ml-slider-horiz', 'value')]
+    [State('drop-locs', 'value'), State('ml-drop-zone', 'value'), State('ml-date-falso', 'date'), 
+     State('ml-slider-horiz', 'value'), State('session-id', 'data')] 
 )
-def ejecutar_auditoria(n, locs, zone, fecha, horiz):
+def ejecutar_auditoria(n, locs, zone, fecha, horiz, session_id):
     if n is None: return no_update, no_update, no_update, no_update, go.Figure().update_layout(template='plotly_white'), ""
-    if DF_CRUDO_GLOBAL is None: return "-", "-", "-", "-", go.Figure(), "Error: dataset_global_raw.csv no encontrado"
     if not locs or not zone: return "-", "-", "-", "-", go.Figure(), "Aviso: Selecciona una ubicación en el filtro global (izquierda) y una zona."
-    
-    loc_principal = locs[0]
-    
+    if not session_id: return "-", "-", "-", "-", go.Figure(), "Error de sesión: No se puede identificar el usuario."
+
+    archivo_usuario = os.path.join('data', 'raw', f'dataset_{session_id}.csv')
+    if not os.path.exists(archivo_usuario):
+        return "-", "-", "-", "-", go.Figure(), "Error: Sincroniza los datos desde el panel principal antes de usar el Motor Predictivo."
+
     try:
-        df_e = enriquecer_datos_ubicacion(DF_CRUDO_GLOBAL, loc_principal, RUTA_JSON)
+        # Usamos TU función original para que formatee las columnas correctamente
+        df_crudo = cargar_csv_crudo(archivo_usuario)
+        loc_principal = locs[0]
+        
+        # Procesar para ML (pasando la fecha tal cual)
+        df_e = enriquecer_datos_ubicacion(df_crudo, loc_principal, RUTA_JSON)
         res = ejecutar_auditoria_predictiva(df_e, loc_principal, zone, fecha, horiz)
         
         if "error" in res: return "-", "-", "-", "-", go.Figure(), f"Error en el motor ML: {res['error']}"
         
+        # Gráfica
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=res['grafica']['fechas'], y=res['grafica']['reales'], name='Datos Reales', mode='lines+markers', line=dict(color='#bdc3c7', width=2), marker=dict(size=6, color='#7f8c8d')))
         fig.add_trace(go.Scatter(x=res['grafica']['fechas'], y=res['grafica']['predichos'], name='Predicción del Algoritmo', mode='lines+markers', line=dict(color='#27ae60', width=3, dash='dot', shape='spline'), marker=dict(size=8, symbol='diamond', color='#2ecc71')))
@@ -115,6 +122,12 @@ def ejecutar_auditoria(n, locs, zone, fecha, horiz):
         fig.update_yaxes(showgrid=True, gridcolor='#f0f0f0', rangemode='tozero')
 
         m = res['metricas']
-        return f"{m['accuracy']}%", f"{int(m['mae'])} vis.", f"{m['wmape_pct']}%", str(m['arboles_optimos']), fig, ""
+        
+        acc = f"{m['accuracy']}%" if m['accuracy'] != "N/A" else "N/A"
+        mae = f"{int(m['mae'])} vis." if m['mae'] != "N/A" else "N/A"
+        wmape = f"{m['wmape_pct']}%" if m['wmape_pct'] != "N/A" else "N/A"
+        
+        return acc, mae, wmape, str(m['arboles_optimos']), fig, ""
+        
     except Exception as e:
-        return "-", "-", "-", "-", go.Figure(), f"Error crítico: {str(e)}"
+        return "-", "-", "-", "-", go.Figure(), f"Error crítico durante el entrenamiento: {str(e)}"

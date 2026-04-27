@@ -1,0 +1,46 @@
+@media print {
+    /* 1. Limpieza de bordes y fechas basura del navegador */
+    @page {
+        margin: 0; 
+        size: A4 portrait;
+    }
+
+    body {
+        margin: 15mm 20mm !important; 
+        background-color: white !important;
+        -webkit-print-color-adjust: exact !important; 
+        print-color-adjust: exact !important;
+    }
+
+    /* 2. OCULTAR TODA LA BASURA VISUAL (Menús, pestañas, botones) */
+    .tab-container,                   /* Menú nativo de pestañas de Dash */
+    .custom-tabs > div:first-child,   /* Respaldo para el menú de pestañas */
+    .sticky-top,                      /* Panel lateral izquierdo */
+    #btn-pdf-ejecutivo,               /* Botón rojo de PDF */
+    #ejecutivo-drop-zonas,            /* Filtros de zonas */
+    .btn-check, 
+    label { 
+        display: none !important; 
+    }
+
+    /* 3. Limpiar las tarjetas globales para que no parezcan cajas en el papel */
+    .card {
+        border: none !important;
+        box-shadow: none !important;
+        background-color: white !important;
+    }
+
+    /* 4. Reponer el borde ÚNICAMENTE a las tarjetas pequeñas del propio resumen */
+    #panel-ejecutivo-content .card {
+        border: 1px solid #e2e8f0 !important;
+        page-break-inside: avoid !important;
+        margin-bottom: 25px !important;
+    }
+
+    /* 5. Forzar ancho total de la página */
+    .col-lg-9, .col-xl-10 { 
+        width: 100% !important; 
+        max-width: 100% !important; 
+        flex: 0 0 100% !important; 
+    }
+}
