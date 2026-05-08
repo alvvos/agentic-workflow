@@ -1,15 +1,19 @@
 from dash import dcc, html, Input, Output, State, callback, no_update
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
-from datetime import date
+from datetime import date, datetime, timedelta
 import os
 import json
 import pandas as pd
 from src.services.ml_predictivo import ejecutar_auditoria_predictiva
 from src.data_processing.constructor_master import cargar_csv_crudo, enriquecer_datos_ubicacion
+from src.models.forecaster import entrenar_modelo_volumen, predecir_manana
+from src.data_processing.feature_engineering import enriquecer_dataset_ml
 
 RUTA_JSON = 'src/data/todas_las_ubicaciones.json'
 mapa_zonas_por_loc = {}
+mapa_tiendas_ml = {}
+mapa_zonas_ml = {}
 
 if os.path.exists(RUTA_JSON):
     with open(RUTA_JSON, 'r', encoding='utf-8') as f:
@@ -17,9 +21,13 @@ if os.path.exists(RUTA_JSON):
         for org in datos_json:
             for loc in org.get('locations', []):
                 if loc.get('uuid'):
-                    zonas = [{'label': z.get('zoneName', 'Zona'), 'value': z['uuid']} 
+                    zonas = [{'label': z.get('zoneName', 'Zona'), 'value': z['uuid']}
                              for z in loc.get('zones', []) if z.get('uuid')]
                     mapa_zonas_por_loc[loc['uuid']] = zonas
+                    mapa_tiendas_ml[loc['uuid']] = loc.get('name')
+                    for z in loc.get('zones', []):
+                        if z.get('uuid'):
+                            mapa_zonas_ml[z['uuid']] = z.get('zoneName', 'Zona')
 
 def generar_panel_ml():
     return html.Div([
@@ -64,7 +72,36 @@ def generar_panel_ml():
             dbc.CardBody([
                 dcc.Graph(id='ml-graph-res', style={"height": "400px"}, config={'displayModeBar': False})
             ], className="p-2")
-        ], className="border-0 shadow-sm rounded-4 bg-white")
+        ], className="border-0 shadow-sm rounded-4 bg-white"),
+
+        html.Hr(className="text-muted my-5"),
+
+        dbc.Row([
+            dbc.Col([
+                html.H4([
+                    html.I(className="fas fa-calendar-day me-2 text-warning"),
+                    "Proyección para Mañana",
+                    dbc.Badge("Beta", color="warning", pill=True, className="ms-2 align-middle small fw-normal")
+                ], className="fw-bold mb-1 text-dark"),
+                html.P(
+                    "Entrena el modelo sobre todos los datos históricos disponibles y proyecta las visitas del día siguiente para cada zona.",
+                    className="text-muted small"
+                )
+            ], width=12)
+        ], className="mb-4"),
+
+        dbc.Card([
+            dbc.CardBody([
+                dbc.Button(
+                    [html.I(className="fas fa-magic me-2"), "CALCULAR PROYECCIÓN DE MAÑANA"],
+                    id="ml-btn-manana", color="warning", className="w-100 fw-bold rounded-pill shadow-sm mb-2"
+                ),
+                html.Div(id="ml-manana-msg", className="text-danger fw-bold mt-2 text-center small"),
+            ])
+        ], className="border-0 shadow-sm rounded-4 bg-light mb-4"),
+
+        html.Div(id="ml-forecast-manana")
+
     ], className="p-2")
 
 @callback(
@@ -82,8 +119,8 @@ def filtrar_zonas_desde_global(locs):
     [Output('ml-card-acc', 'children'), Output('ml-card-mae', 'children'), Output('ml-card-wmape', 'children'),
      Output('ml-card-iter', 'children'), Output('ml-graph-res', 'figure'), Output('ml-error-msg', 'children')],
     [Input('ml-btn-run', 'n_clicks')],
-    [State('drop-locs', 'value'), State('ml-drop-zone', 'value'), State('ml-date-falso', 'date'), 
-     State('ml-slider-horiz', 'value'), State('session-id', 'data')] 
+    [State('drop-locs', 'value'), State('ml-drop-zone', 'value'), State('ml-date-falso', 'date'),
+     State('ml-slider-horiz', 'value'), State('session-id', 'data')]
 )
 def ejecutar_auditoria(n, locs, zone, fecha, horiz, session_id):
     if n is None: return no_update, no_update, no_update, no_update, go.Figure().update_layout(template='plotly_white'), ""
@@ -128,3 +165,90 @@ def ejecutar_auditoria(n, locs, zone, fecha, horiz, session_id):
         
     except Exception as e:
         return "-", "-", "-", "-", go.Figure(), f"Error crítico durante el entrenamiento: {str(e)}"
+
+
+@callback(
+    [Output('ml-forecast-manana', 'children'), Output('ml-manana-msg', 'children')],
+    [Input('ml-btn-manana', 'n_clicks')],
+    [State('drop-locs', 'value'), State('session-id', 'data')],
+    prevent_initial_call=True
+)
+def ejecutar_forecast_manana(n, locs, session_id):
+    if n is None:
+        return no_update, ""
+    if not locs:
+        return no_update, "Selecciona una ubicación en el filtro global antes de calcular."
+    if not session_id:
+        return no_update, "Error de sesión."
+
+    archivo = os.path.join('src', 'data', f'dataset_{session_id}.csv')
+    if not os.path.exists(archivo):
+        return no_update, "Sincroniza los datos desde el panel principal primero."
+
+    try:
+        df = pd.read_csv(archivo)
+        df = df[df['location_id'].isin(locs)]
+        df['Ubicación'] = df['location_id'].map(mapa_tiendas_ml).fillna('Desconocida')
+        df['Zona'] = df['zone_uuid'].map(mapa_zonas_ml).fillna('SinNombre') if 'zone_uuid' in df.columns else 'SinNombre'
+        df['fecha'] = pd.to_datetime(df['fecha'])
+
+        if df.empty:
+            return no_update, "No hay datos para las ubicaciones seleccionadas."
+
+        df_ml = enriquecer_dataset_ml(df)
+
+        if len(df_ml) < 30:
+            return no_update, f"Histórico insuficiente tras el enriquecimiento ({len(df_ml)} registros). Se necesitan mínimo 30 días."
+
+        modelo, features, metricas = entrenar_modelo_volumen(df_ml)
+        df_pred = predecir_manana(df_ml, modelo, features)
+
+        if df_pred is None or df_pred.empty:
+            return no_update, "No se pudieron generar proyecciones."
+
+        manana = pd.to_datetime(df_ml['fecha'].max()) + timedelta(days=1)
+        dias_es = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+        dia_txt = dias_es[manana.dayofweek]
+
+        acc = f"{round((1 - metricas['error_porcentual_medio'] / 100) * 100, 1)}%"
+        mae = f"{int(metricas['error_absoluto_medio'])} vis."
+        wmape = f"{metricas['error_porcentual_medio']}%"
+
+        metricas_row = dbc.Row([
+            dbc.Col(dbc.Card(dbc.CardBody([
+                html.H6("Precisión (Accuracy)", className="text-muted small text-uppercase fw-bold"),
+                html.H3(acc, className="text-success fw-bold mb-0")
+            ]), className="border-0 shadow-sm rounded-4 text-center"), xs=6, md=4, className="mb-3"),
+            dbc.Col(dbc.Card(dbc.CardBody([
+                html.H6("Error Medio (MAE)", className="text-muted small text-uppercase fw-bold"),
+                html.H3(mae, className="text-warning fw-bold mb-0")
+            ]), className="border-0 shadow-sm rounded-4 text-center"), xs=6, md=4, className="mb-3"),
+            dbc.Col(dbc.Card(dbc.CardBody([
+                html.H6("Desviación (WMAPE)", className="text-muted small text-uppercase fw-bold"),
+                html.H3(wmape, className="text-danger fw-bold mb-0")
+            ]), className="border-0 shadow-sm rounded-4 text-center"), xs=6, md=4, className="mb-3"),
+        ], className="mb-4")
+
+        zona_cards = []
+        for _, row in df_pred.iterrows():
+            zona = row.get('Zona', '—')
+            pred = int(row.get('prediccion', 0))
+            zona_cards.append(
+                dbc.Col(dbc.Card(dbc.CardBody([
+                    html.H6(zona, className="text-muted small text-uppercase fw-bold mb-1"),
+                    html.H3(f"{pred:,}", className="fw-bold text-dark mb-0"),
+                    html.Small("visitas proyectadas", className="text-muted")
+                ]), className="border-0 shadow-sm rounded-4 text-center h-100"), xs=6, md=3, className="mb-3")
+            )
+
+        return html.Div([
+            html.Div([
+                html.I(className="fas fa-calendar-day me-2 text-warning"),
+                html.Span(f"Proyección para el {manana.strftime('%d/%m/%Y')} ({dia_txt})", className="fw-bold text-dark"),
+            ], className="mb-3 fs-6"),
+            metricas_row,
+            dbc.Row(zona_cards)
+        ]), ""
+
+    except Exception as e:
+        return no_update, f"Error durante la proyección: {str(e)}"

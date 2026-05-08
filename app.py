@@ -30,28 +30,30 @@ mapa_locs_por_org = {}
 mapa_tiendas = {}
 mapa_zonas = {}
 mapa_zonas_por_loc = {}
+mapa_orgs = {}
 
 for org in datos_loc:
     if org.get('uuid'):
         opciones_orgs.append({'label': org.get('name'), 'value': org['uuid']})
+        mapa_orgs[org['uuid']] = org.get('name', '')
         locs_list = []
         for loc in org.get('locations', []):
             if loc.get('uuid'):
                 locs_list.append({'label': loc.get('name'), 'value': loc['uuid']})
                 mapa_tiendas[loc['uuid']] = loc.get('name')
-                
+
                 zonas_loc = []
                 for z in loc.get('zones', []):
                     if z.get('uuid'):
                         nombre_zona = z.get('zoneName', 'Zona')
                         mapa_zonas[z['uuid']] = nombre_zona
                         zonas_loc.append({
-                            'label': nombre_zona, 
+                            'label': nombre_zona,
                             'value': nombre_zona,
-                            'tipo': z.get('zoneType', '')  
+                            'tipo': z.get('zoneType', '')
                         })
                 mapa_zonas_por_loc[loc['uuid']] = zonas_loc
-                
+
         mapa_locs_por_org[org['uuid']] = locs_list
 
 dias_semana_es = {0: 'Lunes', 1: 'Martes', 2: 'Miércoles', 3: 'Jueves', 4: 'Viernes', 5: 'Sábado', 6: 'Domingo'}
@@ -66,17 +68,35 @@ app = dash.Dash(
 app.title = "Panel Analítico Predictivo"
 server = app.server
 
+# --- HELPERS DE UI ---
+def _seccion_informe(num, titulo, desc, color_num, nota=None):
+    return html.Div([
+        html.Div([
+            html.Span(num, className=f"badge rounded-pill {color_num.replace('text-','bg-')} me-2 fw-bold",
+                      style={"minWidth": "1.6rem", "fontSize": "0.7rem"}),
+            html.Span(titulo, className="fw-bold text-dark small"),
+        ], className="d-flex align-items-center mb-1"),
+        html.P(desc, className="small text-muted mb-0 ms-4"),
+        html.P([html.I(className="fas fa-info-circle me-1"), nota],
+               className="small text-warning ms-4 mb-0") if nota else None,
+    ], className="mb-3")
+
+
 # --- INTERFAZ VISUAL (LAYOUT) ---
 def serve_layout():
     session_id = "local_dev" if MODO_DESARROLLO else str(uuid.uuid4())
     
     sidebar = html.Div([
+        html.Div(
+            html.Img(src="/assets/logo.png", style={"maxWidth": "100%", "maxHeight": "70px", "objectFit": "contain"}),
+            className="text-center mb-3 px-2"
+        ),
         dbc.Card([
             dbc.CardBody([
                 html.H5([html.I(className="fas fa-sliders-h me-2 text-primary"), "Filtros Globales"], className="fw-bold mb-4 text-dark"),
                 
                 html.Label("Organización", className="fw-bold text-muted small text-uppercase mb-1"),
-                dcc.Dropdown(id="drop-org", options=opciones_orgs, value=opciones_orgs[0]['value'] if opciones_orgs else None, className="mb-3 shadow-sm"),
+                dcc.Dropdown(id="drop-org", options=opciones_orgs, value=None, placeholder="Selecciona una organización...", className="mb-3 shadow-sm"),
                 
                 html.Label("Ubicaciones", className="fw-bold text-muted small text-uppercase mb-1 mt-2"),
                 dcc.Dropdown(id="drop-locs", multi=True, className="mb-4 shadow-sm"),
@@ -116,7 +136,6 @@ def serve_layout():
         dbc.Row([
             dbc.Col([
                 html.Div([
-                    html.Img(src="/assets/logo.png", style={"height": "45px", "objectFit": "contain"}, className="me-3"),
                     html.H2("Operaciones", className="fw-bold text-dark mb-0")
                 ], className="d-flex align-items-center justify-content-center justify-content-md-start")
             ], xs=12, md=7, className="mb-4 mb-md-0"),
@@ -192,34 +211,91 @@ def serve_layout():
                     dcc.Tab(label='Generador de reportes', value='tab-reportes', className="fw-bold", children=[
                         html.Br(),
                         dbc.Row([
-                            dbc.Col([
-                                html.H4([html.I(className="fas fa-file-export me-2 text-primary"), "Exportación de Datos"], className="fw-bold mb-1 text-dark"),
-                                html.P("Genera y descarga un reporte consolidado en formato PowerPoint listo para presentar.", className="text-muted small")
-                            ], width=12)
-                        ], className="mb-4"),
 
-                        dbc.Card([
-                            dbc.CardBody([
-                                dbc.Row([
-                                    dbc.Col([
-                                        html.Label("Formato de exportación:", className="fw-bold text-secondary small text-uppercase mb-2"),
+                            # ── Columna izquierda: info del informe ─────────────────
+                            dbc.Col([
+                                html.H4([
+                                    html.I(className="fas fa-presentation me-2 text-danger"),
+                                    "Informe Ejecutivo PowerPoint"
+                                ], className="fw-bold mb-1 text-dark"),
+                                html.P(
+                                    "El informe se construye automáticamente con los filtros activos "
+                                    "en el panel lateral. Selecciona el periodo y las ubicaciones antes de generar.",
+                                    className="text-muted small mb-4"
+                                ),
+
+                                # Resumen de filtros activos
+                                dbc.Card([
+                                    dbc.CardHeader([
+                                        html.I(className="fas fa-sliders-h me-2 text-primary"),
+                                        html.Span("Configuración activa", className="fw-bold small text-uppercase")
+                                    ], className="bg-white border-bottom py-2"),
+                                    dbc.CardBody(
+                                        html.Div(id="export-resumen-filtros",
+                                                 children=html.Span("Cargando filtros...", className="text-muted small")),
+                                        className="py-2 px-3"
+                                    )
+                                ], className="border-0 shadow-sm rounded-4 mb-3"),
+
+                                # Estructura del informe
+                                dbc.Card([
+                                    dbc.CardHeader([
+                                        html.I(className="fas fa-list-ol me-2 text-primary"),
+                                        html.Span("Contenido generado automáticamente", className="fw-bold small text-uppercase")
+                                    ], className="bg-white border-bottom py-2"),
+                                    dbc.CardBody([
+                                        _seccion_informe("1", "Portada", "Organización, emplazamientos y periodo analizado", "text-primary"),
+                                        _seccion_informe("2", "Visión Global del Periodo", "KPIs consolidados, tabla resumen por zona y tendencia mensual", "text-primary"),
+                                        html.P("Por cada mes × ubicación:", className="small fw-bold text-muted text-uppercase mt-3 mb-2"),
+                                        _seccion_informe("A", "KPIs + Evolución Diaria",
+                                                         "Visitas totales, visitantes únicos, nuevos visitantes, estancia media · Visitantes únicos / día por zona", "text-success"),
+                                        _seccion_informe("B", "Intensidad Horaria",
+                                                         "Histograma 00:00–23:00 · Identificación de hora pico y hora valle", "text-success"),
+                                        _seccion_informe("C", "Mapa de Actividad Semanal",
+                                                         "Calendario L–D × semanas del mes, coloreado por intensidad de visitantes únicos", "text-success"),
+                                        _seccion_informe("D", "Ratio de Atracción",
+                                                         "Zona Exterior → Zona Interior: ratio medio, máximo y mínimo · Evolución diaria del %", "text-warning",
+                                                         nota="Solo si hay zonas Exterior e Interior disponibles"),
+                                        _seccion_informe("E", "KPIs de Fidelización",
+                                                         "Visitantes únicos 7d y 28d · Frecuencia de retorno por zona", "text-warning",
+                                                         nota="Solo si la API devuelve datos rolling"),
+                                    ], className="py-2 px-3")
+                                ], className="border-0 shadow-sm rounded-4"),
+
+                            ], xs=12, lg=7, className="mb-4 mb-lg-0"),
+
+                            # ── Columna derecha: botón de descarga ──────────────────
+                            dbc.Col([
+                                dbc.Card([
+                                    dbc.CardBody([
                                         html.Div([
-                                            html.I(className="fas fa-file-powerpoint me-2 text-danger fs-4 align-middle"),
-                                            html.Span("Presentación Ejecutiva (.pptx)", className="fw-bold align-middle text-dark ms-2")
-                                        ], className="p-3 bg-white border rounded-3 shadow-sm text-center")
-                                    ], xs=12, md=8, lg=6, className="mx-auto mb-3")
-                                ]),
-                                html.Hr(className="text-muted my-4"),
-                                dbc.Row([
-                                    dbc.Col([
-                                        # Le pongo el color "danger" (rojo) para que parezca de PowerPoint
-                                        dbc.Button([html.I(className="fas fa-download me-2"), "Generar y Descargar PPTX"], id="btn-descargar", color="danger", className="w-100 fw-bold rounded-pill shadow-sm")
-                                    ], xs=12, md=6, lg=4, className="mx-auto")
-                                ]),
-                                html.Div(id="error-msg", className="text-danger fw-bold mt-3 text-center small"),
-                            ])
-                        ], className="border-0 shadow-sm rounded-4 bg-light mb-4"),
-                        dcc.Download(id="download-report") # Le hemos cambiado el ID para que tenga más sentido
+                                            html.I(className="fas fa-file-powerpoint",
+                                                   style={"fontSize": "3.5rem", "color": "#C0392B"}),
+                                        ], className="text-center mb-3 mt-2"),
+                                        html.H5("Presentación Ejecutiva",
+                                                className="fw-bold text-center text-dark mb-1"),
+                                        html.P(".pptx — Compatible con PowerPoint y Google Slides",
+                                               className="text-muted text-center small mb-4"),
+                                        dbc.Button([
+                                            html.I(className="fas fa-download me-2"),
+                                            "Generar y Descargar"
+                                        ], id="btn-descargar", color="danger",
+                                           className="w-100 fw-bold rounded-pill shadow-sm mb-3",
+                                           size="lg"),
+                                        html.Div(id="error-msg",
+                                                 className="text-danger fw-bold text-center small"),
+                                        html.Hr(className="my-3"),
+                                        html.P([
+                                            html.I(className="fas fa-info-circle me-2 text-muted"),
+                                            "El tiempo de generación depende del número de meses y ubicaciones en el periodo."
+                                        ], className="small text-muted text-center mb-0"),
+                                    ], className="p-4")
+                                ], className="border-0 shadow-sm rounded-4 bg-light sticky-top",
+                                   style={"top": "20px"}),
+                            ], xs=12, lg=5),
+
+                        ], className="align-items-start"),
+                        dcc.Download(id="download-report")
                     ]),
 
                     dcc.Tab(label='Machine learning', value='tab-ml', className="fw-bold", children=[
@@ -250,7 +326,7 @@ def serve_layout():
             dbc.Col(sidebar, xs=12, lg=3, xl=2, className="mb-4 mb-lg-0"),
             dbc.Col(main_content, xs=12, lg=9, xl=10)
         ])
-    ], fluid=True, style={"padding": "30px", "backgroundColor": "#f4f6f9", "minHeight": "100vh"})
+    ], fluid=True, style={"padding": "30px", "backgroundColor": "#ffffff", "minHeight": "100vh"})
 
 app.layout = serve_layout
 
@@ -269,6 +345,55 @@ def filtrar_dataframe_fechas(df, tipo_fecha, start_rango, end_rango, dia_unico):
     return df_filt, start, end
 
 # --- CALLBACKS BASE ---
+@app.callback(
+    Output("export-resumen-filtros", "children"),
+    Input("drop-locs", "value"), Input("tipo-fecha", "value"),
+    Input("date-rango", "start_date"), Input("date-rango", "end_date"), Input("date-dia", "date"),
+)
+def actualizar_resumen_exportacion(locs, t_f, sd, ed, dia):
+    hoy = datetime.today().date()
+    if t_f == "ayer":
+        start = end = hoy - timedelta(days=1)
+    elif t_f == "7d_rel":
+        start, end = hoy - timedelta(days=7), hoy - timedelta(days=1)
+    elif t_f == "28d_rel":
+        start, end = hoy - timedelta(days=28), hoy - timedelta(days=1)
+    elif t_f == "dia" and dia:
+        start = end = datetime.fromisoformat(dia).date()
+    elif t_f == "rango" and sd and ed:
+        start = datetime.fromisoformat(sd).date()
+        end = datetime.fromisoformat(ed).date()
+    else:
+        start = end = hoy - timedelta(days=1)
+
+    n_meses = max(1, round((end - start).days / 30))
+    n_locs = len(locs) if locs else 0
+    slides_est = 2 + n_meses * n_locs * 4
+
+    ubi_labels = []
+    for loc_uuid in (locs or []):
+        nombre = mapa_tiendas.get(loc_uuid, loc_uuid)
+        ubi_labels.append(nombre)
+
+    def _fila(icono, etiqueta, valor, color="text-dark"):
+        return html.Div([
+            html.I(className=f"{icono} me-2 text-muted", style={"width": "1rem"}),
+            html.Span(etiqueta, className="text-muted small me-2"),
+            html.Span(valor, className=f"fw-bold small {color}"),
+        ], className="mb-2")
+
+    return html.Div([
+        _fila("fas fa-calendar-alt", "Periodo:",
+              f"{start.strftime('%d/%m/%Y')} — {end.strftime('%d/%m/%Y')}",
+              "text-primary"),
+        _fila("fas fa-map-marker-alt", "Ubicaciones:",
+              ", ".join(ubi_labels) if ubi_labels else "Ninguna seleccionada",
+              "text-dark" if ubi_labels else "text-danger"),
+        _fila("fas fa-layer-group", "Meses en el periodo:", str(n_meses)),
+        _fila("fas fa-clone", "Diapositivas estimadas:", f"~{slides_est}"),
+    ])
+
+
 @app.callback(Output("contenedor-rango", "style"), Output("contenedor-dia", "style"), Input("tipo-fecha", "value"))
 def toggle_fecha(tipo):
     if tipo == "dia": return {"display": "none"}, {"display": "block"}
@@ -280,43 +405,6 @@ def actualizar_locs(org_uuid):
     if not org_uuid: return [], []
     opciones = mapa_locs_por_org.get(org_uuid, [])
     return opciones, [opc['value'] for opc in opciones]
-
-@app.callback(
-    Output({"type": "card-ai-benchmark", "index": MATCH}, "children"),
-    Input({"type": "btn-ai-benchmark", "index": MATCH}, "n_clicks"),
-    State({"type": "btn-ai-benchmark", "index": MATCH}, "id"),
-    prevent_initial_call=True
-)
-def actualizar_benchmark_ai(n_clicks, btn_id):
-    if not n_clicks: return no_update
-    
-    ubi_nombre = btn_id['index']
-    fecha_max_actual = datetime.now().strftime('%Y-%m-%d') 
-    
-    if n_clicks == -1: 
-        pass 
-        
-    res = generar_benchmark_contextual(ubi_nombre, fecha_max_actual)
-    
-    if "error" in res:
-        return dbc.Alert(f"Error AI: {res['error']}", color="danger", className="rounded-4 py-2 small")
-
-    return dbc.Card(dbc.CardBody([
-        html.H6([html.I(className="fas fa-robot me-2 text-primary"), "BENCHMARK DE ATRACCIÓN ESPERADO (CONTEXTO GEOLOCALIZADO)"], className="fw-bold text-dark small text-uppercase mb-3"),
-        dbc.Row([
-            dbc.Col([
-                html.P("EXPECTATIVA 7D", className="text-muted small fw-bold mb-1"),
-                html.H4(f"{res.get('ratio_7d', 0):.1f}%", className="text-primary fw-bold mb-0")
-            ], width=3, className="border-end"),
-            dbc.Col([
-                html.P("EXPECTATIVA 28D", className="text-muted small fw-bold mb-1"),
-                html.H4(f"{res.get('ratio_28d', 0):.1f}%", className="text-primary fw-bold mb-0")
-            ], width=3, className="border-end"),
-            dbc.Col([
-                html.P(res.get('justificacion', '...'), className="text-secondary small mb-0 lh-sm text-justify")
-            ], width=6)
-        ])
-    ]), className="border-0 bg-light shadow-sm rounded-4 border-start border-4 mb-3", style={"borderLeftColor": "var(--bs-primary) !important"})
 
 # --- NUEVO CALLBACK DE RELLENO DE ZONAS (DUAL) ---
 @app.callback(
@@ -357,10 +445,9 @@ def abrir_modal_carga(n_clicks): return True
 )
 def ejecutar_sincronizacion(is_open, locs, session_id):
     if not is_open: return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
-    ruta_raw = os.path.join('data', 'raw')
-    archivo_usuario = os.path.join(ruta_raw, f'dataset_{session_id}.csv')
+    ruta_data = os.path.join('src', 'data')
+    archivo_usuario = os.path.join(ruta_data, f'dataset_{session_id}.csv')
     try:
-        if not os.path.exists(ruta_raw): os.makedirs(ruta_raw, exist_ok=True)
         actualizar_datos_csv(locs if locs else [], archivo_usuario)
         return False, True, "Datos sincronizados correctamente.", "success", "Sincronización finalizada"
     except Exception as e:
@@ -372,7 +459,7 @@ def ejecutar_sincronizacion(is_open, locs, session_id):
     Input("btn-flush", "n_clicks"), State("session-id", "data"), prevent_initial_call=True
 )
 def limpiar_memoria(n, session_id):
-    archivo_usuario = os.path.join('data', 'raw', f'dataset_{session_id}.csv')
+    archivo_usuario = os.path.join('src', 'data', f'dataset_{session_id}.csv')
     try:
         if os.path.exists(archivo_usuario): os.remove(archivo_usuario)
         return True, "Memoria limpiada con éxito.", "success", "Flush data"
@@ -405,7 +492,7 @@ def master_reactive_analytics(locs, t_f, sd, ed, zones_bi, comp, cross, zones_ex
     if not locs: 
         return html.Div(), "Esperando selección de ubicación...", html.Div(), html.Div()
         
-    archivo_usuario = os.path.join('data', 'raw', f'dataset_{s_id}.csv')
+    archivo_usuario = os.path.join('src', 'data', f'dataset_{s_id}.csv')
     if not os.path.exists(archivo_usuario): 
         return html.Div(), "Sincroniza para descargar datos.", html.Div(), html.Div()
 
@@ -479,15 +566,84 @@ def expandir_grafico(n_clicks_list, figures, ids):
             return True, fig_copy, titulo
     return dash.no_update
 
+# --- AI BENCHMARK (Funnel) ---
+@app.callback(
+    Output({"type": "card-ai-benchmark", "index": MATCH}, "children"),
+    Input({"type": "btn-ai-benchmark", "index": MATCH}, "n_clicks"),
+    State("session-id", "data"),
+    prevent_initial_call=True
+)
+def mostrar_benchmark_ai(n_clicks, session_id):
+    if not n_clicks:
+        return no_update
+    from src.models.anomalys import ordenar_zonas, preparar_df_ratio
+    ubi = ctx.triggered_id['index']
+    archivo = os.path.join('src', 'data', f'dataset_{session_id}.csv')
+    if not os.path.exists(archivo):
+        return dbc.Alert("Sincroniza los datos primero.", color="warning", className="rounded-4")
+    try:
+        df = pd.read_csv(archivo)
+        df['Ubicación'] = df['location_id'].map(mapa_tiendas).fillna('Desconocida')
+        df['Zona'] = df['zone_uuid'].map(mapa_zonas).fillna('SinNombre') if 'zone_uuid' in df.columns else 'SinNombre'
+        df['fecha'] = pd.to_datetime(df['fecha'])
+        df['fecha_dia'] = df['fecha'].dt.normalize()
+        df_ubi = df[df['Ubicación'] == ubi].copy()
+        if df_ubi.empty:
+            return dbc.Alert("Sin datos para este emplazamiento.", color="info", className="rounded-4")
+        zonas = ordenar_zonas(df_ubi['Zona'].unique())
+        if len(zonas) < 2:
+            return dbc.Alert("Se requieren mínimo 2 zonas para analizar el funnel.", color="info", className="rounded-4")
+        filas = []
+        for i in range(len(zonas) - 1):
+            z_out, z_in = zonas[i], zonas[i + 1]
+            df_r = preparar_df_ratio(df_ubi, z_out, z_in)
+            if df_r.empty:
+                continue
+            ratio_medio = df_r['ratio_atraccion'].mean()
+            ratio_max = df_r['ratio_atraccion'].max()
+            ratio_min = df_r['ratio_atraccion'].min()
+            if ratio_medio >= 50:
+                color, insight = "text-success", "Conversión elevada. El flujo hacia el interior es eficiente."
+            elif ratio_medio >= 25:
+                color, insight = "text-warning", "Conversión moderada. Margen de mejora en activación en puerta."
+            else:
+                color, insight = "text-danger", "Conversión baja. Revisar señalización y propuesta de valor en entrada."
+            filas.append(dbc.Row([
+                dbc.Col([
+                    html.Span(f"{z_out} → {z_in}", className="text-muted small fw-bold text-uppercase"),
+                    html.H4(f"{ratio_medio:.1f}%", className=f"fw-bold mb-0 {color}"),
+                    html.Small(f"Rango histórico: {ratio_min:.1f}% – {ratio_max:.1f}%", className="text-muted")
+                ], xs=4),
+                dbc.Col(html.P(insight, className="small text-muted mb-0 fst-italic"), xs=8)
+            ], className="align-items-center mb-3 py-2 border-bottom"))
+        if not filas:
+            return dbc.Alert("No hay datos de conversión calculables.", color="info", className="rounded-4")
+        return dbc.Card([
+            dbc.CardHeader([
+                html.I(className="fas fa-chart-line me-2 text-primary"),
+                "Benchmark de Conversión",
+                dbc.Badge("Análisis estadístico", color="secondary", className="ms-2 small fw-normal")
+            ], className="bg-white border-bottom fw-bold"),
+            dbc.CardBody(filas + [
+                html.P([
+                    html.I(className="fas fa-info-circle me-1 text-muted"),
+                    "Calculado sobre el histórico completo disponible para este emplazamiento."
+                ], className="small text-muted mb-0 mt-1 fst-italic")
+            ])
+        ], className="border-0 shadow-sm rounded-4")
+    except Exception as e:
+        return dbc.Alert(f"Error generando benchmark: {str(e)}", color="danger", className="rounded-4")
+
+
 # --- PPTX ---
 @app.callback(
-    Output("download-report", "data"), Output("error-msg", "children", allow_duplicate=True), 
-    Input("btn-descargar", "n_clicks"), State("drop-locs", "value"), State("tipo-fecha", "value"), 
+    Output("download-report", "data"), Output("error-msg", "children", allow_duplicate=True),
+    Input("btn-descargar", "n_clicks"), State("drop-locs", "value"), State("tipo-fecha", "value"),
     State("date-rango", "start_date"), State("date-rango", "end_date"), State("date-dia", "date"),
-    State("session-id", "data"), prevent_initial_call=True
+    State("session-id", "data"), State("drop-org", "value"), prevent_initial_call=True
 )
-def generar_pptx(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, session_id):
-    archivo_usuario = os.path.join('data', 'raw', f'dataset_{session_id}.csv')
+def generar_pptx(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, session_id, org_uuid):
+    archivo_usuario = os.path.join('src', 'data', f'dataset_{session_id}.csv')
     if not os.path.exists(archivo_usuario): return dash.no_update, "Sincroniza los datos primero."
     
     df_completo = pd.read_csv(archivo_usuario)
@@ -505,15 +661,13 @@ def generar_pptx(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, 
     if 'dwell_time' in df_filt.columns: df_filt['dwell_time'] /= 60.0
     
     try:
+        org_nombre = mapa_orgs.get(org_uuid, '') if org_uuid else ''
         output = io.BytesIO()
-        # Llamamos directamente a la función de PPTX
-        generar_reporte_pptx(df_filt, output, start, end)
+        generar_reporte_pptx(df_filt, output, start, end, org_nombre)
         output.seek(0)
-        
-        # Formateamos el nombre del archivo para que incluya las fechas
-        nombre_archivo = f"Reporte_Consolidado_{start.strftime('%d%m')}_al_{end.strftime('%d%m')}.pptx"
+        nombre_archivo = f"Reporte_{org_nombre or 'Consolidado'}_{start.strftime('%d%m')}_al_{end.strftime('%d%m')}.pptx"
         return dcc.send_bytes(output.getvalue(), nombre_archivo), ""
-        
+
     except Exception as e:
         return dash.no_update, f"Error generando PPTX: {str(e)}"
 
