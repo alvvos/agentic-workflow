@@ -10,14 +10,14 @@ from dash import html, dcc, Input, Output, State, ctx
 import plotly.graph_objects as go
 import dash_bootstrap_components as dbc
 
-# --- IMPORTACIONES DEL PROYECTO ---
 from src.data_ingestion.sincronizador import actualizar_datos_csv
-from src.reporting.generador_embudos import generar_excel_embudos
-from src.reporting.generador_operativo import generar_excel_operativo
+from src.reporting.generador_pptx import generar_reporte_pptx
 from src.reporting.ml_dashboard import generar_panel_ml
 from src.data_processing.data_radar import generar_tabla_auditoria
 from src.models.anomalys import generar_panel_bi_completo
-from src.reporting.health_check import generar_panel_ejecutivo # <- AQUÍ ESTABA EL FALLO
+from src.reporting.health_check import generar_panel_ejecutivo 
+from dash import Input, Output, State, html, MATCH, no_update
+from datetime import datetime
 
 MODO_DESARROLLO = True
 
@@ -194,7 +194,7 @@ def serve_layout():
                         dbc.Row([
                             dbc.Col([
                                 html.H4([html.I(className="fas fa-file-export me-2 text-primary"), "Exportación de Datos"], className="fw-bold mb-1 text-dark"),
-                                html.P("Configura y descarga reportes detallados en formato Excel listos para presentar.", className="text-muted small")
+                                html.P("Genera y descarga un reporte consolidado en formato PowerPoint listo para presentar.", className="text-muted small")
                             ], width=12)
                         ], className="mb-4"),
 
@@ -202,43 +202,24 @@ def serve_layout():
                             dbc.CardBody([
                                 dbc.Row([
                                     dbc.Col([
-                                        html.Label("Adjuntar KPIs oficiales:", className="fw-bold text-secondary small text-uppercase mb-2"),
-                                        dbc.Checklist(
-                                            id="kpis-oficiales", 
-                                            options=[
-                                                {"label": "7 días", "value": "7d"}, 
-                                                {"label": "28 días", "value": "28d"}, 
-                                                {"label": "Mes actual", "value": "month"}, 
-                                                {"label": "Año actual", "value": "year"}
-                                            ], 
-                                            value=["7d", "28d"], inline=True, input_class_name="btn-check", 
-                                            label_class_name="btn btn-outline-primary mb-2 me-2 fw-bold shadow-sm rounded-pill"
-                                        )
-                                    ], xs=12, xl=6, className="mb-4 mb-xl-0"),
-                                    
-                                    dbc.Col([
-                                        html.Label("Modelo de reporte:", className="fw-bold text-secondary small text-uppercase mb-2"),
-                                        dbc.RadioItems(
-                                            id="tipo-reporte", 
-                                            options=[
-                                                {"label": "Operativo (Visitas, horas...)", "value": "operativo"}, 
-                                                {"label": "Embudos dinámicos", "value": "embudos"}
-                                            ], 
-                                            value="operativo", inline=True, input_class_name="btn-check", 
-                                            label_class_name="btn btn-outline-secondary mb-2 me-2 fw-bold shadow-sm rounded-pill"
-                                        )
-                                    ], xs=12, xl=6)
+                                        html.Label("Formato de exportación:", className="fw-bold text-secondary small text-uppercase mb-2"),
+                                        html.Div([
+                                            html.I(className="fas fa-file-powerpoint me-2 text-danger fs-4 align-middle"),
+                                            html.Span("Presentación Ejecutiva (.pptx)", className="fw-bold align-middle text-dark ms-2")
+                                        ], className="p-3 bg-white border rounded-3 shadow-sm text-center")
+                                    ], xs=12, md=8, lg=6, className="mx-auto mb-3")
                                 ]),
                                 html.Hr(className="text-muted my-4"),
                                 dbc.Row([
                                     dbc.Col([
-                                        dbc.Button([html.I(className="fas fa-file-excel me-2"), "Generar y Descargar Excel"], id="btn-descargar", color="success", className="w-100 fw-bold rounded-pill shadow-sm")
+                                        # Le pongo el color "danger" (rojo) para que parezca de PowerPoint
+                                        dbc.Button([html.I(className="fas fa-download me-2"), "Generar y Descargar PPTX"], id="btn-descargar", color="danger", className="w-100 fw-bold rounded-pill shadow-sm")
                                     ], xs=12, md=6, lg=4, className="mx-auto")
                                 ]),
                                 html.Div(id="error-msg", className="text-danger fw-bold mt-3 text-center small"),
                             ])
                         ], className="border-0 shadow-sm rounded-4 bg-light mb-4"),
-                        dcc.Download(id="download-excel")
+                        dcc.Download(id="download-report") # Le hemos cambiado el ID para que tenga más sentido
                     ]),
 
                     dcc.Tab(label='Machine learning', value='tab-ml', className="fw-bold", children=[
@@ -299,6 +280,43 @@ def actualizar_locs(org_uuid):
     if not org_uuid: return [], []
     opciones = mapa_locs_por_org.get(org_uuid, [])
     return opciones, [opc['value'] for opc in opciones]
+
+@app.callback(
+    Output({"type": "card-ai-benchmark", "index": MATCH}, "children"),
+    Input({"type": "btn-ai-benchmark", "index": MATCH}, "n_clicks"),
+    State({"type": "btn-ai-benchmark", "index": MATCH}, "id"),
+    prevent_initial_call=True
+)
+def actualizar_benchmark_ai(n_clicks, btn_id):
+    if not n_clicks: return no_update
+    
+    ubi_nombre = btn_id['index']
+    fecha_max_actual = datetime.now().strftime('%Y-%m-%d') 
+    
+    if n_clicks == -1: 
+        pass 
+        
+    res = generar_benchmark_contextual(ubi_nombre, fecha_max_actual)
+    
+    if "error" in res:
+        return dbc.Alert(f"Error AI: {res['error']}", color="danger", className="rounded-4 py-2 small")
+
+    return dbc.Card(dbc.CardBody([
+        html.H6([html.I(className="fas fa-robot me-2 text-primary"), "BENCHMARK DE ATRACCIÓN ESPERADO (CONTEXTO GEOLOCALIZADO)"], className="fw-bold text-dark small text-uppercase mb-3"),
+        dbc.Row([
+            dbc.Col([
+                html.P("EXPECTATIVA 7D", className="text-muted small fw-bold mb-1"),
+                html.H4(f"{res.get('ratio_7d', 0):.1f}%", className="text-primary fw-bold mb-0")
+            ], width=3, className="border-end"),
+            dbc.Col([
+                html.P("EXPECTATIVA 28D", className="text-muted small fw-bold mb-1"),
+                html.H4(f"{res.get('ratio_28d', 0):.1f}%", className="text-primary fw-bold mb-0")
+            ], width=3, className="border-end"),
+            dbc.Col([
+                html.P(res.get('justificacion', '...'), className="text-secondary small mb-0 lh-sm text-justify")
+            ], width=6)
+        ])
+    ]), className="border-0 bg-light shadow-sm rounded-4 border-start border-4 mb-3", style={"borderLeftColor": "var(--bs-primary) !important"})
 
 # --- NUEVO CALLBACK DE RELLENO DE ZONAS (DUAL) ---
 @app.callback(
@@ -461,16 +479,17 @@ def expandir_grafico(n_clicks_list, figures, ids):
             return True, fig_copy, titulo
     return dash.no_update
 
-# --- EXCEL ---
+# --- PPTX ---
 @app.callback(
-    Output("download-excel", "data"), Output("error-msg", "children", allow_duplicate=True), 
+    Output("download-report", "data"), Output("error-msg", "children", allow_duplicate=True), 
     Input("btn-descargar", "n_clicks"), State("drop-locs", "value"), State("tipo-fecha", "value"), 
     State("date-rango", "start_date"), State("date-rango", "end_date"), State("date-dia", "date"),
-    State("kpis-oficiales", "value"), State("tipo-reporte", "value"), State("session-id", "data"), prevent_initial_call=True
+    State("session-id", "data"), prevent_initial_call=True
 )
-def generar_excel(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, kpis_oficiales, tipo_reporte, session_id):
+def generar_pptx(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, session_id):
     archivo_usuario = os.path.join('data', 'raw', f'dataset_{session_id}.csv')
     if not os.path.exists(archivo_usuario): return dash.no_update, "Sincroniza los datos primero."
+    
     df_completo = pd.read_csv(archivo_usuario)
     if locs: df_completo = df_completo[df_completo['location_id'].isin(locs)]
     df_completo['Ubicación'] = df_completo['location_id'].map(mapa_tiendas).fillna('Desconocida')
@@ -484,34 +503,20 @@ def generar_excel(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico,
     df_filt = df_filt[~df_filt['Zona'].str.contains('Extra', case=False, na=False)]
     df_filt['Día semana'] = pd.Categorical(df_filt['fecha'].dt.dayofweek.map(dias_semana_es), categories=orden_dias, ordered=True)
     if 'dwell_time' in df_filt.columns: df_filt['dwell_time'] /= 60.0
-    df_filt['Día del periodo'] = (df_filt['fecha'] - start).dt.days
-    df_filt['Semana del periodo'] = "Semana " + ((df_filt['Día del periodo'] // 7) + 1).astype(str)
-
+    
     try:
         output = io.BytesIO()
-        writer = pd.ExcelWriter(output, engine='xlsxwriter')
-        if tipo_reporte == "embudos": generar_excel_embudos(df_filt, writer, writer.book)
-        else: generar_excel_operativo(df_filt, writer, writer.book, kpis_oficiales)
-        writer.close()
+        # Llamamos directamente a la función de PPTX
+        generar_reporte_pptx(df_filt, output, start, end)
         output.seek(0)
-        return dcc.send_bytes(output.getvalue(), f"Reporte_{tipo_reporte}.xlsx"), ""
+        
+        # Formateamos el nombre del archivo para que incluya las fechas
+        nombre_archivo = f"Reporte_Consolidado_{start.strftime('%d%m')}_al_{end.strftime('%d%m')}.pptx"
+        return dcc.send_bytes(output.getvalue(), nombre_archivo), ""
+        
     except Exception as e:
-        return dash.no_update, f"Error generando excel: {str(e)}"
+        return dash.no_update, f"Error generando PPTX: {str(e)}"
 
-# --- CALLBACK DE DESCARGA PDF ---
-app.clientside_callback(
-    """
-    function(n_clicks) {
-        if (n_clicks > 0) {
-            window.print();
-        }
-        return window.dash_clientside.no_update;
-    }
-    """,
-    Output("btn-pdf-ejecutivo", "id"),
-    Input("btn-pdf-ejecutivo", "n_clicks"),
-    prevent_initial_call=True
-)
 
 if __name__ == "__main__":
     app.run(debug=True, port=8052)

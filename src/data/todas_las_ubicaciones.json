@@ -622,7 +622,12 @@
                         "uuid": "2ef74d7d-89ba-45d4-aaf2-8c920e05db86",
                         "zoneName": "Exterior"
                     }
-                ]
+                ],
+                "postal_code": "34046",
+                "region_code": "AN",
+                "country_code": "MX",
+                "lat": 19.1175,
+                "lon": -104.3431
             }
         ]
     },

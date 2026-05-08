@@ -95,17 +95,14 @@ def ejecutar_auditoria(n, locs, zone, fecha, horiz, session_id):
         return "-", "-", "-", "-", go.Figure(), "Error: Sincroniza los datos desde el panel principal antes de usar el Motor Predictivo."
 
     try:
-        # Usamos TU función original para que formatee las columnas correctamente
         df_crudo = cargar_csv_crudo(archivo_usuario)
         loc_principal = locs[0]
         
-        # Procesar para ML (pasando la fecha tal cual)
         df_e = enriquecer_datos_ubicacion(df_crudo, loc_principal, RUTA_JSON)
         res = ejecutar_auditoria_predictiva(df_e, loc_principal, zone, fecha, horiz)
         
         if "error" in res: return "-", "-", "-", "-", go.Figure(), f"Error en el motor ML: {res['error']}"
         
-        # Gráfica
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=res['grafica']['fechas'], y=res['grafica']['reales'], name='Datos Reales', mode='lines+markers', line=dict(color='#bdc3c7', width=2), marker=dict(size=6, color='#7f8c8d')))
         fig.add_trace(go.Scatter(x=res['grafica']['fechas'], y=res['grafica']['predichos'], name='Predicción del Algoritmo', mode='lines+markers', line=dict(color='#27ae60', width=3, dash='dot', shape='spline'), marker=dict(size=8, symbol='diamond', color='#2ecc71')))
