@@ -23,6 +23,7 @@ Thumbs.db
 
 # Excepciones (Archivos JSON que SÍ queremos subir porque son de configuración)
 !todas_las_ubicaciones.json
+!geo_features.json
 
 __pycache__/
 *.pyc

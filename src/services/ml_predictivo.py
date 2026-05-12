@@ -5,6 +5,7 @@ from sklearn.metrics import mean_absolute_error
 import holidays
 import gc
 from datetime import timedelta
+from src.data_processing.geo_enrichment import get_geo_vals, get_geo_features_activos, GEO_FEATURE_COLS
 
 # Instanciamos el calendario oficial para el futuro
 festivos_espana = holidays.ES(years=[2024, 2025, 2026])
@@ -27,6 +28,9 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
             'temp_min': 'min',
             'es_festivo': 'max'
         }).reset_index().sort_values('fecha').reset_index(drop=True)
+
+        # Snapshot activo para la predicción (estado actual del mundo, fechas futuras)
+        geo_vals_pred = get_geo_vals(location_uuid)
 
         # 2. SEPARACIÓN DEL PASADO (TRAIN SET)
         fecha_corte = pd.to_datetime(falso_hoy)
@@ -58,9 +62,19 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
         
         train = train.dropna().reset_index(drop=True)
 
-        features = ['es_finde', 'es_festivo', 'llueve', 'dia_semana', 'dia_mes', 'mes', 
-                    'lag_1d', 'lag_7d', 'media_7d', 'quincena', 'vispera_festivo', 
-                    'lag_14d', 'media_14d', 'std_7d', 'finde_lluvioso', 'mucho_calor', 'mucho_frio', 'clima_ideal']
+        # Join temporal geoespacial: cada fila de training recibe el snapshot válido en su fecha.
+        # Esto evita data leakage (no usar datos Esri futuros para entrenar sobre el pasado).
+        geo_rows = pd.DataFrame(
+            [get_geo_vals(location_uuid, fecha) for fecha in train['fecha']],
+            index=train.index
+        )
+        geo_features_activos = [c for c in GEO_FEATURE_COLS if geo_rows[c].notna().any()]
+        for col in geo_features_activos:
+            train[col] = geo_rows[col].values
+
+        features = ['es_finde', 'es_festivo', 'llueve', 'dia_semana', 'dia_mes', 'mes',
+                    'lag_1d', 'lag_7d', 'media_7d', 'quincena', 'vispera_festivo',
+                    'lag_14d', 'media_14d', 'std_7d', 'finde_lluvioso', 'mucho_calor', 'mucho_frio', 'clima_ideal'] + geo_features_activos
         
         X_train, y_train = train[features], train['total_visits']
 
@@ -132,7 +146,8 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
                 'finde_lluvioso': es_finde * llueve,
                 'mucho_calor': 1 if t_max >= 32.0 else 0,
                 'mucho_frio': 1 if t_min <= 8.0 else 0,
-                'clima_ideal': 1 if (18.0 <= t_max <= 26.0 and llueve == 0) else 0
+                'clima_ideal': 1 if (18.0 <= t_max <= 26.0 and llueve == 0) else 0,
+                **{col: geo_vals_pred[col] for col in geo_features_activos}
             }])
 
             # Predicción del día X
