@@ -19,7 +19,7 @@ from src.reporting.health_check import generar_panel_ejecutivo
 from dash import Input, Output, State, html, MATCH, no_update
 from datetime import datetime
 
-MODO_DESARROLLO = True
+MODO_DESARROLLO = os.getenv("MODO_DESARROLLO", "false").lower() == "true"
 
 # --- CARGA DE DATOS MAESTROS ---
 with open('src/data/todas_las_ubicaciones.json', 'r', encoding='utf-8') as f:
