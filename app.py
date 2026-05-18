@@ -393,6 +393,7 @@ def serve_layout():
         dcc.Store(id='session-id', data=session_id),
         dcc.Store(id='bi-filtro-zona', data=None),
         dcc.Store(id='bi-selected-graphs', data=[]),
+        dcc.Store(id='data-version', data=0),
         dcc.Download(id='download-bi-pdf'),
         
         dbc.Modal([
@@ -525,17 +526,18 @@ def abrir_modal_carga(n_clicks): return True
 @app.callback(
     Output("modal-sync", "is_open", allow_duplicate=True), Output("toast-notificacion", "is_open", allow_duplicate=True),
     Output("toast-notificacion", "children", allow_duplicate=True), Output("toast-notificacion", "icon", allow_duplicate=True), Output("toast-notificacion", "header", allow_duplicate=True),
+    Output("data-version", "data"),
     Input("modal-sync", "is_open"), State("drop-locs", "value"), State("session-id", "data"), prevent_initial_call=True
 )
 def ejecutar_sincronizacion(is_open, locs, session_id):
-    if not is_open: return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    if not is_open: return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
     ruta_data = os.path.join('src', 'data')
     archivo_usuario = os.path.join(ruta_data, f'dataset_{session_id}.csv')
     try:
         actualizar_datos_csv(locs if locs else [], archivo_usuario)
-        return False, True, "Datos sincronizados correctamente.", "success", "Sincronización finalizada"
+        return False, True, "Datos sincronizados correctamente.", "success", "Sincronización finalizada", datetime.now().timestamp()
     except Exception as e:
-        return False, True, f"Error al descargar datos: {str(e)}", "danger", "Error de sincronización"
+        return False, True, f"Error al descargar datos: {str(e)}", "danger", "Error de sincronización", dash.no_update
 
 @app.callback(
     Output("toast-notificacion", "is_open", allow_duplicate=True), Output("toast-notificacion", "children", allow_duplicate=True),
@@ -566,12 +568,13 @@ def update_click_filter(clickData_list, clear_btn, current_filter):
 @app.callback(
     [Output("bi-dynamic-content", "children"), Output("bi-status-visor", "children"), 
      Output("audit-results", "children"), Output("panel-ejecutivo-content", "children")],
-    [Input("drop-locs", "value"), Input("tipo-fecha", "value"), Input("date-rango", "start_date"), 
+    [Input("drop-locs", "value"), Input("tipo-fecha", "value"), Input("date-rango", "start_date"),
      Input("date-rango", "end_date"), Input("radar-drop-zonas", "value"), Input("bi-comparativa", "value"),
-     Input("bi-filtro-zona", "data"), Input("ejecutivo-drop-zonas", "value")], 
+     Input("bi-filtro-zona", "data"), Input("ejecutivo-drop-zonas", "value"),
+     Input("data-version", "data")],
     [State("session-id", "data")], prevent_initial_call=False
 )
-def master_reactive_analytics(locs, t_f, sd, ed, zones_bi, comp, cross, zones_exe, s_id): 
+def master_reactive_analytics(locs, t_f, sd, ed, zones_bi, comp, cross, zones_exe, _data_v, s_id):
     # SALIDAS DE SEGURIDAD (Evitan que colapse)
     if not locs: 
         return html.Div(), "Esperando selección de ubicación...", html.Div(), html.Div()
