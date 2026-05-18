@@ -14,6 +14,7 @@ dataset_global_raw.csv
 !todas_las_ubicaciones.json
 # Modelos y Encoders (Se generan localmente al entrenar)
 models/
+!src/models/
 *.pkl
 *.json
 
