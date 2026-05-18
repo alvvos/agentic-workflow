@@ -18,6 +18,9 @@ models/
 *.pkl
 *.json
 
+# Autenticación — nunca al repo
+users.json
+
 # Archivos del sistema operativo
 .DS_Store
 Thumbs.db

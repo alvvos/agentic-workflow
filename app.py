@@ -9,6 +9,8 @@ import dash
 from dash import html, dcc, Input, Output, State, ctx
 import plotly.graph_objects as go
 import dash_bootstrap_components as dbc
+import flask
+from werkzeug.security import check_password_hash
 
 from src.data_ingestion.sincronizador import actualizar_datos_csv
 from src.reporting.generador_pptx import generar_reporte_pptx
@@ -67,6 +69,84 @@ app = dash.Dash(
 )
 app.title = "Panel Analítico Predictivo"
 server = app.server
+server.secret_key = os.getenv("SECRET_KEY", "dev-only-change-in-prod")
+
+_USERS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "users.json")
+
+def _load_users():
+    if not os.path.exists(_USERS_FILE):
+        return {}
+    with open(_USERS_FILE) as f:
+        return json.load(f)
+
+_LOGIN_HTML = """<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Acceso — Panel Analítico</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body{background:#f0f4f8;min-height:100vh;display:flex;align-items:center;justify-content:center}
+    .login-card{width:100%;max-width:380px}
+    .btn-primary{background:#0052CC;border-color:#0052CC}
+    .btn-primary:hover{background:#003d99;border-color:#003d99}
+    .text-brand{color:#0052CC}
+  </style>
+</head>
+<body>
+<div class="login-card px-3">
+  <div class="text-center mb-4">
+    <h5 class="fw-bold text-brand mb-1">Panel Analítico Predictivo</h5>
+    <p class="text-muted small mb-0">Introduce tus credenciales para acceder</p>
+  </div>
+  <div class="card shadow border-0 rounded-4">
+    <div class="card-body p-4">
+      {% if error %}<div class="alert alert-danger small py-2 mb-3">{{ error }}</div>{% endif %}
+      <form method="post">
+        <div class="mb-3">
+          <label class="form-label fw-bold small text-muted text-uppercase">Usuario</label>
+          <input type="text" name="username" class="form-control rounded-3" autofocus required>
+        </div>
+        <div class="mb-4">
+          <label class="form-label fw-bold small text-muted text-uppercase">Contraseña</label>
+          <input type="password" name="password" class="form-control rounded-3" required>
+        </div>
+        <button type="submit" class="btn btn-primary w-100 fw-bold rounded-pill">Entrar</button>
+      </form>
+    </div>
+  </div>
+</div>
+</body>
+</html>"""
+
+_ALLOWED_PATHS = ('/login', '/logout', '/_dash-component-suites/', '/assets/')
+
+@server.before_request
+def require_login():
+    if MODO_DESARROLLO:
+        return
+    if any(flask.request.path.startswith(p) for p in _ALLOWED_PATHS):
+        return
+    if not flask.session.get('user'):
+        return flask.redirect('/login')
+
+@server.route('/login', methods=['GET', 'POST'])
+def login():
+    if flask.request.method == 'POST':
+        username = flask.request.form.get('username', '').strip()
+        password = flask.request.form.get('password', '')
+        users = _load_users()
+        if username in users and check_password_hash(users[username], password):
+            flask.session['user'] = username
+            return flask.redirect('/')
+        return flask.render_template_string(_LOGIN_HTML, error='Usuario o contraseña incorrectos')
+    return flask.render_template_string(_LOGIN_HTML, error=None)
+
+@server.route('/logout')
+def logout():
+    flask.session.pop('user', None)
+    return flask.redirect('/login')
 
 # --- HELPERS DE UI ---
 def _seccion_informe(num, titulo, desc, color_num, nota=None):
@@ -84,7 +164,7 @@ def _seccion_informe(num, titulo, desc, color_num, nota=None):
 
 # --- INTERFAZ VISUAL (LAYOUT) ---
 def serve_layout():
-    session_id = "local_dev" if MODO_DESARROLLO else str(uuid.uuid4())
+    session_id = "local_dev" if MODO_DESARROLLO else flask.session.get('user', '')
     
     sidebar = html.Div([
         html.Div(
@@ -141,7 +221,8 @@ def serve_layout():
             ], xs=12, md=7, className="mb-4 mb-md-0"),
             dbc.Col([
                 dbc.Button([html.I(className="fas fa-sync-alt me-2"), "Sincronizar"], id="btn-sync", color="primary", outline=True, className="fw-bold rounded-pill shadow-sm me-2"),
-                dbc.Button([html.I(className="fas fa-trash-alt me-2"), "Flush"], id="btn-flush", color="danger", outline=True, className="fw-bold rounded-pill shadow-sm")
+                dbc.Button([html.I(className="fas fa-trash-alt me-2"), "Flush"], id="btn-flush", color="danger", outline=True, className="fw-bold rounded-pill shadow-sm me-2"),
+                html.A([html.I(className="fas fa-sign-out-alt me-1"), session_id], href="/logout", className="btn btn-outline-secondary btn-sm fw-bold rounded-pill shadow-sm") if not MODO_DESARROLLO else html.Span()
             ], xs=12, md=5, className="text-center text-md-end")
         ], id="cabecera-app", className="mb-4 align-items-center d-print-none"),
         
