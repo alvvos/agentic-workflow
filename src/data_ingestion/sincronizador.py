@@ -9,7 +9,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 load_dotenv()
 AITANNA_API_KEY = os.getenv("AITANNA_API_KEY")
 
-def obtener_uuids_geolocalizados(ruta_json="../data/todas_las_ubicaciones.json"):
+_DIR = os.path.dirname(os.path.abspath(__file__))
+_DEFAULT_JSON = os.path.join(_DIR, "..", "data", "todas_las_ubicaciones.json")
+
+def obtener_uuids_geolocalizados(ruta_json=_DEFAULT_JSON):
     if not os.path.exists(ruta_json):
         print(f"Error: No se encuentra el archivo {ruta_json}")
         return []
