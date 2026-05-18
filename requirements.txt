@@ -5,4 +5,11 @@ plotly
 holidays
 gunicorn
 numpy
-dotenv
+python-dotenv
+requests
+xgboost
+python-pptx
+scikit-learn
+google-generativeai
+kaleido
+fpdf2

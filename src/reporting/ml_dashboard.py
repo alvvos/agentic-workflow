@@ -127,7 +127,7 @@ def ejecutar_auditoria(n, locs, zone, fecha, horiz, session_id):
     if not locs or not zone: return "-", "-", "-", "-", go.Figure(), "Aviso: Selecciona una ubicación en el filtro global (izquierda) y una zona."
     if not session_id: return "-", "-", "-", "-", go.Figure(), "Error de sesión: No se puede identificar el usuario."
 
-    archivo_usuario = os.path.join('data', 'raw', f'dataset_{session_id}.csv')
+    archivo_usuario = os.path.join('src', 'data', f'dataset_{session_id}.csv')
     if not os.path.exists(archivo_usuario):
         return "-", "-", "-", "-", go.Figure(), "Error: Sincroniza los datos desde el panel principal antes de usar el Motor Predictivo."
 

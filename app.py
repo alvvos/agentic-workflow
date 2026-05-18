@@ -199,7 +199,8 @@ def serve_layout():
                                 )
                             ], xs=12, lg=8),
                             dbc.Col([
-                                dbc.Button([html.I(className="fas fa-times me-2"), "Borrar filtro cruzado"], id="btn-clear-bi", color="danger", outline=True, className="mt-lg-4 mt-2 w-100 rounded-pill fw-bold shadow-sm")
+                                dbc.Button([html.I(className="fas fa-times me-2"), "Borrar filtro cruzado"], id="btn-clear-bi", color="danger", outline=True, className="mt-lg-4 mt-2 w-100 rounded-pill fw-bold shadow-sm mb-2"),
+                                dbc.Button([html.I(className="fas fa-file-pdf me-2"), "Descargar PDF"], id="btn-download-pdf-bi", color="secondary", outline=True, className="w-100 rounded-pill fw-bold shadow-sm", disabled=True),
                             ], xs=12, lg=4)
                         ], className="align-items-center mb-4"),
                         
@@ -310,6 +311,8 @@ def serve_layout():
     return dbc.Container([
         dcc.Store(id='session-id', data=session_id),
         dcc.Store(id='bi-filtro-zona', data=None),
+        dcc.Store(id='bi-selected-graphs', data=[]),
+        dcc.Download(id='download-bi-pdf'),
         
         dbc.Modal([
             dbc.ModalHeader(dbc.ModalTitle(id="modal-bi-title", className="fw-bold text-primary")),
@@ -672,5 +675,104 @@ def generar_pptx(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, 
         return dash.no_update, f"Error generando PPTX: {str(e)}"
 
 
+# --- SELECCIÓN Y DESCARGA DE GRÁFICOS ---
+
+@app.callback(
+    Output('bi-selected-graphs', 'data', allow_duplicate=True),
+    Input({'type': 'btn-select-graph', 'index': dash.ALL}, 'n_clicks'),
+    State('bi-selected-graphs', 'data'),
+    prevent_initial_call=True
+)
+def actualizar_seleccion(n_clicks_list, current):
+    if not ctx.triggered_id:
+        return current or []
+    idx = ctx.triggered_id['index']
+    sel = set(current or [])
+    sel.discard(idx) if idx in sel else sel.add(idx)
+    return list(sel)
+
+
+@app.callback(
+    Output({'type': 'btn-select-graph', 'index': dash.ALL}, 'children'),
+    Output({'type': 'btn-select-graph', 'index': dash.ALL}, 'style'),
+    Input('bi-selected-graphs', 'data'),
+    State({'type': 'btn-select-graph', 'index': dash.ALL}, 'id'),
+    prevent_initial_call=False
+)
+def actualizar_visual_seleccion(selected, btn_ids):
+    sel_set = set(selected or [])
+    children, styles = [], []
+    for bid in (btn_ids or []):
+        if bid['index'] in sel_set:
+            children.append(html.I(className='fas fa-check-square'))
+            styles.append({"textDecoration": "none", "fontSize": "0.95rem", "color": "#28A745"})
+        else:
+            children.append(html.I(className='far fa-square'))
+            styles.append({"textDecoration": "none", "fontSize": "0.95rem", "color": "#adb5bd"})
+    return children, styles
+
+
+@app.callback(
+    Output('btn-download-pdf-bi', 'disabled'),
+    Output('btn-download-pdf-bi', 'children'),
+    Input('bi-selected-graphs', 'data'),
+)
+def actualizar_btn_pdf(selected):
+    n = len(selected or [])
+    if n == 0:
+        return True, [html.I(className='fas fa-file-pdf me-2'), 'Descargar PDF']
+    return False, [html.I(className='fas fa-file-pdf me-2'), f'Descargar PDF ({n})']
+
+
+@app.callback(
+    Output('bi-selected-graphs', 'data', allow_duplicate=True),
+    Input('drop-locs', 'value'), Input('tipo-fecha', 'value'),
+    Input('date-rango', 'start_date'), Input('date-rango', 'end_date'),
+    Input('radar-drop-zonas', 'value'), Input('bi-comparativa', 'value'),
+    prevent_initial_call=True
+)
+def resetear_seleccion(*_):
+    return []
+
+
+@app.callback(
+    Output('download-bi-pdf', 'data'),
+    Input('btn-download-pdf-bi', 'n_clicks'),
+    State({'type': 'bi-graph', 'index': dash.ALL}, 'figure'),
+    State({'type': 'bi-graph', 'index': dash.ALL}, 'id'),
+    State('bi-selected-graphs', 'data'),
+    prevent_initial_call=True
+)
+def descargar_pdf_graficos(n, figures, ids, selected):
+    if not n or not selected:
+        return dash.no_update
+    import plotly.io as pio
+    from fpdf import FPDF
+    import tempfile, os
+
+    sel_set = set(selected)
+    seleccionados = [(go.Figure(fig), id_['index']) for fig, id_ in zip(figures, ids) if id_['index'] in sel_set]
+    if not seleccionados:
+        return dash.no_update
+
+    pdf = FPDF(orientation='L', unit='mm', format='A4')
+    pdf.set_auto_page_break(auto=False)
+    temp_files = []
+    try:
+        for fig, _ in seleccionados:
+            img = pio.to_image(fig, format='png', width=1400, height=700, scale=1.5)
+            tmp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+            tmp.write(img); tmp.close()
+            temp_files.append(tmp.name)
+            pdf.add_page()
+            pdf.image(tmp.name, x=10, y=10, w=277)
+    finally:
+        for f in temp_files:
+            try: os.unlink(f)
+            except: pass
+
+    return dcc.send_bytes(bytes(pdf.output()), 'graficos_seleccionados.pdf')
+
+
 if __name__ == "__main__":
-    app.run(debug=True, port=8052)
+    app.run(debug=True, port=8051)

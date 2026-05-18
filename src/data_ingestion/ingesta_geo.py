@@ -9,10 +9,7 @@ from src.data_processing.geo_enrichment import (
     _GEO_PATH,
 )
 
-# Fecha más antigua del histórico de training. Define hasta dónde se back-datean
-# las features estructurales en la primera entrega de Esri.
 TRAINING_START = "2024-01-01"
-
 
 def ingestar_snapshot_esri(
     location_uuid: str,
