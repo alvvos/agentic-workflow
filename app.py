@@ -85,9 +85,9 @@ _LOGIN_HTML = """<!DOCTYPE html>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Acceso — Panel Analítico</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/lux/bootstrap.min.css" rel="stylesheet">
   <style>
-    body{background:#f0f4f8;min-height:100vh;display:flex;align-items:center;justify-content:center}
+    body{background:#f8f9fa;min-height:100vh;display:flex;align-items:center;justify-content:center}
     .login-card{width:100%;max-width:380px}
     .btn-primary{background:#0052CC;border-color:#0052CC}
     .btn-primary:hover{background:#003d99;border-color:#003d99}
@@ -97,19 +97,20 @@ _LOGIN_HTML = """<!DOCTYPE html>
 <body>
 <div class="login-card px-3">
   <div class="text-center mb-4">
-    <h5 class="fw-bold text-brand mb-1">Panel Analítico Predictivo</h5>
+    <img src="/assets/logo.png" style="max-height:60px;object-fit:contain" class="mb-3" alt="Logo">
+    <h5 class="fw-bold text-brand mb-1">Panel analítico predictivo</h5>
     <p class="text-muted small mb-0">Introduce tus credenciales para acceder</p>
   </div>
-  <div class="card shadow border-0 rounded-4">
+  <div class="card shadow-sm border-0 rounded-4">
     <div class="card-body p-4">
       {% if error %}<div class="alert alert-danger small py-2 mb-3">{{ error }}</div>{% endif %}
       <form method="post">
         <div class="mb-3">
-          <label class="form-label fw-bold small text-muted text-uppercase">Usuario</label>
+          <label class="form-label fw-bold small text-muted">Usuario</label>
           <input type="text" name="username" class="form-control rounded-3" autofocus required>
         </div>
         <div class="mb-4">
-          <label class="form-label fw-bold small text-muted text-uppercase">Contraseña</label>
+          <label class="form-label fw-bold small text-muted">Contraseña</label>
           <input type="password" name="password" class="form-control rounded-3" required>
         </div>
         <button type="submit" class="btn btn-primary w-100 fw-bold rounded-pill">Entrar</button>
@@ -240,10 +241,7 @@ def serve_layout():
                                 )
                             ], xs=12, md=9),
                             
-                            # --- BOTÓN DE PDF ---
-                            dbc.Col([
-                                dbc.Button([html.I(className="fas fa-file-pdf me-2"), "Descargar PDF"], id="btn-pdf-ejecutivo", color="danger", className="w-100 fw-bold rounded-pill shadow-sm mb-3")
-                            ], xs=12, md=3)
+                            dbc.Col([], xs=12, md=3)
                             
                         ], className="mb-4 align-items-center"),
                         
@@ -280,8 +278,7 @@ def serve_layout():
                                 )
                             ], xs=12, lg=8),
                             dbc.Col([
-                                dbc.Button([html.I(className="fas fa-times me-2"), "Borrar filtro cruzado"], id="btn-clear-bi", color="danger", outline=True, className="mt-lg-4 mt-2 w-100 rounded-pill fw-bold shadow-sm mb-2"),
-                                dbc.Button([html.I(className="fas fa-file-pdf me-2"), "Descargar PDF"], id="btn-download-pdf-bi", color="secondary", outline=True, className="w-100 rounded-pill fw-bold shadow-sm", disabled=True),
+                                dbc.Button([html.I(className="fas fa-times me-2"), "Borrar filtro cruzado"], id="btn-clear-bi", color="danger", outline=True, className="mt-lg-4 mt-2 w-100 rounded-pill fw-bold shadow-sm"),
                             ], xs=12, lg=4)
                         ], className="align-items-center mb-4"),
                         
@@ -392,10 +389,8 @@ def serve_layout():
     return dbc.Container([
         dcc.Store(id='session-id', data=session_id),
         dcc.Store(id='bi-filtro-zona', data=None),
-        dcc.Store(id='bi-selected-graphs', data=[]),
         dcc.Store(id='data-version', data=0),
-        dcc.Download(id='download-bi-pdf'),
-        
+        dcc.Store(id='sync-trigger', data=0),
         dbc.Modal([
             dbc.ModalHeader(dbc.ModalTitle(id="modal-bi-title", className="fw-bold text-primary")),
             dbc.ModalBody(dcc.Graph(id="modal-bi-graph", style={"height": "75vh"})),
@@ -519,25 +514,50 @@ def auto_fill_zonas(locs):
                 
     return opts_bi, vals_bi, opts_exe, vals_exe
 
+# --- HELPERS DE SINCRONIZACIÓN ---
+def _acquire_sync_lock(lock_file, max_age=600):
+    """Intenta adquirir el lock de sincronización. Devuelve True si se adquiere."""
+    if os.path.exists(lock_file):
+        age = (datetime.now() - datetime.fromtimestamp(os.path.getmtime(lock_file))).total_seconds()
+        if age < max_age:
+            return False
+        os.remove(lock_file)
+    open(lock_file, 'w').close()
+    return True
+
+def _release_sync_lock(lock_file):
+    if os.path.exists(lock_file):
+        os.remove(lock_file)
+
 # --- CALLBACKS DE SISTEMA ---
-@app.callback(Output("modal-sync", "is_open", allow_duplicate=True), Input("btn-sync", "n_clicks"), prevent_initial_call=True)
-def abrir_modal_carga(n_clicks): return True
+@app.callback(
+    Output("modal-sync", "is_open"), Output("sync-trigger", "data"),
+    Input("btn-sync", "n_clicks"), prevent_initial_call=True
+)
+def abrir_modal_carga(n_clicks):
+    return True, n_clicks
 
 @app.callback(
     Output("modal-sync", "is_open", allow_duplicate=True), Output("toast-notificacion", "is_open", allow_duplicate=True),
     Output("toast-notificacion", "children", allow_duplicate=True), Output("toast-notificacion", "icon", allow_duplicate=True), Output("toast-notificacion", "header", allow_duplicate=True),
     Output("data-version", "data"),
-    Input("modal-sync", "is_open"), State("drop-locs", "value"), State("session-id", "data"), prevent_initial_call=True
+    Input("sync-trigger", "data"), State("drop-locs", "value"), State("session-id", "data"), prevent_initial_call=True
 )
-def ejecutar_sincronizacion(is_open, locs, session_id):
-    if not is_open: return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+def ejecutar_sincronizacion(trigger, locs, session_id):
+    if not trigger:
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
     ruta_data = os.path.join('src', 'data')
     archivo_usuario = os.path.join(ruta_data, f'dataset_{session_id}.csv')
+    lock_file = os.path.join(ruta_data, f'dataset_{session_id}.lock')
+    if not _acquire_sync_lock(lock_file):
+        return False, True, "Sincronización ya en progreso, espera un momento.", "warning", "Sincronización en curso", dash.no_update
     try:
         actualizar_datos_csv(locs if locs else [], archivo_usuario)
         return False, True, "Datos sincronizados correctamente.", "success", "Sincronización finalizada", datetime.now().timestamp()
     except Exception as e:
         return False, True, f"Error al descargar datos: {str(e)}", "danger", "Error de sincronización", dash.no_update
+    finally:
+        _release_sync_lock(lock_file)
 
 @app.callback(
     Output("toast-notificacion", "is_open", allow_duplicate=True), Output("toast-notificacion", "children", allow_duplicate=True),
@@ -553,28 +573,35 @@ def limpiar_memoria(n, session_id):
 
 
 @app.callback(
-    Output("bi-filtro-zona", "data"), Input({"type": "bi-graph", "index": dash.ALL}, "clickData"),
-    Input("btn-clear-bi", "n_clicks"), State("bi-filtro-zona", "data"), prevent_initial_call=True
+    Output("bi-filtro-zona", "data"),
+    Input({"type": "bi-graph", "index": dash.ALL}, "selectedData"),
+    Input("btn-clear-bi", "n_clicks"),
+    State("bi-filtro-zona", "data"),
+    prevent_initial_call=True
 )
-def update_click_filter(clickData_list, clear_btn, current_filter):
-    if ctx.triggered_id == "btn-clear-bi": return None
-    if not ctx.triggered: return current_filter
+def update_fecha_filter(selected_list, clear_btn, current):
+    if ctx.triggered_id == "btn-clear-bi":
+        return None
     val = ctx.triggered[0]['value']
-    if val and 'points' in val:
-        zona = val['points'][0].get('customdata')
-        if zona: return zona
-    return current_filter
+    # None → figura reemplazada por re-render, no acción del usuario
+    if val is None:
+        return current
+    # Lista vacía → clic en zona sin datos, limpiar selección
+    if not val.get('points'):
+        return None
+    fechas = sorted({str(p['x'])[:10] for p in val['points'] if 'x' in p})
+    return fechas if fechas else None
 
 @app.callback(
     [Output("bi-dynamic-content", "children"), Output("bi-status-visor", "children"), 
      Output("audit-results", "children"), Output("panel-ejecutivo-content", "children")],
     [Input("drop-locs", "value"), Input("tipo-fecha", "value"), Input("date-rango", "start_date"),
-     Input("date-rango", "end_date"), Input("radar-drop-zonas", "value"), Input("bi-comparativa", "value"),
-     Input("bi-filtro-zona", "data"), Input("ejecutivo-drop-zonas", "value"),
-     Input("data-version", "data")],
+     Input("date-rango", "end_date"), Input("date-dia", "date"), Input("radar-drop-zonas", "value"),
+     Input("bi-comparativa", "value"), Input("bi-filtro-zona", "data"),
+     Input("ejecutivo-drop-zonas", "value"), Input("data-version", "data")],
     [State("session-id", "data")], prevent_initial_call=False
 )
-def master_reactive_analytics(locs, t_f, sd, ed, zones_bi, comp, cross, zones_exe, _data_v, s_id):
+def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, cross, zones_exe, _data_v, s_id):
     # SALIDAS DE SEGURIDAD (Evitan que colapse)
     if not locs: 
         return html.Div(), "Esperando selección de ubicación...", html.Div(), html.Div()
@@ -603,6 +630,7 @@ def master_reactive_analytics(locs, t_f, sd, ed, zones_bi, comp, cross, zones_ex
     start = end = pd.to_datetime(hoy - timedelta(days=1))
     if t_f == "7d_rel": start, end = pd.to_datetime(hoy - timedelta(days=7)), pd.to_datetime(hoy - timedelta(days=1))
     elif t_f == "28d_rel": start, end = pd.to_datetime(hoy - timedelta(days=28)), pd.to_datetime(hoy - timedelta(days=1))
+    elif t_f == "dia" and dia: start = end = pd.to_datetime(dia)
     elif t_f == "rango" and sd and ed: start, end = pd.to_datetime(sd), pd.to_datetime(ed)
     
     df_actual = df[(df['fecha'] >= start) & (df['fecha'] <= end + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))].copy()
@@ -625,7 +653,7 @@ def master_reactive_analytics(locs, t_f, sd, ed, zones_bi, comp, cross, zones_ex
         html.Span([html.I(className="fas fa-calendar-day me-2"), f"{start.strftime('%d %b')} - {end.strftime('%d %b')}"], className="badge bg-white text-primary me-2 shadow-sm fs-6"),
         html.Span([html.I(className="fas fa-layer-group me-2"), f"{len(zones_bi) if zones_bi else 'Todas las'} Zonas"], className="badge bg-white text-secondary me-2 shadow-sm fs-6"),
         html.Span(comparativa_txt, className="badge bg-primary text-white shadow-sm fs-6") if comparativa_txt else None,
-        html.Span(f" • Filtrando por: {cross}", className="ms-2 text-danger fw-bold small") if cross else None
+        html.Span([html.I(className="fas fa-crosshairs me-1"), f"{len(cross)} día(s) seleccionado(s)"], className="badge bg-danger text-white ms-2 shadow-sm fs-6") if cross else None
     ])
 
     bi_content = generar_panel_bi_completo(df_bi, df_bi_hist, comp, cross)
@@ -759,103 +787,6 @@ def generar_pptx(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, 
         return dash.no_update, f"Error generando PPTX: {str(e)}"
 
 
-# --- SELECCIÓN Y DESCARGA DE GRÁFICOS ---
-
-@app.callback(
-    Output('bi-selected-graphs', 'data', allow_duplicate=True),
-    Input({'type': 'btn-select-graph', 'index': dash.ALL}, 'n_clicks'),
-    State('bi-selected-graphs', 'data'),
-    prevent_initial_call=True
-)
-def actualizar_seleccion(n_clicks_list, current):
-    if not ctx.triggered_id:
-        return current or []
-    idx = ctx.triggered_id['index']
-    sel = set(current or [])
-    sel.discard(idx) if idx in sel else sel.add(idx)
-    return list(sel)
-
-
-@app.callback(
-    Output({'type': 'btn-select-graph', 'index': dash.ALL}, 'children'),
-    Output({'type': 'btn-select-graph', 'index': dash.ALL}, 'style'),
-    Input('bi-selected-graphs', 'data'),
-    State({'type': 'btn-select-graph', 'index': dash.ALL}, 'id'),
-    prevent_initial_call=False
-)
-def actualizar_visual_seleccion(selected, btn_ids):
-    sel_set = set(selected or [])
-    children, styles = [], []
-    for bid in (btn_ids or []):
-        if bid['index'] in sel_set:
-            children.append(html.I(className='fas fa-check-square'))
-            styles.append({"textDecoration": "none", "fontSize": "0.95rem", "color": "#28A745"})
-        else:
-            children.append(html.I(className='far fa-square'))
-            styles.append({"textDecoration": "none", "fontSize": "0.95rem", "color": "#adb5bd"})
-    return children, styles
-
-
-@app.callback(
-    Output('btn-download-pdf-bi', 'disabled'),
-    Output('btn-download-pdf-bi', 'children'),
-    Input('bi-selected-graphs', 'data'),
-)
-def actualizar_btn_pdf(selected):
-    n = len(selected or [])
-    if n == 0:
-        return True, [html.I(className='fas fa-file-pdf me-2'), 'Descargar PDF']
-    return False, [html.I(className='fas fa-file-pdf me-2'), f'Descargar PDF ({n})']
-
-
-@app.callback(
-    Output('bi-selected-graphs', 'data', allow_duplicate=True),
-    Input('drop-locs', 'value'), Input('tipo-fecha', 'value'),
-    Input('date-rango', 'start_date'), Input('date-rango', 'end_date'),
-    Input('radar-drop-zonas', 'value'), Input('bi-comparativa', 'value'),
-    prevent_initial_call=True
-)
-def resetear_seleccion(*_):
-    return []
-
-
-@app.callback(
-    Output('download-bi-pdf', 'data'),
-    Input('btn-download-pdf-bi', 'n_clicks'),
-    State({'type': 'bi-graph', 'index': dash.ALL}, 'figure'),
-    State({'type': 'bi-graph', 'index': dash.ALL}, 'id'),
-    State('bi-selected-graphs', 'data'),
-    prevent_initial_call=True
-)
-def descargar_pdf_graficos(n, figures, ids, selected):
-    if not n or not selected:
-        return dash.no_update
-    import plotly.io as pio
-    from fpdf import FPDF
-    import tempfile, os
-
-    sel_set = set(selected)
-    seleccionados = [(go.Figure(fig), id_['index']) for fig, id_ in zip(figures, ids) if id_['index'] in sel_set]
-    if not seleccionados:
-        return dash.no_update
-
-    pdf = FPDF(orientation='L', unit='mm', format='A4')
-    pdf.set_auto_page_break(auto=False)
-    temp_files = []
-    try:
-        for fig, _ in seleccionados:
-            img = pio.to_image(fig, format='png', width=1400, height=700, scale=1.5)
-            tmp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
-            tmp.write(img); tmp.close()
-            temp_files.append(tmp.name)
-            pdf.add_page()
-            pdf.image(tmp.name, x=10, y=10, w=277)
-    finally:
-        for f in temp_files:
-            try: os.unlink(f)
-            except: pass
-
-    return dcc.send_bytes(bytes(pdf.output()), 'graficos_seleccionados.pdf')
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ _GRAPH_CONFIG = {
     'displayModeBar': True,
     'displaylogo': False,
     'modeBarButtons': [['toImage']],
-    'toImageButtonOptions': {'format': 'png', 'scale': 2, 'height': 520, 'width': 960},
+    'toImageButtonOptions': {'format': 'png', 'scale': 3, 'height': 600, 'width': 1400},
 }
 
 def formato_fecha_es(fecha):
@@ -74,9 +74,23 @@ def construir_figura_bi(df, df_hist, metrica, titulo, zonas_ordenadas, color_map
 
     df = df.sort_values('fecha_dia')
     fechas_unicas = sorted(df['fecha_dia'].unique())
-    tickvals = fechas_unicas
-    ticktext = [formato_fecha_es(pd.to_datetime(f)) for f in fechas_unicas]
-    angulo_x = -90 if len(fechas_unicas) > 10 else 0
+
+    _MESES_ES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+    usar_meses = len(fechas_unicas) > 60
+    if usar_meses:
+        _agg = 'sum' if tipo == 'bar' else 'mean'
+        df = df.copy()
+        df['fecha_dia'] = df['fecha_dia'].dt.to_period('M').dt.to_timestamp()
+        df = df.groupby(['fecha_dia', 'Zona'])[metrica].agg(_agg).reset_index()
+        df_hist = pd.DataFrame()
+        fechas_unicas = sorted(df['fecha_dia'].unique())
+        tickvals = fechas_unicas
+        ticktext = [f"{_MESES_ES[pd.to_datetime(f).month - 1]} {pd.to_datetime(f).year}" for f in fechas_unicas]
+        angulo_x = 0
+    else:
+        tickvals = fechas_unicas
+        ticktext = [formato_fecha_es(pd.to_datetime(f)) for f in fechas_unicas]
+        angulo_x = -90 if len(fechas_unicas) > 10 else 0
 
     has_historical = not df_hist.empty and offset_dias > 0
 
@@ -117,6 +131,16 @@ def construir_figura_bi(df, df_hist, metrica, titulo, zonas_ordenadas, color_map
                 df_z_hist = df_z_hist.sort_values('fecha_alineada')
                 fig.add_trace(go.Scatter(x=df_z_hist['fecha_alineada'], y=df_z_hist[metrica], name=f"{zona} (Ant.)", mode='lines', line=dict(color=color_zona, width=1.5, dash='dot'), hoverinfo='skip', showlegend=False, opacity=0.4, customdata=[zona]*len(df_z_hist)))
             fig.add_trace(go.Scatter(x=df_z['fecha_dia'], y=df_z[metrica], name=zona, mode='lines+markers', line=dict(color=color_zona, width=3, shape='spline'), marker=dict(size=7), hoverinfo='text', hovertext=hover_texts, customdata=[zona]*len(df_z)))
+            if len(df_z) > 2:
+                y_num = df_z[metrica].fillna(df_z[metrica].mean()).values
+                coef = np.polyfit(np.arange(len(y_num)), y_num, 1)
+                trend = np.polyval(coef, np.arange(len(y_num)))
+                fig.add_trace(go.Scatter(
+                    x=df_z['fecha_dia'], y=trend,
+                    mode='lines', line=dict(color=color_zona, width=1.5, dash='dash'),
+                    opacity=0.45, showlegend=False, hoverinfo='skip',
+                    customdata=[zona] * len(df_z)
+                ))
 
         if len(df_z) > 2:
             m, s = df_z[metrica].mean(), df_z[metrica].std()
@@ -138,12 +162,12 @@ def crear_tarjeta_metrica(df, df_hist, col_y, titulo, offset, ubi, id_sufijo, ti
     zonas = ordenar_zonas(df['Zona'].unique())
     fig = construir_figura_bi(df, df_hist, col_y, titulo, zonas, obtener_mapa_colores(zonas), tipo, offset)
     gid = f"{ubi}-{col_y}-{id_sufijo}"
+    cfg = {**_GRAPH_CONFIG, 'toImageButtonOptions': {**_GRAPH_CONFIG['toImageButtonOptions'], 'filename': gid}}
     return dbc.Card([
         dbc.CardHeader([
             dbc.Button(html.I(className="fas fa-expand-arrows-alt"), id={"type": "btn-expand", "index": gid}, color="link", className="p-0 text-muted float-end ms-2", style={"textDecoration": "none"}),
-            dbc.Button(html.I(className="far fa-square"), id={"type": "btn-select-graph", "index": gid}, color="link", className="p-0 float-end", style={"textDecoration": "none", "fontSize": "0.95rem", "color": "#adb5bd"}),
         ], className="bg-white border-0 py-1"),
-        dbc.CardBody(dcc.Graph(id={"type": "bi-graph", "index": gid}, figure=fig, config=_GRAPH_CONFIG, style={"height": "350px"}), className="p-1")
+        dbc.CardBody(dcc.Graph(id={"type": "bi-graph", "index": gid}, figure=fig, config=cfg, style={"height": "350px"}), className="p-1")
     ], className="border-0 shadow-sm rounded-4 h-100")
 
 def _parse_hourly(val):
@@ -323,14 +347,16 @@ def crear_tarjeta_kpi_global(titulo, val_actual, val_hist, es_tiempo=False, es_r
         html.Div(delta_html, className="mt-1", style={"fontSize": "0.75rem"})
     ]), className="border-0 shadow-sm rounded-4 text-center h-100")
 
-def generar_panel_bi_completo(df_actual, df_hist, comparativa, click_zona=None):
+def generar_panel_bi_completo(df_actual, df_hist, comparativa, fechas_filtro=None):
     if df_actual.empty: return dbc.Alert("No hay datos disponibles en el rango seleccionado.", color="warning", className="rounded-4")
-    
+
     offset = {'wow': 7, 'mom': 28, 'yoy': 365}.get(comparativa, 0)
-    
-    if click_zona:
-        df_actual = df_actual[df_actual['Zona'] == click_zona]
-        if not df_hist.empty: df_hist = df_hist[df_hist['Zona'] == click_zona]
+
+    if fechas_filtro:
+        fechas_set = set(pd.to_datetime(fechas_filtro).normalize())
+        df_actual = df_actual[df_actual['fecha'].dt.normalize().isin(fechas_set)]
+        if df_actual.empty:
+            return dbc.Alert("Ningún dato coincide con los días seleccionados.", color="info", className="rounded-4")
 
     df_actual['fecha_dia'] = df_actual['fecha'].dt.normalize()
     if not df_hist.empty: df_hist['fecha_dia'] = df_hist['fecha'].dt.normalize()

@@ -7,8 +7,6 @@ import json
 import pandas as pd
 from src.services.ml_predictivo import ejecutar_auditoria_predictiva
 from src.data_processing.constructor_master import cargar_csv_crudo, enriquecer_datos_ubicacion
-from src.models.forecaster import entrenar_modelo_volumen, predecir_manana
-from src.data_processing.feature_engineering import enriquecer_dataset_ml
 
 RUTA_JSON = 'src/data/todas_las_ubicaciones.json'
 mapa_zonas_por_loc = {}
@@ -186,67 +184,51 @@ def ejecutar_forecast_manana(n, locs, session_id):
         return no_update, "Sincroniza los datos desde el panel principal primero."
 
     try:
-        df = pd.read_csv(archivo)
-        df = df[df['location_id'].isin(locs)]
-        df['Ubicación'] = df['location_id'].map(mapa_tiendas_ml).fillna('Desconocida')
-        df['Zona'] = df['zone_uuid'].map(mapa_zonas_ml).fillna('SinNombre') if 'zone_uuid' in df.columns else 'SinNombre'
-        df['fecha'] = pd.to_datetime(df['fecha'])
-
-        if df.empty:
-            return no_update, "No hay datos para las ubicaciones seleccionadas."
-
-        df_ml = enriquecer_dataset_ml(df)
-
-        if len(df_ml) < 30:
-            return no_update, f"Histórico insuficiente tras el enriquecimiento ({len(df_ml)} registros). Se necesitan mínimo 30 días."
-
-        modelo, features, metricas = entrenar_modelo_volumen(df_ml)
-        df_pred = predecir_manana(df_ml, modelo, features)
-
-        if df_pred is None or df_pred.empty:
-            return no_update, "No se pudieron generar proyecciones."
-
-        manana = pd.to_datetime(df_ml['fecha'].max()) + timedelta(days=1)
-        dias_es = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
-        dia_txt = dias_es[manana.dayofweek]
-
-        acc = f"{round((1 - metricas['error_porcentual_medio'] / 100) * 100, 1)}%"
-        mae = f"{int(metricas['error_absoluto_medio'])} vis."
-        wmape = f"{metricas['error_porcentual_medio']}%"
-
-        metricas_row = dbc.Row([
-            dbc.Col(dbc.Card(dbc.CardBody([
-                html.H6("Precisión (Accuracy)", className="text-muted small text-uppercase fw-bold"),
-                html.H3(acc, className="text-success fw-bold mb-0")
-            ]), className="border-0 shadow-sm rounded-4 text-center"), xs=6, md=4, className="mb-3"),
-            dbc.Col(dbc.Card(dbc.CardBody([
-                html.H6("Error Medio (MAE)", className="text-muted small text-uppercase fw-bold"),
-                html.H3(mae, className="text-warning fw-bold mb-0")
-            ]), className="border-0 shadow-sm rounded-4 text-center"), xs=6, md=4, className="mb-3"),
-            dbc.Col(dbc.Card(dbc.CardBody([
-                html.H6("Desviación (WMAPE)", className="text-muted small text-uppercase fw-bold"),
-                html.H3(wmape, className="text-danger fw-bold mb-0")
-            ]), className="border-0 shadow-sm rounded-4 text-center"), xs=6, md=4, className="mb-3"),
-        ], className="mb-4")
+        df_crudo = cargar_csv_crudo(archivo)
+        ultima_fecha_global = pd.to_datetime(df_crudo['fecha']).max()
+        falso_hoy = (ultima_fecha_global + timedelta(days=1)).strftime('%Y-%m-%d')
 
         zona_cards = []
-        for _, row in df_pred.iterrows():
-            zona = row.get('Zona', '—')
-            pred = int(row.get('prediccion', 0))
-            zona_cards.append(
-                dbc.Col(dbc.Card(dbc.CardBody([
-                    html.H6(zona, className="text-muted small text-uppercase fw-bold mb-1"),
-                    html.H3(f"{pred:,}", className="fw-bold text-dark mb-0"),
-                    html.Small("visitas proyectadas", className="text-muted")
-                ]), className="border-0 shadow-sm rounded-4 text-center h-100"), xs=6, md=3, className="mb-3")
-            )
+        for loc_uuid in locs:
+            df_e = enriquecer_datos_ubicacion(df_crudo, loc_uuid, RUTA_JSON)
+            if df_e.empty:
+                continue
+            loc_nombre = mapa_tiendas_ml.get(loc_uuid, loc_uuid)
+            for zona_info in mapa_zonas_por_loc.get(loc_uuid, []):
+                zone_uuid = zona_info['value']
+                zona_nombre = mapa_zonas_ml.get(zone_uuid, zona_info['label'])
+                res = ejecutar_auditoria_predictiva(df_e, loc_uuid, zone_uuid, falso_hoy, horizonte_dias=1)
+                if res.get('status') != 'success':
+                    continue
+                pred = int(res['grafica']['predichos'][0])
+                zona_cards.append(
+                    dbc.Col(dbc.Card(dbc.CardBody([
+                        html.Small(loc_nombre, className="text-muted d-block mb-1"),
+                        html.H6(zona_nombre, className="fw-bold small text-uppercase mb-1"),
+                        html.H3(f"{pred:,}", className="fw-bold text-dark mb-0"),
+                        html.Small("visitas proyectadas", className="text-muted"),
+                    ]), className="border-0 shadow-sm rounded-4 text-center h-100"), xs=6, md=3, className="mb-3")
+                )
+
+        if not zona_cards:
+            return no_update, "No se pudieron generar proyecciones para las zonas seleccionadas."
+
+        manana_dt = ultima_fecha_global + timedelta(days=1)
+        dias_es = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+        dia_txt = dias_es[manana_dt.dayofweek]
 
         return html.Div([
             html.Div([
                 html.I(className="fas fa-calendar-day me-2 text-warning"),
-                html.Span(f"Proyección para el {manana.strftime('%d/%m/%Y')} ({dia_txt})", className="fw-bold text-dark"),
+                html.Span(
+                    f"Proyección para el {manana_dt.strftime('%d/%m/%Y')} ({dia_txt})",
+                    className="fw-bold text-dark"
+                ),
+                html.Small(
+                    f" — día siguiente al último dato disponible ({ultima_fecha_global.strftime('%d/%m/%Y')})",
+                    className="text-muted ms-2"
+                ),
             ], className="mb-3 fs-6"),
-            metricas_row,
             dbc.Row(zona_cards)
         ]), ""
 

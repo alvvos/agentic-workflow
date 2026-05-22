@@ -149,6 +149,11 @@ def ingestar_snapshot_esri(
         json.dump(store_raw, f, ensure_ascii=False, indent=2)
     os.replace(tmp_path, _GEO_PATH)
 
+    # Invalidar modelos en caché para esta ubicación — el próximo predict reentrenará
+    # con los nuevos datos Esri.
+    from src.services.ml_predictivo import invalidar_modelos_location
+    invalidar_modelos_location(location_uuid)
+
     return {
         "location_uuid": location_uuid,
         "primera_entrega": is_primera_entrega,
