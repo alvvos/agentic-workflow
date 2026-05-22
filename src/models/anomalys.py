@@ -429,15 +429,7 @@ def generar_panel_bi_completo(df_actual, df_hist, comparativa, fechas_filtro=Non
                 seccion_funnel = [
                     html.Div(className="d-flex justify-content-between align-items-end border-bottom pb-2 mb-3 mt-4", children=[
                         html.H5([html.I(className="fas fa-filter me-2 text-primary"), "Conversión y Atracción (Funnel)"], className="fw-bold mb-0 text-dark"),
-                        
-                        # --- BOTÓN TRIGEADOR LLM ---
-                        dbc.Button([html.I(className="fas fa-magic me-2"), "Consultar Benchmark AI"], 
-                                   id={"type": "btn-ai-benchmark", "index": ubi}, 
-                                   color="dark", size="sm", className="fw-bold rounded-pill shadow-sm")
                     ]),
-                    
-                    # --- TARJETA RECEPTORA DEL LLM (Oculta por defecto) ---
-                    html.Div(id={"type": "card-ai-benchmark", "index": ubi}, className="mb-4"),
                     
                     dbc.Row(kpis_funnel),
                     dbc.Row(graficos_funnel)

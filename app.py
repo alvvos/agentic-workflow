@@ -276,22 +276,28 @@ def serve_layout():
                                     ],
                                     value="none", inline=True, className="mb-2"
                                 )
-                            ], xs=12, lg=8),
+                            ], xs=12, lg=7),
                             dbc.Col([
-                                dbc.Button([html.I(className="fas fa-times me-2"), "Borrar filtro cruzado"], id="btn-clear-bi", color="danger", outline=True, className="mt-lg-4 mt-2 w-100 rounded-pill fw-bold shadow-sm"),
-                            ], xs=12, lg=4)
+                                dbc.Button([html.I(className="fas fa-file-archive me-2"), "Descargar todos (.png)"], id="btn-download-all-bi", color="secondary", outline=True, className="mt-lg-4 mt-2 w-100 rounded-pill fw-bold shadow-sm"),
+                                dcc.Download(id="download-bi-zip"),
+                            ], xs=12, lg=5)
                         ], className="align-items-center mb-4"),
-                        
+
                         html.Div(id="bi-dynamic-content"),
                         html.Hr(className="text-muted my-5"),
+                        dbc.Row([
+                            dbc.Col(
+                                dbc.Button([html.I(className="fas fa-file-excel me-2"), "Descargar Excel"], id="btn-dl-auditoria", color="success", outline=True, className="rounded-pill fw-bold shadow-sm"),
+                                xs=12, className="text-end mb-3"
+                            )
+                        ]),
+                        dcc.Download(id="download-auditoria"),
                         html.Div(id="audit-results")
                     ]),
 
                     dcc.Tab(label='Generador de reportes', value='tab-reportes', className="fw-bold", children=[
                         html.Br(),
                         dbc.Row([
-
-                            # ── Columna izquierda: info del informe ─────────────────
                             dbc.Col([
                                 html.H4([
                                     html.I(className="fas fa-presentation me-2 text-danger"),
@@ -388,7 +394,6 @@ def serve_layout():
 
     return dbc.Container([
         dcc.Store(id='session-id', data=session_id),
-        dcc.Store(id='bi-filtro-zona', data=None),
         dcc.Store(id='data-version', data=0),
         dcc.Store(id='sync-trigger', data=0),
         dbc.Modal([
@@ -514,6 +519,29 @@ def auto_fill_zonas(locs):
                 
     return opts_bi, vals_bi, opts_exe, vals_exe
 
+# --- ALERTA DE SINCRONIZACIÓN ---
+@app.callback(
+    Output("btn-sync", "className"),
+    Input("session-id", "data"),
+    Input("data-version", "data"),
+)
+def actualizar_alerta_sync(session_id, _):
+    base = "fw-bold rounded-pill shadow-sm me-2"
+    if not session_id:
+        return base
+    archivo = os.path.join('src', 'data', f'dataset_{session_id}.csv')
+    if not os.path.exists(archivo):
+        return base + " btn-sync-alerta"
+    try:
+        df_tmp = pd.read_csv(archivo, usecols=['fecha'])
+        max_fecha = pd.to_datetime(df_tmp['fecha']).max().date()
+        ayer = datetime.today().date() - timedelta(days=1)
+        if (ayer - max_fecha).days > 1:
+            return base + " btn-sync-alerta"
+    except Exception:
+        pass
+    return base
+
 # --- HELPERS DE SINCRONIZACIÓN ---
 def _acquire_sync_lock(lock_file, max_age=600):
     """Intenta adquirir el lock de sincronización. Devuelve True si se adquiere."""
@@ -571,37 +599,16 @@ def limpiar_memoria(n, session_id):
         return True, "Memoria limpiada con éxito.", "success", "Flush data"
     except Exception as e: return True, f"Error al limpiar memoria: {str(e)}", "danger", "Error"
 
-
 @app.callback(
-    Output("bi-filtro-zona", "data"),
-    Input({"type": "bi-graph", "index": dash.ALL}, "selectedData"),
-    Input("btn-clear-bi", "n_clicks"),
-    State("bi-filtro-zona", "data"),
-    prevent_initial_call=True
-)
-def update_fecha_filter(selected_list, clear_btn, current):
-    if ctx.triggered_id == "btn-clear-bi":
-        return None
-    val = ctx.triggered[0]['value']
-    # None → figura reemplazada por re-render, no acción del usuario
-    if val is None:
-        return current
-    # Lista vacía → clic en zona sin datos, limpiar selección
-    if not val.get('points'):
-        return None
-    fechas = sorted({str(p['x'])[:10] for p in val['points'] if 'x' in p})
-    return fechas if fechas else None
-
-@app.callback(
-    [Output("bi-dynamic-content", "children"), Output("bi-status-visor", "children"), 
+    [Output("bi-dynamic-content", "children"), Output("bi-status-visor", "children"),
      Output("audit-results", "children"), Output("panel-ejecutivo-content", "children")],
     [Input("drop-locs", "value"), Input("tipo-fecha", "value"), Input("date-rango", "start_date"),
      Input("date-rango", "end_date"), Input("date-dia", "date"), Input("radar-drop-zonas", "value"),
-     Input("bi-comparativa", "value"), Input("bi-filtro-zona", "data"),
-     Input("ejecutivo-drop-zonas", "value"), Input("data-version", "data")],
+     Input("bi-comparativa", "value"), Input("ejecutivo-drop-zonas", "value"),
+     Input("data-version", "data")],
     [State("session-id", "data")], prevent_initial_call=False
 )
-def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, cross, zones_exe, _data_v, s_id):
+def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, zones_exe, _data_v, s_id):
     # SALIDAS DE SEGURIDAD (Evitan que colapse)
     if not locs: 
         return html.Div(), "Esperando selección de ubicación...", html.Div(), html.Div()
@@ -653,10 +660,9 @@ def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, cross, zon
         html.Span([html.I(className="fas fa-calendar-day me-2"), f"{start.strftime('%d %b')} - {end.strftime('%d %b')}"], className="badge bg-white text-primary me-2 shadow-sm fs-6"),
         html.Span([html.I(className="fas fa-layer-group me-2"), f"{len(zones_bi) if zones_bi else 'Todas las'} Zonas"], className="badge bg-white text-secondary me-2 shadow-sm fs-6"),
         html.Span(comparativa_txt, className="badge bg-primary text-white shadow-sm fs-6") if comparativa_txt else None,
-        html.Span([html.I(className="fas fa-crosshairs me-1"), f"{len(cross)} día(s) seleccionado(s)"], className="badge bg-danger text-white ms-2 shadow-sm fs-6") if cross else None
     ])
 
-    bi_content = generar_panel_bi_completo(df_bi, df_bi_hist, comp, cross)
+    bi_content = generar_panel_bi_completo(df_bi, df_bi_hist, comp)
     audit_content = generar_tabla_auditoria(df_actual) if not df_actual.empty else dbc.Alert("No hay datos para el radar en estas fechas.", color="info", className="rounded-4")
 
     return bi_content, visor, audit_content, informe_ejecutivo
@@ -680,75 +686,6 @@ def expandir_grafico(n_clicks_list, figures, ids):
             fig_copy.update_layout(height=None, margin=dict(t=50, b=80, l=40, r=20))
             return True, fig_copy, titulo
     return dash.no_update
-
-# --- AI BENCHMARK (Funnel) ---
-@app.callback(
-    Output({"type": "card-ai-benchmark", "index": MATCH}, "children"),
-    Input({"type": "btn-ai-benchmark", "index": MATCH}, "n_clicks"),
-    State("session-id", "data"),
-    prevent_initial_call=True
-)
-def mostrar_benchmark_ai(n_clicks, session_id):
-    if not n_clicks:
-        return no_update
-    from src.models.anomalys import ordenar_zonas, preparar_df_ratio
-    ubi = ctx.triggered_id['index']
-    archivo = os.path.join('src', 'data', f'dataset_{session_id}.csv')
-    if not os.path.exists(archivo):
-        return dbc.Alert("Sincroniza los datos primero.", color="warning", className="rounded-4")
-    try:
-        df = pd.read_csv(archivo)
-        df['Ubicación'] = df['location_id'].map(mapa_tiendas).fillna('Desconocida')
-        df['Zona'] = df['zone_uuid'].map(mapa_zonas).fillna('SinNombre') if 'zone_uuid' in df.columns else 'SinNombre'
-        df['fecha'] = pd.to_datetime(df['fecha'])
-        df['fecha_dia'] = df['fecha'].dt.normalize()
-        df_ubi = df[df['Ubicación'] == ubi].copy()
-        if df_ubi.empty:
-            return dbc.Alert("Sin datos para este emplazamiento.", color="info", className="rounded-4")
-        zonas = ordenar_zonas(df_ubi['Zona'].unique())
-        if len(zonas) < 2:
-            return dbc.Alert("Se requieren mínimo 2 zonas para analizar el funnel.", color="info", className="rounded-4")
-        filas = []
-        for i in range(len(zonas) - 1):
-            z_out, z_in = zonas[i], zonas[i + 1]
-            df_r = preparar_df_ratio(df_ubi, z_out, z_in)
-            if df_r.empty:
-                continue
-            ratio_medio = df_r['ratio_atraccion'].mean()
-            ratio_max = df_r['ratio_atraccion'].max()
-            ratio_min = df_r['ratio_atraccion'].min()
-            if ratio_medio >= 50:
-                color, insight = "text-success", "Conversión elevada. El flujo hacia el interior es eficiente."
-            elif ratio_medio >= 25:
-                color, insight = "text-warning", "Conversión moderada. Margen de mejora en activación en puerta."
-            else:
-                color, insight = "text-danger", "Conversión baja. Revisar señalización y propuesta de valor en entrada."
-            filas.append(dbc.Row([
-                dbc.Col([
-                    html.Span(f"{z_out} → {z_in}", className="text-muted small fw-bold text-uppercase"),
-                    html.H4(f"{ratio_medio:.1f}%", className=f"fw-bold mb-0 {color}"),
-                    html.Small(f"Rango histórico: {ratio_min:.1f}% – {ratio_max:.1f}%", className="text-muted")
-                ], xs=4),
-                dbc.Col(html.P(insight, className="small text-muted mb-0 fst-italic"), xs=8)
-            ], className="align-items-center mb-3 py-2 border-bottom"))
-        if not filas:
-            return dbc.Alert("No hay datos de conversión calculables.", color="info", className="rounded-4")
-        return dbc.Card([
-            dbc.CardHeader([
-                html.I(className="fas fa-chart-line me-2 text-primary"),
-                "Benchmark de Conversión",
-                dbc.Badge("Análisis estadístico", color="secondary", className="ms-2 small fw-normal")
-            ], className="bg-white border-bottom fw-bold"),
-            dbc.CardBody(filas + [
-                html.P([
-                    html.I(className="fas fa-info-circle me-1 text-muted"),
-                    "Calculado sobre el histórico completo disponible para este emplazamiento."
-                ], className="small text-muted mb-0 mt-1 fst-italic")
-            ])
-        ], className="border-0 shadow-sm rounded-4")
-    except Exception as e:
-        return dbc.Alert(f"Error generando benchmark: {str(e)}", color="danger", className="rounded-4")
-
 
 # --- PPTX ---
 @app.callback(
@@ -787,6 +724,78 @@ def generar_pptx(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, 
         return dash.no_update, f"Error generando PPTX: {str(e)}"
 
 
+
+
+
+# --- DESCARGA TODOS LOS GRÁFICOS BI (ZIP PNG, kaleido) ---
+@app.callback(
+    Output("download-bi-zip", "data"),
+    Input("btn-download-all-bi", "n_clicks"),
+    State({"type": "bi-graph", "index": dash.ALL}, "figure"),
+    State({"type": "bi-graph", "index": dash.ALL}, "id"),
+    prevent_initial_call=True
+)
+def descargar_todos_graficos_bi(n, figures, ids):
+    if not n or not figures:
+        return dash.no_update
+    import zipfile as zf
+    buf = io.BytesIO()
+    with zf.ZipFile(buf, 'w', zf.ZIP_DEFLATED) as z:
+        for fig_dict, gid in zip(figures, ids):
+            if not fig_dict:
+                continue
+            try:
+                fig = go.Figure(fig_dict)
+                img_bytes = fig.to_image(format='png', width=1400, height=600, scale=2)
+                nombre = (gid['index'] if isinstance(gid, dict) else str(gid))[:80]
+                z.writestr(f"{nombre}.png", img_bytes)
+            except Exception:
+                continue
+    buf.seek(0)
+    return dcc.send_bytes(buf.getvalue(), "graficos_bi.zip")
+
+# --- DESCARGA EXCEL AUDITORÍA ---
+@app.callback(
+    Output("download-auditoria", "data"),
+    Input("btn-dl-auditoria", "n_clicks"),
+    State("drop-locs", "value"), State("tipo-fecha", "value"),
+    State("date-rango", "start_date"), State("date-rango", "end_date"),
+    State("date-dia", "date"), State("radar-drop-zonas", "value"),
+    State("session-id", "data"),
+    prevent_initial_call=True
+)
+def descargar_auditoria_excel(n, locs, t_f, sd, ed, dia, zones_bi, session_id):
+    if not n or not locs or not session_id:
+        return dash.no_update
+    archivo = os.path.join('src', 'data', f'dataset_{session_id}.csv')
+    if not os.path.exists(archivo):
+        return dash.no_update
+    df = pd.read_csv(archivo)
+    if df.empty:
+        return dash.no_update
+    df = df[df['location_id'].isin(locs)]
+    df['Ubicación'] = df['location_id'].map(mapa_tiendas).fillna('Desconocida')
+    df['Zona'] = df['zone_uuid'].map(mapa_zonas).fillna('SinNombre') if 'zone_uuid' in df.columns else 'SinNombre'
+    df['fecha'] = pd.to_datetime(df['fecha'])
+    hoy = datetime.today().date()
+    start = end = pd.to_datetime(hoy - timedelta(days=1))
+    if t_f == "7d_rel": start, end = pd.to_datetime(hoy - timedelta(days=7)), pd.to_datetime(hoy - timedelta(days=1))
+    elif t_f == "28d_rel": start, end = pd.to_datetime(hoy - timedelta(days=28)), pd.to_datetime(hoy - timedelta(days=1))
+    elif t_f == "dia" and dia: start = end = pd.to_datetime(dia)
+    elif t_f == "rango" and sd and ed: start, end = pd.to_datetime(sd), pd.to_datetime(ed)
+    df_actual = df[(df['fecha'] >= start) & (df['fecha'] <= end + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))].copy()
+    if zones_bi:
+        df_actual = df_actual[df_actual['Zona'].isin(zones_bi)]
+    if df_actual.empty:
+        return dash.no_update
+    cols = [c for c in ['fecha', 'Ubicación', 'Zona', 'total_visits', 'unique_visitors', 'new_visitors', 'dwell_time'] if c in df_actual.columns]
+    df_exp = df_actual[cols].copy()
+    df_exp['fecha'] = df_exp['fecha'].dt.strftime('%Y-%m-%d')
+    if 'dwell_time' in df_exp.columns:
+        df_exp['dwell_time'] = (df_exp['dwell_time'] / 60).round(1)
+        df_exp.rename(columns={'dwell_time': 'estancia_min'}, inplace=True)
+    df_exp.sort_values(['fecha', 'Ubicación', 'Zona'], inplace=True)
+    return dcc.send_string(df_exp.to_csv(index=False), f"auditoria_{start.strftime('%Y%m%d')}_{end.strftime('%Y%m%d')}.csv")
 
 
 if __name__ == "__main__":

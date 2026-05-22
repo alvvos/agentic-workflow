@@ -1,0 +1,11 @@
+/* Sync alert: pulsing glow + color override when data is stale */
+@keyframes sync-alert-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.5); }
+    70%  { box-shadow: 0 0 0 8px rgba(220, 53, 69, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+}
+.btn-sync-alerta {
+    animation: sync-alert-pulse 1.4s ease-in-out infinite;
+    border-color: #DC3545 !important;
+    color: #DC3545 !important;
+}

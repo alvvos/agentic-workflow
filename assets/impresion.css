@@ -16,11 +16,10 @@
     .tab-container,                   /* Menú nativo de pestañas de Dash */
     .custom-tabs > div:first-child,   /* Respaldo para el menú de pestañas */
     .sticky-top,                      /* Panel lateral izquierdo */
-    #btn-pdf-ejecutivo,               /* Botón rojo de PDF */
     #ejecutivo-drop-zonas,            /* Filtros de zonas */
-    .btn-check, 
-    label { 
-        display: none !important; 
+    .btn-check,
+    label {
+        display: none !important;
     }
 
     /* 3. Limpiar las tarjetas globales para que no parezcan cajas en el papel */
