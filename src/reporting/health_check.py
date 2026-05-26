@@ -615,7 +615,53 @@ def _render_zona_card(zona, r, a, d, dias_28, uid, periodo_label="semana"):
     )
 
 
-def _render_pm_questions(df, zonas_data, fecha_max, uid):
+def _fig_semanas_mes(df, fecha_max):
+    """Visitantes únicos totales por semana — desglose del último mes."""
+    if df.empty or 'unique_visitors' not in df.columns:
+        return None
+    fmin = fecha_max - timedelta(days=27)
+    df_m = df[(df['fecha_dt'] >= fmin) & (df['fecha_dt'] <= fecha_max)].copy()
+    if df_m.empty:
+        return None
+    df_m['fecha_ts'] = pd.to_datetime(df_m['fecha_dt'])
+    df_m['sem'] = df_m['fecha_ts'].dt.to_period('W')
+    por_sem = df_m.groupby('sem')['unique_visitors'].sum().sort_index()
+    if por_sem.empty or len(por_sem) < 2:
+        return None
+
+    n      = len(por_sem)
+    labels = [f"Sem {i + 1}" for i in range(n)]
+    hover  = [f"{p.start_time.strftime('%d/%m')}–{p.end_time.strftime('%d/%m')}"
+              for p in por_sem.index]
+    values = por_sem.values.tolist()
+    opacities = [0.28 + 0.72 * (i / max(n - 1, 1)) for i in range(n)]
+    colors = [f"rgba(0,82,204,{op:.2f})" for op in opacities]
+
+    max_v = max(values) if values else 1
+    fig = go.Figure(go.Bar(
+        x=labels, y=values,
+        marker=dict(color=colors, line=dict(width=0)),
+        text=[f"<b>{int(v):,}</b>" for v in values],
+        textposition='outside',
+        textfont=dict(size=11, color=_C_DARK),
+        customdata=hover,
+        hovertemplate='%{x} (%{customdata}): <b>%{y:,.0f}</b> visitantes únicos<extra></extra>',
+        cliponaxis=False,
+    ))
+    fig.update_layout(
+        height=180,
+        margin=dict(t=20, b=8, l=8, r=8),
+        xaxis=dict(showgrid=False, tickfont=dict(size=12, color=_C_DARK), fixedrange=True),
+        yaxis=dict(visible=False, fixedrange=True, range=[0, max_v * 1.30]),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        showlegend=False,
+        bargap=0.35,
+    )
+    return fig
+
+
+def _render_pm_questions(df, zonas_data, fecha_max, uid, ventana="semana"):
     """
     Responde gráficamente las preguntas habituales de un PM sobre el tráfico.
     Cada carta tiene una pregunta en lenguaje natural + gráfico directo.
@@ -640,33 +686,48 @@ def _render_pm_questions(df, zonas_data, fecha_max, uid):
             className="border-0 shadow-sm rounded-4 h-100 bg-white",
         )
 
-    preguntas = [
+    _periodo = "último mes (28 días)" if ventana == "mes" else "últimas 4 semanas"
+    _periodo_corto = "último mes" if ventana == "mes" else "últimos 7 días"
+
+    preguntas = []
+
+    # Gráfico semana-a-semana: solo en modo mes
+    if ventana == "mes":
+        preguntas.append((
+            _fig_semanas_mes(df, fecha_max),
+            f"q-semanas-{uid}",
+            "¿Cómo evolucionó el tráfico semana a semana?",
+            "Visitantes únicos por semana · último mes · de izquierda (más antigua) a derecha (más reciente)",
+            "180px",
+        ))
+
+    preguntas += [
         (
             _fig_dias_semana(df, fecha_max),
             f"q-dias-{uid}",
             "¿Cuándo viene la gente?",
-            "Media de visitantes por día de la semana · últimas 4 semanas · el tono más oscuro marca el pico",
+            f"Media de visitantes únicos por día · {_periodo} · tono más oscuro = pico",
             "160px",
         ),
         (
             _fig_finde_vs_laborable(df, fecha_max),
             f"q-finde-{uid}",
             "¿Rinde mejor el fin de semana o entre semana?",
-            "Promedio de visitantes por día · últimas 4 semanas",
+            f"Visitantes únicos/día (media) · {_periodo}",
             "180px",
         ),
         (
             _fig_dwell_zonas(zonas_data),
             f"q-dwell-{uid}",
             "¿Cuánto tiempo se quedan?",
-            "Tiempo medio de permanencia por zona · últimos 7 días",
+            f"Tiempo medio de permanencia por zona · {_periodo_corto}",
             "180px",
         ),
         (
             _fig_embudo_conversion(zonas_data),
             f"q-embudo-{uid}",
             "¿Cuántos visitantes convierten?",
-            "Tráfico por etapa · últimos 7 días · porcentaje respecto al paso anterior",
+            f"Visitantes únicos por etapa · {_periodo_corto} · % respecto al paso anterior",
             "180px",
         ),
     ]
@@ -777,7 +838,7 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
                        style={"fontSize": "0.61rem", "letterSpacing": "1px"}),
                 html.H4(ubi, className="fw-bold mb-1 text-white"),
                 html.P(
-                    f"{(fecha_max - timedelta(days=27)).strftime('%d %b')} – "
+                    f"{(fecha_max - timedelta(days=dias_v - 1)).strftime('%d %b')} – "
                     f"{fecha_max.strftime('%d %b %Y')}",
                     className="mb-0",
                     style={"fontSize": "0.84rem", "color": "rgba(255,255,255,0.82)",
@@ -832,7 +893,7 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
     ], className="mb-4")
 
     # ── 4. Preguntas PM ──────────────────────────────────────────────────
-    dias_section = _render_pm_questions(df, zonas_data, fecha_max, uid)
+    dias_section = _render_pm_questions(df, zonas_data, fecha_max, uid, ventana=ventana)
 
     # ── 5. Geo panel ─────────────────────────────────────────────────────
     fecha_captura = get_geo_snapshot_date(location_uuid) if location_uuid else None
