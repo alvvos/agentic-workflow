@@ -1,11 +1,88 @@
-/* Sync alert: pulsing glow + color override when data is stale */
-@keyframes sync-alert-pulse {
-    0%   { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.5); }
-    70%  { box-shadow: 0 0 0 8px rgba(220, 53, 69, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+
+/* ── Loading overlays — fade suave, sin layout shift ─────────────────────── */
+@keyframes loading-fade-in {
+    from { opacity: 0; transform: translateY(5px); }
+    to   { opacity: 1; transform: translateY(0);   }
 }
-.btn-sync-alerta {
-    animation: sync-alert-pulse 1.4s ease-in-out infinite;
-    border-color: #DC3545 !important;
-    color: #DC3545 !important;
+
+.loading-spinner-body {
+    min-height: 320px;
+    animation: loading-fade-in 0.22s ease;
+}
+
+/* Modal sync — entrada pop fluida (complementa la transición Bootstrap) */
+#modal-sync .modal-content {
+    animation: modal-pop-in 0.18s ease;
+}
+
+@keyframes modal-pop-in {
+    from { opacity: 0; transform: scale(0.96) translateY(-6px); }
+    to   { opacity: 1; transform: scale(1)    translateY(0);    }
+}
+
+/* ── Tabs: estilo subrayado limpio ───────────────────────────────────────── */
+
+.custom-tabs,
+.custom-tabs .tab-parent {
+    border: none !important;
+    background: transparent !important;
+}
+
+/* Barra */
+.custom-tabs .tab-container {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-bottom: 2px solid #e9ecef !important;
+    margin-bottom: 24px !important;
+    background: transparent !important;
+}
+
+/* Cada tab: solo texto, sin caja */
+.custom-tabs .tab {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    display: inline-block !important;
+    padding: 12px 20px !important;
+    margin: 0 !important;
+    border: none !important;
+    border-bottom: 3px solid transparent !important;
+    margin-bottom: -2px !important;
+    background: transparent !important;
+    color: #6c757d !important;
+    font-size: 0.87rem !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    white-space: nowrap !important;
+    transition: color 0.15s ease, border-color 0.15s ease !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+}
+
+/* Hover */
+.custom-tabs .tab:not(.tab--selected):hover {
+    color: #0052CC !important;
+    border-bottom-color: #b3c8f5 !important;
+    background: transparent !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* Seleccionado */
+.custom-tabs .tab--selected {
+    color: #0052CC !important;
+    border-bottom: 3px solid #0052CC !important;
+    font-weight: 700 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    transform: none !important;
+    animation: none !important;
+}
+
+/* Contenido */
+.custom-tabs .tab-content {
+    border: none !important;
+    padding: 0 !important;
 }

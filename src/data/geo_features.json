@@ -23,93 +23,497 @@
     }
   },
   "3c73b012-fa57-4023-8d76-7b0e60cd6fbc": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "81824d35-fa27-428b-84d9-dcda463850dc": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "123722e6-9a1e-47b4-b33e-8f432c79e18e": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "faf7d203-342e-44c6-96e3-1ed64d8252c3": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "c5490e24-81c2-4894-9ce0-c31a1068fb3c": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "4d912992-4aeb-485c-b525-1329d0548542": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "83b0a376-dc5b-42f5-8ddd-d88feae22f92": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "67034276-0d01-4c90-a363-fa75699a19a4": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": "2026-05-22",
+      "poblacion_5min": 6875,
+      "poblacion_10min": 4154,
+      "poblacion_15min": 59220,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": 564,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": 38309,
+      "poblacion_cp": 77876
+    },
+    {
+      "valid_from": "2026-05-23",
+      "valid_to": null,
+      "poblacion_5min": 6875,
+      "poblacion_10min": 4154,
+      "poblacion_15min": 59220,
+      "densidad_comercial_score": 0.1752,
+      "indice_movilidad_peatonal": 0.208,
+      "dist_transporte_min_m": 564,
+      "n_competidores_500m": 1,
+      "dist_competidor_cercano_m": 85,
+      "renta_media_cp": 38309,
+      "poblacion_cp": 77876
+    }
   ],
   "db01e2ed-3bbb-4c6f-8bbe-9b73762f473d": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "251e7f40-95c7-4678-aa48-df1b90e3461c": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "146d410b-1ff5-4739-a67d-54d470fc159d": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "de566da6-3410-4234-a3a3-9416921bd7c4": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "264b6cd5-4c74-4f08-b9a6-b842f7f70382": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "80bb0b26-dd18-484b-8a41-e6310a961176": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "19e6be18-bcf6-47c3-9036-675430cf0ab0": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "a047c461-8ba1-4207-b312-1191f0335cd9": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "65195206-a646-48ca-b31e-c109be23862b": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "90fddcb3-5365-458b-b20b-e3c49cdaf4d3": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "5f31d4fb-bdc7-43e4-8363-3b19575334d1": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "cffd267d-8e11-4aa0-8bc9-7b4d699b3576": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "0121c181-991d-4021-ab98-c2d58e33bd12": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "2ee8181c-4fb4-4fa5-9e80-0aa660a80fc8": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "77429c4c-4a31-48ed-b2e0-9138b0e8c4bd": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "b3408174-56b0-401e-9699-3eca568b17dc": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "92a5af6f-5fd1-43a3-a6ef-99360fd1f049": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "0b73f779-5b3f-440a-9069-ce636013bc52": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "96136557-21ae-4293-a83e-48a776fb5fe7": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "ce86e8a6-6166-4dd0-a77e-d8027ff3fc02": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "ee204471-ee67-4338-8bcc-8847ad999f76": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ],
   "73aa8a8d-dc93-4017-8761-c89e05766d5b": [
-    {"valid_from": "2024-01-01", "valid_to": null, "poblacion_5min": null, "poblacion_10min": null, "poblacion_15min": null, "densidad_comercial_score": null, "indice_movilidad_peatonal": null, "dist_transporte_min_m": null, "n_competidores_500m": null, "dist_competidor_cercano_m": null, "renta_media_cp": null, "poblacion_cp": null}
+    {
+      "valid_from": "2024-01-01",
+      "valid_to": null,
+      "poblacion_5min": null,
+      "poblacion_10min": null,
+      "poblacion_15min": null,
+      "densidad_comercial_score": null,
+      "indice_movilidad_peatonal": null,
+      "dist_transporte_min_m": null,
+      "n_competidores_500m": null,
+      "dist_competidor_cercano_m": null,
+      "renta_media_cp": null,
+      "poblacion_cp": null
+    }
   ]
 }

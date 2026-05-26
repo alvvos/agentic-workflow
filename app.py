@@ -17,7 +17,7 @@ from src.reporting.generador_pptx import generar_reporte_pptx
 from src.reporting.ml_dashboard import generar_panel_ml
 from src.data_processing.data_radar import generar_tabla_auditoria
 from src.models.anomalys import generar_panel_bi_completo
-from src.reporting.health_check import generar_panel_ejecutivo 
+from src.reporting.health_check import generar_panel_pm
 from dash import Input, Output, State, html, MATCH, no_update
 from datetime import datetime
 
@@ -102,7 +102,7 @@ _LOGIN_HTML = """<!DOCTYPE html>
     <p class="text-muted small mb-0">Introduce tus credenciales para acceder</p>
   </div>
   <div class="card shadow-sm border-0 rounded-4">
-    <div class="card-body p-4">
+    <div class="card-body p-4 py-24">
       {% if error %}<div class="alert alert-danger small py-2 mb-3">{{ error }}</div>{% endif %}
       <form method="post">
         <div class="mb-3">
@@ -230,7 +230,7 @@ def serve_layout():
         dbc.Card([
             dbc.CardBody([
                 dcc.Tabs(id="tabs-panel", value='tab-ejecutivo', className="custom-tabs", children=[
-                    dcc.Tab(label='Resumen ejecutivo', value='tab-ejecutivo', className="fw-bold", children=[
+                    dcc.Tab(label='Panel PM', value='tab-ejecutivo', className="fw-bold h-min-screen", children=[
                         html.Br(),
                         dbc.Row([
                             dbc.Col([
@@ -245,7 +245,19 @@ def serve_layout():
                             
                         ], className="mb-4 align-items-center"),
                         
-                        html.Div(id="panel-ejecutivo-content")
+                        dcc.Loading(
+                            html.Div(id="panel-ejecutivo-content",
+                                     style={"minHeight": "420px"}),
+                            custom_spinner=html.Div(
+                                [
+                                    dbc.Spinner(color="primary", size="lg"),
+                                    html.H5("Analizando...", className="ms-3 mb-0 text-primary fw-bold"),
+                                ],
+                                className="d-flex align-items-center justify-content-center loading-spinner-body",
+                            ),
+                            delay_show=350,
+                            delay_hide=80,
+                        )
                     ]),
 
                     dcc.Tab(label='Panel BI', value='tab-auditoria', className="fw-bold", children=[
@@ -283,7 +295,19 @@ def serve_layout():
                             ], xs=12, lg=5)
                         ], className="align-items-center mb-4"),
 
-                        html.Div(id="bi-dynamic-content"),
+                        dcc.Loading(
+                            html.Div(id="bi-dynamic-content",
+                                     style={"minHeight": "420px"}),
+                            custom_spinner=html.Div(
+                                [
+                                    dbc.Spinner(color="primary", size="lg"),
+                                    html.H5("Cargando análisis...", className="ms-3 mb-0 text-primary fw-bold"),
+                                ],
+                                className="d-flex align-items-center justify-content-center loading-spinner-body",
+                            ),
+                            delay_show=350,
+                            delay_hide=80,
+                        ),
                         html.Hr(className="text-muted my-5"),
                         dbc.Row([
                             dbc.Col(
@@ -396,14 +420,26 @@ def serve_layout():
         dcc.Store(id='session-id', data=session_id),
         dcc.Store(id='data-version', data=0),
         dcc.Store(id='sync-trigger', data=0),
+        dcc.Interval(id='interval-staleness', interval=5 * 60 * 1000, n_intervals=0),
         dbc.Modal([
             dbc.ModalHeader(dbc.ModalTitle(id="modal-bi-title", className="fw-bold text-primary")),
             dbc.ModalBody(dcc.Graph(id="modal-bi-graph", style={"height": "75vh"})),
         ], id="modal-bi-fullscreen", size="xl", is_open=False, centered=True),
         
         dbc.Modal([
-            dbc.ModalBody(html.Div([dbc.Spinner(color="primary", size="lg"), html.H5("Procesando...", className="ms-3 mb-0 text-primary fw-bold")], className="d-flex align-items-center p-3"))
-        ], id="modal-sync", is_open=False, backdrop="static", keyboard=False, centered=True),
+            dbc.ModalBody(
+                html.Div(
+                    [
+                        dbc.Spinner(color="primary", size="lg"),
+                        html.H5("Sincronizando...", className="ms-3 mb-0 text-primary fw-bold"),
+                    ],
+                    className="d-flex align-items-center p-4",
+                ),
+                className="p-0",
+            ),
+        ], id="modal-sync", is_open=False, backdrop="static", keyboard=False, centered=True,
+           contentClassName="border-0 rounded-4",
+           style={"boxShadow": "0 20px 60px rgba(0,0,0,0.15)"}),
 
         dbc.Toast(id="toast-notificacion", header="Notificación", is_open=False, dismissable=True, icon="info", duration=4000, style={"position": "fixed", "top": 20, "right": 20, "width": 350, "zIndex": 9999, "fontSize": "15px"}),
 
@@ -521,26 +557,49 @@ def auto_fill_zonas(locs):
 
 # --- ALERTA DE SINCRONIZACIÓN ---
 @app.callback(
-    Output("btn-sync", "className"),
+    Output("btn-sync", "children"),
+    Output("btn-sync", "color"),
+    Output("btn-sync", "outline"),
     Input("session-id", "data"),
     Input("data-version", "data"),
+    Input("interval-staleness", "n_intervals"),
+    State("drop-locs", "value"),
 )
-def actualizar_alerta_sync(session_id, _):
-    base = "fw-bold rounded-pill shadow-sm me-2"
+def actualizar_alerta_sync(session_id, _data_v, _tick, locs):
+    _normal = ([html.I(className="fas fa-sync-alt me-2"), "Sincronizar"], "primary", True)
+
     if not session_id:
-        return base
+        return _normal
+
     archivo = os.path.join('src', 'data', f'dataset_{session_id}.csv')
     if not os.path.exists(archivo):
-        return base + " btn-sync-alerta"
+        return (
+            [html.I(className="fas fa-exclamation-circle me-2"), "Sin datos — sincronizar"],
+            "danger", False,
+        )
     try:
-        df_tmp = pd.read_csv(archivo, usecols=['fecha'])
-        max_fecha = pd.to_datetime(df_tmp['fecha']).max().date()
+        df_tmp = pd.read_csv(archivo, usecols=['fecha', 'location_id'])
+        df_tmp['fecha'] = pd.to_datetime(df_tmp['fecha'])
+
+        if locs:
+            df_tmp = df_tmp[df_tmp['location_id'].isin(locs)]
+
+        if df_tmp.empty:
+            return _normal
+
+        # La ubicación con menos datos recientes determina el estado
+        fecha_mas_atrasada = df_tmp.groupby('location_id')['fecha'].max().min().date()
         ayer = datetime.today().date() - timedelta(days=1)
-        if (ayer - max_fecha).days > 1:
-            return base + " btn-sync-alerta"
+        dias = (ayer - fecha_mas_atrasada).days
+        if dias > 1:
+            return (
+                [html.I(className="fas fa-exclamation-triangle me-2"),
+                 f"Sincronizar · {dias}d sin datos"],
+                "warning", False,
+            )
     except Exception:
         pass
-    return base
+    return _normal
 
 # --- HELPERS DE SINCRONIZACIÓN ---
 def _acquire_sync_lock(lock_file, max_age=600):
@@ -627,10 +686,8 @@ def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, zones_exe,
     df['Zona'] = df['zone_uuid'].map(mapa_zonas).fillna('SinNombre') if 'zone_uuid' in df.columns else 'SinNombre'
     df['fecha'] = pd.to_datetime(df['fecha'])
     
-    # 1. INFORME EJECUTIVO (Le pasamos las zonas estrictas)
-    # 1. GENERAR INFORME EJECUTIVO (Lo envolvemos en una lista para Pandas)
     lista_zonas_exe = zones_exe if zones_exe else []
-    informe_ejecutivo = generar_panel_ejecutivo(df, locs, lista_zonas_exe)
+    informe_ejecutivo = generar_panel_pm(df, locs, lista_zonas_exe)
     
     # 2. FILTRO TEMPORAL PARA BI Y RADAR
     hoy = datetime.today().date()

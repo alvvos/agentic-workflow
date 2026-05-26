@@ -106,16 +106,27 @@ def ingestar_snapshot_esri(
     politica_log = []
 
     if is_primera_entrega:
-        snap_estructural = {
-            "valid_from": TRAINING_START,
-            "valid_to": cierre_anterior,
-            **{col: None for col in GEO_FEATURE_COLS},
-        }
-        for col in GEO_FEATURES_BACKDATABLE:
-            if col in valores:
-                snap_estructural[col] = valores[col]
+        # Rellena el placeholder nulo in-place si ya existe un snapshot con valid_from=TRAINING_START
+        # (evita crear dos intervalos solapados con el mismo valid_from).
+        snap_placeholder = next(
+            (s for s in snapshots if s.get("valid_from") == TRAINING_START),
+            None,
+        )
+        if snap_placeholder is not None:
+            for col in GEO_FEATURES_BACKDATABLE:
+                if col in valores:
+                    snap_placeholder[col] = valores[col]
+        else:
+            snap_estructural = {
+                "valid_from": TRAINING_START,
+                "valid_to": cierre_anterior,
+                **{col: None for col in GEO_FEATURE_COLS},
+            }
+            for col in GEO_FEATURES_BACKDATABLE:
+                if col in valores:
+                    snap_estructural[col] = valores[col]
+            nuevos_snapshots.append(snap_estructural)
 
-        nuevos_snapshots.append(snap_estructural)
         backdated = [c for c in GEO_FEATURES_BACKDATABLE if valores.get(c) is not None]
         politica_log.append({
             "tipo": "estructural_backdated",

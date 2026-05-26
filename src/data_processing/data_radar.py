@@ -25,7 +25,7 @@ def obtener_clima_historico(lat, lon, fecha_inicio, fecha_fin):
     clima_dict = {}
     url = f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lon}&start_date={fecha_inicio}&end_date={fecha_fin}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Europe%2FMadrid"
     try:
-        respuesta = requests.get(url).json()
+        respuesta = requests.get(url, timeout=5).json()
         if 'daily' in respuesta:
             for i, dia_str in enumerate(respuesta['daily']['time']):
                 clima_dict[dia_str] = {
