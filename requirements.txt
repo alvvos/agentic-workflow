@@ -13,3 +13,4 @@ scikit-learn
 google-generativeai
 kaleido
 fpdf2
+playwright

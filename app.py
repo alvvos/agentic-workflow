@@ -13,7 +13,7 @@ import flask
 from werkzeug.security import check_password_hash
 
 from src.data_ingestion.sincronizador import actualizar_datos_csv
-from src.reporting.generador_pptx import generar_reporte_pptx
+from src.reporting.generador_html import generar_reporte_html
 from src.reporting.ml_dashboard import generar_panel_ml
 from src.data_processing.data_radar import generar_tabla_auditoria
 from src.models.anomalys import generar_panel_bi_completo
@@ -149,6 +149,45 @@ def logout():
     flask.session.pop('user', None)
     return flask.redirect('/login')
 
+
+def _cors_origin():
+    """Devuelve el origen exacto de la petición (incluido 'null' para file://)."""
+    return flask.request.headers.get('Origin') or '*'
+
+
+@server.route('/api/html-to-pdf', methods=['OPTIONS'])
+def html_to_pdf_preflight():
+    resp = flask.make_response()
+    resp.headers['Access-Control-Allow-Origin'] = _cors_origin()
+    resp.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+    resp.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    resp.headers['Vary'] = 'Origin'
+    return resp
+
+
+@server.route('/api/html-to-pdf', methods=['POST'])
+def html_to_pdf_endpoint():
+    from playwright.sync_api import sync_playwright
+    html_content = flask.request.get_data(as_text=True)
+    if not html_content:
+        return flask.make_response('No HTML recibido', 400)
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page()
+        page.set_content(html_content, wait_until='networkidle')
+        page.wait_for_timeout(2000)
+        pdf_bytes = page.pdf(
+            format='A4', print_background=True,
+            margin={'top': '1.5cm', 'bottom': '1.5cm', 'left': '1.2cm', 'right': '1.2cm'},
+        )
+        browser.close()
+    resp = flask.make_response(pdf_bytes)
+    resp.headers['Content-Type'] = 'application/pdf'
+    resp.headers['Content-Disposition'] = 'attachment; filename=informe.pdf'
+    resp.headers['Access-Control-Allow-Origin'] = _cors_origin()
+    resp.headers['Vary'] = 'Origin'
+    return resp
+
 # --- HELPERS DE UI ---
 def _seccion_informe(num, titulo, desc, color_num, nota=None):
     return html.Div([
@@ -182,33 +221,34 @@ def serve_layout():
                 html.Label("Ubicaciones", className="fw-bold text-muted small text-uppercase mb-1 mt-2"),
                 dcc.Dropdown(id="drop-locs", multi=True, className="mb-4 shadow-sm"),
                 
-                html.Hr(className="text-muted"),
-                
-                html.Label("Período a visualizar", className="fw-bold text-muted small text-uppercase mb-3 mt-3"),
-                dbc.RadioItems(
-                    id="tipo-fecha",
-                    options=[
-                        {"label": "Ayer", "value": "ayer"},
-                        {"label": "Últimos 7 días", "value": "7d_rel"},
-                        {"label": "Últimos 28 días", "value": "28d_rel"},
-                        {"label": "Día concreto", "value": "dia"},
-                        {"label": "Rango temporal", "value": "rango"}
-                    ],
-                    value="7d_rel",
-                    className="mb-3"
-                ),
-                html.Div(
-                    dcc.DatePickerRange(
-                        id='date-rango', start_date=datetime(2025, 9, 1).date(), end_date=datetime.today().date(),
-                        display_format='YYYY-MM-DD', className="w-100 shadow-sm"
-                    ), id="contenedor-rango", style={"display": "none"}
-                ),
-                html.Div(
-                    dcc.DatePickerSingle(
-                        id='date-dia', date=datetime.today().date(), display_format='YYYY-MM-DD',
-                        className="w-100 shadow-sm"
-                    ), id="contenedor-dia", style={"display": "none"}
-                )
+                html.Div(id="sidebar-periodo-wrapper", children=[
+                    html.Hr(className="text-muted"),
+                    html.Label("Período a visualizar", className="fw-bold text-muted small text-uppercase mb-3 mt-3"),
+                    dbc.RadioItems(
+                        id="tipo-fecha",
+                        options=[
+                            {"label": "Ayer", "value": "ayer"},
+                            {"label": "Últimos 7 días", "value": "7d_rel"},
+                            {"label": "Últimos 28 días", "value": "28d_rel"},
+                            {"label": "Día concreto", "value": "dia"},
+                            {"label": "Rango temporal", "value": "rango"}
+                        ],
+                        value="7d_rel",
+                        className="mb-3"
+                    ),
+                    html.Div(
+                        dcc.DatePickerRange(
+                            id='date-rango', start_date=datetime(2025, 9, 1).date(), end_date=datetime.today().date(),
+                            display_format='YYYY-MM-DD', className="w-100 shadow-sm"
+                        ), id="contenedor-rango", style={"display": "none"}
+                    ),
+                    html.Div(
+                        dcc.DatePickerSingle(
+                            id='date-dia', date=datetime.today().date(), display_format='YYYY-MM-DD',
+                            className="w-100 shadow-sm"
+                        ), id="contenedor-dia", style={"display": "none"}
+                    ),
+                ])
             ])
         ], className="border-0 shadow-sm rounded-4")
     ], className="sticky-top", style={"top": "30px", "zIndex": 1020})
@@ -324,20 +364,19 @@ def serve_layout():
                         dbc.Row([
                             dbc.Col([
                                 html.H4([
-                                    html.I(className="fas fa-presentation me-2 text-danger"),
-                                    "Informe Ejecutivo PowerPoint"
+                                    html.I(className="fas fa-file-code me-2 text-primary"),
+                                    "Informe HTML"
                                 ], className="fw-bold mb-1 text-dark"),
                                 html.P(
-                                    "El informe se construye automáticamente con los filtros activos "
-                                    "en el panel lateral. Selecciona el periodo y las ubicaciones antes de generar.",
-                                    className="text-muted small mb-4"
+                                    "Genera un archivo .html con todos los gráficos interactivos y bloques de texto editables. "
+                                    "Ábrelo en el navegador para editar, y usa Ctrl+P para guardar como PDF.",
+                                    className="text-muted small mb-3"
                                 ),
 
-                                # Resumen de filtros activos
                                 dbc.Card([
                                     dbc.CardHeader([
                                         html.I(className="fas fa-sliders-h me-2 text-primary"),
-                                        html.Span("Configuración activa", className="fw-bold small text-uppercase")
+                                        html.Span("Filtros activos", className="fw-bold small text-uppercase")
                                     ], className="bg-white border-bottom py-2"),
                                     dbc.CardBody(
                                         html.Div(id="export-resumen-filtros",
@@ -346,57 +385,52 @@ def serve_layout():
                                     )
                                 ], className="border-0 shadow-sm rounded-4 mb-3"),
 
-                                # Estructura del informe
                                 dbc.Card([
                                     dbc.CardHeader([
                                         html.I(className="fas fa-list-ol me-2 text-primary"),
-                                        html.Span("Contenido generado automáticamente", className="fw-bold small text-uppercase")
+                                        html.Span("Estructura del informe", className="fw-bold small text-uppercase")
                                     ], className="bg-white border-bottom py-2"),
-                                    dbc.CardBody([
-                                        _seccion_informe("1", "Portada", "Organización, emplazamientos y periodo analizado", "text-primary"),
-                                        _seccion_informe("2", "Visión Global del Periodo", "KPIs consolidados, tabla resumen por zona y tendencia mensual", "text-primary"),
-                                        html.P("Por cada mes × ubicación:", className="small fw-bold text-muted text-uppercase mt-3 mb-2"),
-                                        _seccion_informe("A", "KPIs + Evolución Diaria",
-                                                         "Visitas totales, visitantes únicos, nuevos visitantes, estancia media · Visitantes únicos / día por zona", "text-success"),
-                                        _seccion_informe("B", "Intensidad Horaria",
-                                                         "Histograma 00:00–23:00 · Identificación de hora pico y hora valle", "text-success"),
-                                        _seccion_informe("C", "Mapa de Actividad Semanal",
-                                                         "Calendario L–D × semanas del mes, coloreado por intensidad de visitantes únicos", "text-success"),
-                                        _seccion_informe("D", "Ratio de Atracción",
-                                                         "Zona Exterior → Zona Interior: ratio medio, máximo y mínimo · Evolución diaria del %", "text-warning",
-                                                         nota="Solo si hay zonas Exterior e Interior disponibles"),
-                                        _seccion_informe("E", "KPIs de Fidelización",
-                                                         "Visitantes únicos 7d y 28d · Frecuencia de retorno por zona", "text-warning",
-                                                         nota="Solo si la API devuelve datos rolling"),
-                                    ], className="py-2 px-3")
+                                    dbc.CardBody(
+                                        html.Ul([
+                                            html.Li([html.Strong("Portada"), " — Organización, periodo y ubicaciones"]),
+                                            html.Li([html.Strong("1. Visión Global"), " — KPIs consolidados, tabla por zona, tendencia mensual"]),
+                                            html.Li([html.Strong("2. Mes a mes"), " — KPIs, intensidad horaria, calendario de actividad y ratio de atracción por mes"]),
+                                            html.Li([html.Strong("3. Conclusiones"), " — Síntesis editable"]),
+                                        ], className="small text-muted ps-3 mb-0")
+                                    , className="py-2 px-3")
                                 ], className="border-0 shadow-sm rounded-4"),
 
                             ], xs=12, lg=7, className="mb-4 mb-lg-0"),
 
-                            # ── Columna derecha: botón de descarga ──────────────────
                             dbc.Col([
                                 dbc.Card([
                                     dbc.CardBody([
                                         html.Div([
-                                            html.I(className="fas fa-file-powerpoint",
-                                                   style={"fontSize": "3.5rem", "color": "#C0392B"}),
+                                            html.I(className="fas fa-file-code",
+                                                   style={"fontSize": "3.5rem", "color": "#0052CC"}),
                                         ], className="text-center mb-3 mt-2"),
-                                        html.H5("Presentación Ejecutiva",
+                                        html.H5("Informe HTML Interactivo",
                                                 className="fw-bold text-center text-dark mb-1"),
-                                        html.P(".pptx — Compatible con PowerPoint y Google Slides",
+                                        html.P("Gráficos interactivos · Texto editable · Imprimible",
                                                className="text-muted text-center small mb-4"),
                                         dbc.Button([
-                                            html.I(className="fas fa-download me-2"),
-                                            "Generar y Descargar"
-                                        ], id="btn-descargar", color="danger",
-                                           className="w-100 fw-bold rounded-pill shadow-sm mb-3",
+                                            html.I(className="fas fa-code me-2"),
+                                            "Descargar HTML"
+                                        ], id="btn-generar-html", color="primary", outline=True,
+                                           className="w-100 fw-bold rounded-pill shadow-sm mb-2",
                                            size="lg"),
-                                        html.Div(id="error-msg",
+                                        dbc.Button([
+                                            html.I(className="fas fa-file-pdf me-2"),
+                                            "Descargar PDF"
+                                        ], id="btn-generar-pdf", color="primary",
+                                           className="w-100 fw-bold rounded-pill shadow-sm mb-2",
+                                           size="lg"),
+                                        html.Div(id="error-msg-html",
                                                  className="text-danger fw-bold text-center small"),
                                         html.Hr(className="my-3"),
                                         html.P([
-                                            html.I(className="fas fa-info-circle me-2 text-muted"),
-                                            "El tiempo de generación depende del número de meses y ubicaciones en el periodo."
+                                            html.I(className="fas fa-pencil-alt me-2 text-muted"),
+                                            "Pasa el cursor por cualquier texto del informe para editarlo."
                                         ], className="small text-muted text-center mb-0"),
                                     ], className="p-4")
                                 ], className="border-0 shadow-sm rounded-4 bg-light sticky-top",
@@ -404,7 +438,8 @@ def serve_layout():
                             ], xs=12, lg=5),
 
                         ], className="align-items-start"),
-                        dcc.Download(id="download-report")
+                        dcc.Download(id="download-html-report"),
+                        dcc.Download(id="download-pdf-report")
                     ]),
 
                     dcc.Tab(label='Machine learning', value='tab-ml', className="fw-bold", children=[
@@ -515,6 +550,13 @@ def actualizar_resumen_exportacion(locs, t_f, sd, ed, dia):
     ])
 
 
+@app.callback(Output("sidebar-periodo-wrapper", "style"), Input("tabs-panel", "value"))
+def toggle_periodo_sidebar(tab):
+    if tab in ('tab-ejecutivo', 'tab-ml'):
+        return {"display": "none"}
+    return {}
+
+
 @app.callback(Output("contenedor-rango", "style"), Output("contenedor-dia", "style"), Input("tipo-fecha", "value"))
 def toggle_fecha(tipo):
     if tipo == "dia": return {"display": "none"}, {"display": "block"}
@@ -563,7 +605,7 @@ def auto_fill_zonas(locs):
     Input("session-id", "data"),
     Input("data-version", "data"),
     Input("interval-staleness", "n_intervals"),
-    State("drop-locs", "value"),
+    Input("drop-locs", "value"),
 )
 def actualizar_alerta_sync(session_id, _data_v, _tick, locs):
     _normal = ([html.I(className="fas fa-sync-alt me-2"), "Sincronizar"], "primary", True)
@@ -744,17 +786,19 @@ def expandir_grafico(n_clicks_list, figures, ids):
             return True, fig_copy, titulo
     return dash.no_update
 
-# --- PPTX ---
+
+
+# --- HTML REPORT ---
 @app.callback(
-    Output("download-report", "data"), Output("error-msg", "children", allow_duplicate=True),
-    Input("btn-descargar", "n_clicks"), State("drop-locs", "value"), State("tipo-fecha", "value"),
+    Output("download-html-report", "data"), Output("error-msg-html", "children"),
+    Input("btn-generar-html", "n_clicks"), State("drop-locs", "value"), State("tipo-fecha", "value"),
     State("date-rango", "start_date"), State("date-rango", "end_date"), State("date-dia", "date"),
     State("session-id", "data"), State("drop-org", "value"), prevent_initial_call=True
 )
-def generar_pptx(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, session_id, org_uuid):
+def generar_html(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, session_id, org_uuid):
     archivo_usuario = os.path.join('src', 'data', f'dataset_{session_id}.csv')
     if not os.path.exists(archivo_usuario): return dash.no_update, "Sincroniza los datos primero."
-    
+
     df_completo = pd.read_csv(archivo_usuario)
     if locs: df_completo = df_completo[df_completo['location_id'].isin(locs)]
     df_completo['Ubicación'] = df_completo['location_id'].map(mapa_tiendas).fillna('Desconocida')
@@ -768,20 +812,61 @@ def generar_pptx(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, 
     df_filt = df_filt[~df_filt['Zona'].str.contains('Extra', case=False, na=False)]
     df_filt['Día semana'] = pd.Categorical(df_filt['fecha'].dt.dayofweek.map(dias_semana_es), categories=orden_dias, ordered=True)
     if 'dwell_time' in df_filt.columns: df_filt['dwell_time'] /= 60.0
-    
+
     try:
         org_nombre = mapa_orgs.get(org_uuid, '') if org_uuid else ''
-        output = io.BytesIO()
-        generar_reporte_pptx(df_filt, output, start, end, org_nombre)
-        output.seek(0)
-        nombre_archivo = f"Reporte_{org_nombre or 'Consolidado'}_{start.strftime('%d%m')}_al_{end.strftime('%d%m')}.pptx"
-        return dcc.send_bytes(output.getvalue(), nombre_archivo), ""
-
+        server_url = flask.request.host_url
+        html_str = generar_reporte_html(df_filt, start, end, org_nombre, server_url=server_url)
+        nombre_archivo = f"Reporte_{org_nombre or 'Consolidado'}_{start.strftime('%d%m')}_al_{end.strftime('%d%m')}.html"
+        return dcc.send_string(html_str, nombre_archivo), ""
     except Exception as e:
-        return dash.no_update, f"Error generando PPTX: {str(e)}"
+        return dash.no_update, f"Error generando HTML: {str(e)}"
 
 
+# --- PDF REPORT (Playwright) ---
+@app.callback(
+    Output("download-pdf-report", "data"), Output("error-msg-html", "children", allow_duplicate=True),
+    Input("btn-generar-pdf", "n_clicks"), State("drop-locs", "value"), State("tipo-fecha", "value"),
+    State("date-rango", "start_date"), State("date-rango", "end_date"), State("date-dia", "date"),
+    State("session-id", "data"), State("drop-org", "value"), prevent_initial_call=True
+)
+def generar_pdf(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, session_id, org_uuid):
+    archivo_usuario = os.path.join('src', 'data', f'dataset_{session_id}.csv')
+    if not os.path.exists(archivo_usuario): return dash.no_update, "Sincroniza los datos primero."
 
+    df_completo = pd.read_csv(archivo_usuario)
+    if locs: df_completo = df_completo[df_completo['location_id'].isin(locs)]
+    df_completo['Ubicación'] = df_completo['location_id'].map(mapa_tiendas).fillna('Desconocida')
+    df_completo['Zona'] = df_completo['zone_uuid'].map(mapa_zonas).fillna('SinNombre') if 'zone_uuid' in df_completo.columns else 'SinNombre'
+    df_completo['fecha'] = pd.to_datetime(df_completo['fecha'])
+
+    res = filtrar_dataframe_fechas(df_completo, tipo_fecha, start_rango, end_rango, dia_unico)
+    if res[0] is None: return dash.no_update, res[1]
+    df_filt, start, end = res
+
+    df_filt = df_filt[~df_filt['Zona'].str.contains('Extra', case=False, na=False)]
+    df_filt['Día semana'] = pd.Categorical(df_filt['fecha'].dt.dayofweek.map(dias_semana_es), categories=orden_dias, ordered=True)
+    if 'dwell_time' in df_filt.columns: df_filt['dwell_time'] /= 60.0
+
+    try:
+        from playwright.sync_api import sync_playwright
+        org_nombre = mapa_orgs.get(org_uuid, '') if org_uuid else ''
+        html_str = generar_reporte_html(df_filt, start, end, org_nombre)
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page()
+            page.set_content(html_str, wait_until="networkidle")
+            page.wait_for_timeout(2000)  # espera render completo de Plotly
+            pdf_bytes = page.pdf(
+                format="A4",
+                print_background=True,
+                margin={"top": "1.5cm", "bottom": "1.5cm", "left": "1.2cm", "right": "1.2cm"},
+            )
+            browser.close()
+        nombre_archivo = f"Reporte_{org_nombre or 'Consolidado'}_{start.strftime('%d%m')}_al_{end.strftime('%d%m')}.pdf"
+        return dcc.send_bytes(pdf_bytes, nombre_archivo), ""
+    except Exception as e:
+        return dash.no_update, f"Error generando PDF: {str(e)}"
 
 
 # --- DESCARGA TODOS LOS GRÁFICOS BI (ZIP PNG, kaleido) ---

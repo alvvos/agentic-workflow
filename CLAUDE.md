@@ -12,6 +12,7 @@ Multi-tenant: data is scoped by organization → location → zone hierarchy def
 
 ```bash
 pip install -r requirements.txt
+playwright install chromium   # first time only — downloads ~150 MB Chromium headless
 # Create .env with AITANNA_API_KEY=<your_key>
 python app.py         # dev server at http://localhost:8052
 gunicorn --workers 4 --bind 0.0.0.0:8000 app:server  # production
