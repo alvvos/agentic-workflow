@@ -38,7 +38,8 @@ def peticion_dia(loc_id, fecha_str):
     except Exception as e:
         return fecha_str, None, f"Exception: {str(e)}"
 
-def actualizar_datos_csv(ubicaciones_seleccionadas=None, archivo_destino="src/data/dataset_global_raw.csv"):
+def actualizar_datos_csv(ubicaciones_seleccionadas=None, archivo_destino="src/data/dataset_global_raw.csv",
+                         stop_event=None, progress_cb=None):
     os.makedirs(os.path.dirname(archivo_destino), exist_ok=True)
     
     if os.path.exists(archivo_destino):
@@ -59,6 +60,11 @@ def actualizar_datos_csv(ubicaciones_seleccionadas=None, archivo_destino="src/da
     registros_nuevos_totales = 0
 
     for idx, loc_id in enumerate(location_ids, 1):
+        if stop_event and stop_event.is_set():
+            print("Sincronización cancelada por el usuario.")
+            break
+        if progress_cb:
+            progress_cb(idx, total_locs)
         if not df_master.empty and 'location_id' in df_master.columns and loc_id in df_master['location_id'].values:
             ultima_fecha_loc = df_master[df_master['location_id'] == loc_id]['fecha'].max()
         else:

@@ -46,6 +46,7 @@ def serve_layout():
         dcc.Store(id='data-version', data=0),
         dcc.Store(id='sync-trigger', data=0),
         dcc.Interval(id='interval-staleness', interval=5 * 60 * 1000, n_intervals=0),
+        dcc.Interval(id='interval-sync-poll', interval=1500, n_intervals=0, disabled=True),
         dbc.Modal([
             dbc.ModalHeader(dbc.ModalTitle(id="modal-bi-title", className="fw-bold text-primary")),
             dbc.ModalBody(dcc.Graph(id="modal-bi-graph", style={"height": "75vh"})),
@@ -53,13 +54,17 @@ def serve_layout():
 
         dbc.Modal([
             dbc.ModalBody(
-                html.Div(
-                    [
+                html.Div([
+                    html.Div([
                         dbc.Spinner(color="primary", size="lg"),
                         html.H5("Sincronizando...", className="ms-3 mb-0 text-primary fw-bold"),
-                    ],
-                    className="d-flex align-items-center p-4",
-                ),
+                    ], className="d-flex align-items-center"),
+                    html.Div(id="sync-progress-text", className="text-muted small mt-3"),
+                    dbc.Button([
+                        html.I(className="fas fa-times me-2"), "Cancelar"
+                    ], id="btn-cancel-sync", color="outline-danger", size="sm",
+                       className="mt-3 rounded-pill"),
+                ], className="p-4"),
                 className="p-0",
             ),
         ], id="modal-sync", is_open=False, backdrop="static", keyboard=False, centered=True,
