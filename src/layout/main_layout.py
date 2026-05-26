@@ -56,14 +56,24 @@ def serve_layout():
             dbc.ModalBody(
                 html.Div([
                     html.Div([
-                        dbc.Spinner(color="primary", size="lg"),
-                        html.H5("Sincronizando...", className="ms-3 mb-0 text-primary fw-bold"),
-                    ], className="d-flex align-items-center"),
-                    html.Div(id="sync-progress-text", className="text-muted small mt-3"),
+                        dbc.Spinner(color="primary", size="sm"),
+                        html.H6("Sincronizando datos…", className="ms-3 mb-0 text-primary fw-bold"),
+                    ], className="d-flex align-items-center mb-3"),
+                    dbc.Progress(
+                        id="sync-progress-bar",
+                        value=0,
+                        max=100,
+                        striped=True,
+                        animated=True,
+                        color="primary",
+                        className="mb-2",
+                        style={"height": "10px", "borderRadius": "5px"},
+                    ),
+                    html.Div(id="sync-progress-text", className="text-muted small mb-3"),
                     dbc.Button([
-                        html.I(className="fas fa-times me-2"), "Cancelar"
-                    ], id="btn-cancel-sync", color="outline-danger", size="sm",
-                       className="mt-3 rounded-pill"),
+                        html.I(className="fas fa-times me-1"), "Cancelar"
+                    ], id="btn-cancel-sync", color="danger", outline=True, size="sm",
+                       className="rounded-pill"),
                 ], className="p-4"),
                 className="p-0",
             ),

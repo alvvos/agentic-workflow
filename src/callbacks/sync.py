@@ -1,15 +1,42 @@
 import os
+import json
 import threading
 import pandas as pd
 from datetime import datetime, timedelta
 import dash
 from dash import Output, Input, State, html
+import dash_bootstrap_components as dbc
 from src.core.config import app
 from src.data_ingestion.sincronizador import actualizar_datos_csv
 
-# ── Estado de sincronizaciones en curso ─────────────────────────────────────
-# session_id → {"cancel": Event, "status": str, "progress": str, "error": str|None}
-_sync_jobs: dict = {}
+# ── Hilos activos en este worker (cancel Event local) ───────────────────────
+_sync_threads: dict = {}
+
+_RUTA_DATA = os.path.join('src', 'data')
+
+
+def _status_path(session_id):
+    return os.path.join(_RUTA_DATA, f'dataset_{session_id}.status.json')
+
+
+def _cancel_path(session_id):
+    return os.path.join(_RUTA_DATA, f'dataset_{session_id}.cancel')
+
+
+def _write_status(session_id, **kwargs):
+    try:
+        with open(_status_path(session_id), 'w') as f:
+            json.dump(kwargs, f)
+    except Exception:
+        pass
+
+
+def _read_status(session_id):
+    try:
+        with open(_status_path(session_id)) as f:
+            return json.load(f)
+    except Exception:
+        return None
 
 
 def _acquire_sync_lock(lock_file, max_age=600):
@@ -28,24 +55,34 @@ def _release_sync_lock(lock_file):
 
 
 def _run_sync(session_id, locs, archivo_usuario, lock_file):
-    job = _sync_jobs[session_id]
+    cancel_event = _sync_threads.get(session_id)
+    cancel_file = _cancel_path(session_id)
 
     def progress_cb(current, total):
-        job["progress"] = f"Ubicación {current} de {total}…"
+        _write_status(session_id, status="running", current=current, total=total)
+        # Señal de cancelación cross-worker: fichero en disco
+        if cancel_event and (os.path.exists(cancel_file) or cancel_event.is_set()):
+            if cancel_event:
+                cancel_event.set()
 
     try:
         actualizar_datos_csv(
             locs if locs else [],
             archivo_usuario,
-            stop_event=job["cancel"],
+            stop_event=cancel_event,
             progress_cb=progress_cb,
         )
-        job["status"] = "cancelled" if job["cancel"].is_set() else "done"
+        final = "cancelled" if (cancel_event and cancel_event.is_set()) else "done"
+        _write_status(session_id, status=final, current=0, total=0)
     except Exception as e:
-        job["status"] = "error"
-        job["error"] = str(e)
+        _write_status(session_id, status="error", current=0, total=0, error=str(e))
     finally:
         _release_sync_lock(lock_file)
+        _sync_threads.pop(session_id, None)
+        try:
+            os.remove(cancel_file)
+        except FileNotFoundError:
+            pass
 
 
 # ── Alerta de datos obsoletos ────────────────────────────────────────────────
@@ -103,6 +140,7 @@ def abrir_modal_carga(n_clicks):
 
 @app.callback(
     Output("interval-sync-poll", "disabled"),
+    Output("sync-progress-bar", "value"),
     Input("sync-trigger", "data"),
     State("drop-locs", "value"),
     State("session-id", "data"),
@@ -110,27 +148,24 @@ def abrir_modal_carga(n_clicks):
 )
 def ejecutar_sincronizacion(trigger, locs, session_id):
     if not trigger:
-        return True
-    ruta_data = os.path.join('src', 'data')
-    archivo_usuario = os.path.join(ruta_data, f'dataset_{session_id}.csv')
-    lock_file = os.path.join(ruta_data, f'dataset_{session_id}.lock')
+        return True, 0
+
+    lock_file = os.path.join(_RUTA_DATA, f'dataset_{session_id}.lock')
+    archivo_usuario = os.path.join(_RUTA_DATA, f'dataset_{session_id}.csv')
 
     if not _acquire_sync_lock(lock_file):
-        return False  # ya hay sync en curso, sigue el polling
+        return False, dash.no_update  # ya hay sync en curso, seguir polling
 
     cancel_event = threading.Event()
-    _sync_jobs[session_id] = {
-        "cancel": cancel_event,
-        "status": "running",
-        "progress": "Iniciando…",
-        "error": None,
-    }
+    _sync_threads[session_id] = cancel_event
+    _write_status(session_id, status="running", current=0, total=0)
+
     threading.Thread(
         target=_run_sync,
         args=(session_id, locs, archivo_usuario, lock_file),
         daemon=True,
     ).start()
-    return False  # activa el interval de polling
+    return False, 0  # activa el interval de polling
 
 
 # ── Polling de progreso ──────────────────────────────────────────────────────
@@ -144,35 +179,42 @@ def ejecutar_sincronizacion(trigger, locs, session_id):
     Output("data-version", "data"),
     Output("interval-sync-poll", "disabled", allow_duplicate=True),
     Output("sync-progress-text", "children"),
+    Output("sync-progress-bar", "value", allow_duplicate=True),
     Input("interval-sync-poll", "n_intervals"),
     State("session-id", "data"),
     prevent_initial_call=True,
 )
 def poll_sync_progress(_, session_id):
     _no = dash.no_update
-    job = _sync_jobs.get(session_id)
-    if not job:
-        return _no, _no, _no, _no, _no, _no, True, ""
+    data = _read_status(session_id)
 
-    status = job["status"]
-    progress = job.get("progress", "")
+    if data is None:
+        return _no, _no, _no, _no, _no, _no, True, "", 0
+
+    status = data.get("status", "running")
+    current = data.get("current", 0)
+    total = data.get("total", 0)
+    pct = int(current / total * 100) if total > 0 else 0
+    progress_text = f"Ubicación {current} de {total}…" if total > 0 else "Iniciando…"
 
     if status == "running":
-        return True, _no, _no, _no, _no, _no, False, progress
+        return True, _no, _no, _no, _no, _no, False, progress_text, pct
 
-    # Terminado — limpiamos y cerramos
-    _sync_jobs.pop(session_id, None)
+    # Terminado — borrar fichero de estado
+    try:
+        os.remove(_status_path(session_id))
+    except FileNotFoundError:
+        pass
 
     if status == "done":
         return (False, True, "Datos sincronizados correctamente.",
                 "success", "Sincronización finalizada",
-                datetime.now().timestamp(), True, "")
+                datetime.now().timestamp(), True, "", 100)
     if status == "cancelled":
         return (False, True, "Sincronización cancelada.",
-                "warning", "Cancelado", _no, True, "")
-    # error
-    return (False, True, f"Error: {job.get('error', 'desconocido')}",
-            "danger", "Error de sincronización", _no, True, "")
+                "warning", "Cancelado", _no, True, "", 0)
+    return (False, True, f"Error: {data.get('error', 'desconocido')}",
+            "danger", "Error de sincronización", _no, True, "", 0)
 
 
 # ── Cancelar sincronización ──────────────────────────────────────────────────
@@ -184,12 +226,14 @@ def poll_sync_progress(_, session_id):
     prevent_initial_call=True,
 )
 def cancelar_sincronizacion(_, session_id):
-    job = _sync_jobs.get(session_id)
-    if job and job["status"] == "running":
-        job["cancel"].set()
-        job["status"] = "cancelling"
-        return "Cancelando… finalizando ubicación actual."
-    return dash.no_update
+    # Señal cross-worker: fichero en disco
+    cancel_file = _cancel_path(session_id)
+    open(cancel_file, 'w').close()
+    # Señal in-process si el hilo está en este worker
+    ev = _sync_threads.get(session_id)
+    if ev:
+        ev.set()
+    return "Cancelando… finalizando ubicación actual."
 
 
 # ── Flush de datos ───────────────────────────────────────────────────────────
