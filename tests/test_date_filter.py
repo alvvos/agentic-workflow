@@ -10,7 +10,7 @@ from datetime import date, timedelta
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # Importamos solo la función, sin arrancar Dash
-from app import filtrar_dataframe_fechas
+from src.core.utils import filtrar_dataframe_fechas
 
 
 def _df(start="2025-01-01", days=60):

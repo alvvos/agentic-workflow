@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app import _acquire_sync_lock, _release_sync_lock
+from src.callbacks.sync import _acquire_sync_lock, _release_sync_lock
 
 
 def test_acquire_crea_lock(tmp_path):

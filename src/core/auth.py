@@ -1,0 +1,86 @@
+import os
+import json
+import flask
+from werkzeug.security import check_password_hash
+from src.core.config import MODO_DESARROLLO, server
+
+_USERS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'users.json')
+
+def _load_users():
+    if not os.path.exists(_USERS_FILE):
+        return {}
+    with open(_USERS_FILE) as f:
+        return json.load(f)
+
+_LOGIN_HTML = """<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Acceso — Panel Analítico</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/lux/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body{background:#f8f9fa;min-height:100vh;display:flex;align-items:center;justify-content:center}
+    .login-card{width:100%;max-width:380px}
+    .btn-primary{background:#0052CC;border-color:#0052CC}
+    .btn-primary:hover{background:#003d99;border-color:#003d99}
+    .text-brand{color:#0052CC}
+  </style>
+</head>
+<body>
+<div class="login-card px-3">
+  <div class="text-center mb-4">
+    <img src="/assets/logo.png" style="max-height:60px;object-fit:contain" class="mb-3" alt="Logo">
+    <h5 class="fw-bold text-brand mb-1">Panel analítico predictivo</h5>
+    <p class="text-muted small mb-0">Introduce tus credenciales para acceder</p>
+  </div>
+  <div class="card shadow-sm border-0 rounded-4">
+    <div class="card-body p-4 py-24">
+      {% if error %}<div class="alert alert-danger small py-2 mb-3">{{ error }}</div>{% endif %}
+      <form method="post">
+        <div class="mb-3">
+          <label class="form-label fw-bold small text-muted">Usuario</label>
+          <input type="text" name="username" class="form-control rounded-3" autofocus required>
+        </div>
+        <div class="mb-4">
+          <label class="form-label fw-bold small text-muted">Contraseña</label>
+          <input type="password" name="password" class="form-control rounded-3" required>
+        </div>
+        <button type="submit" class="btn btn-primary w-100 fw-bold rounded-pill">Entrar</button>
+      </form>
+    </div>
+  </div>
+</div>
+</body>
+</html>"""
+
+_ALLOWED_PATHS = ('/login', '/logout', '/_dash-component-suites/', '/assets/')
+
+
+@server.before_request
+def require_login():
+    if MODO_DESARROLLO:
+        return
+    if any(flask.request.path.startswith(p) for p in _ALLOWED_PATHS):
+        return
+    if not flask.session.get('user'):
+        return flask.redirect('/login')
+
+
+@server.route('/login', methods=['GET', 'POST'])
+def login():
+    if flask.request.method == 'POST':
+        username = flask.request.form.get('username', '').strip()
+        password = flask.request.form.get('password', '')
+        users = _load_users()
+        if username in users and check_password_hash(users[username], password):
+            flask.session['user'] = username
+            return flask.redirect('/')
+        return flask.render_template_string(_LOGIN_HTML, error='Usuario o contraseña incorrectos')
+    return flask.render_template_string(_LOGIN_HTML, error=None)
+
+
+@server.route('/logout')
+def logout():
+    flask.session.pop('user', None)
+    return flask.redirect('/login')
