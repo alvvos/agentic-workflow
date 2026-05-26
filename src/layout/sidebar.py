@@ -47,7 +47,47 @@ def build_sidebar():
                             className="w-100 shadow-sm"
                         ), id="contenedor-dia", style={"display": "none"}
                     ),
-                ])
+                ]),
+
+                # ── Panel PM — visible only on tab-ejecutivo ──────────────
+                html.Div(id="pm-options-wrapper", style={"display": "none"}, children=[
+                    html.Hr(className="text-muted"),
+                    html.Label("Ventana de análisis",
+                               className="fw-bold text-muted small text-uppercase mb-2 mt-2"),
+                    dbc.RadioItems(
+                        id="pm-ventana",
+                        options=[
+                            {"label": "Semana (7 días)", "value": "semana"},
+                            {"label": "Mes (28 días)",   "value": "mes"},
+                        ],
+                        value="semana",
+                        className="mb-1",
+                    ),
+                    html.Small(
+                        "Mes compara los últimos 28 días vs el mes anterior.",
+                        className="text-muted d-block mb-2",
+                        style={"fontSize": "0.68rem", "lineHeight": "1.4"},
+                    ),
+                ]),
+
+                # ── BI comparativa — visible only on tab-auditoria ────────
+                html.Div(id="bi-comparativa-wrapper", style={"display": "none"}, children=[
+                    html.Hr(className="text-muted"),
+                    html.Label("Comparativa temporal",
+                               className="fw-bold text-muted small text-uppercase mb-2 mt-2"),
+                    dbc.RadioItems(
+                        id="bi-comparativa",
+                        options=[
+                            {"label": "Ninguna",               "value": "none"},
+                            {"label": "vs. Semana Ant. (WoW)", "value": "wow"},
+                            {"label": "vs. Mes Ant. (MoM)",    "value": "mom"},
+                            {"label": "vs. Año Ant. (YoY)",    "value": "yoy"},
+                        ],
+                        value="none",
+                        className="mb-2",
+                    ),
+                ]),
+
             ])
         ], className="border-0 shadow-sm rounded-4")
     ], className="sticky-top", style={"top": "30px", "zIndex": 1020})

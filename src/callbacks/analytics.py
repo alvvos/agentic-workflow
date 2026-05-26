@@ -19,10 +19,10 @@ from src.models.anomalys import generar_panel_bi_completo
     [Input("drop-locs", "value"), Input("tipo-fecha", "value"), Input("date-rango", "start_date"),
      Input("date-rango", "end_date"), Input("date-dia", "date"), Input("radar-drop-zonas", "value"),
      Input("bi-comparativa", "value"), Input("ejecutivo-drop-zonas", "value"),
-     Input("data-version", "data")],
+     Input("pm-ventana", "value"), Input("data-version", "data")],
     [State("session-id", "data")], prevent_initial_call=False
 )
-def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, zones_exe, _data_v, s_id):
+def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, zones_exe, pm_ventana, _data_v, s_id):
     if not locs:
         return html.Div(), "Esperando selección de ubicación...", html.Div(), html.Div()
 
@@ -40,7 +40,7 @@ def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, zones_exe,
     df['fecha'] = pd.to_datetime(df['fecha'])
 
     lista_zonas_exe = zones_exe if zones_exe else []
-    informe_ejecutivo = generar_panel_pm(df, locs, lista_zonas_exe)
+    informe_ejecutivo = generar_panel_pm(df, locs, lista_zonas_exe, ventana=pm_ventana or "semana")
 
     hoy = datetime.today().date()
     start = end = pd.to_datetime(hoy - timedelta(days=1))

@@ -15,6 +15,7 @@ import math
 import random
 from pathlib import Path
 
+import pandas as pd
 import plotly.graph_objects as go
 from dash import dcc, html
 import dash_bootstrap_components as dbc
@@ -410,41 +411,53 @@ def _render_clima_strip(clima):
 # ---------------------------------------------------------------------------
 
 def _fig_captacion(vals):
-    specs = [
-        ("5 min",  vals.get("poblacion_5min"),  1.00),
-        ("10 min", vals.get("poblacion_10min"), 0.65),
-        ("15 min", vals.get("poblacion_15min"), 0.35),
-    ]
-    specs = [(l, v, op) for l, v, op in specs if v is not None]
+    pob5  = vals.get("poblacion_5min")
+    pob10 = vals.get("poblacion_10min")
+    pob15 = vals.get("poblacion_15min")
+
+    # Incremental population per ring (matching map ring colors)
+    specs = []
+    if pob5 is not None:
+        specs.append(("0–5 min",   pob5,                       "rgba(40,167,69,0.75)",  pob5))
+    if pob10 is not None:
+        inc10 = max(0, pob10 - pob5) if pob5 is not None else pob10
+        specs.append(("5–10 min",  inc10, "rgba(243,156,18,0.80)", pob10))
+    if pob15 is not None:
+        base  = pob10 if pob10 is not None else (pob5 or 0)
+        inc15 = max(0, pob15 - base)
+        specs.append(("10–15 min", inc15, "rgba(0,82,204,0.70)",   pob15))
+
     if not specs:
         return None
 
-    labels = [s[0] for s in specs]
-    values = [s[1] for s in specs]
-    colors = [f"rgba(0,82,204,{s[2]})" for s in specs]
-    max_v  = max(values)
+    labels   = [s[0] for s in specs]
+    values   = [s[1] for s in specs]
+    colors   = [s[2] for s in specs]
+    cum_vals = [s[3] for s in specs]
+    max_v    = max(values) if max(values) > 0 else 1
 
     fig = go.Figure(go.Bar(
         y=labels,
         x=values,
         orientation="h",
-        marker=dict(
-            color=colors,
-            line=dict(color="white", width=2),
-        ),
+        marker=dict(color=colors, line=dict(color="white", width=2)),
         text=[f"{v:,.0f} hab." for v in values],
         textposition="outside",
         constraintext="none",
         textfont=dict(size=11, color=_C_DARK, **_FONT),
-        hovertemplate="%{y} a pie: <b>%{x:,.0f}</b> personas accesibles<extra></extra>",
+        customdata=cum_vals,
+        hovertemplate=(
+            "%{y}: <b>%{x:,.0f}</b> personas en este anillo<br>"
+            "Total accesible hasta aquí: <b>%{customdata:,.0f}</b><extra></extra>"
+        ),
     ))
 
     fig.update_layout(
         xaxis=dict(
-            title=dict(text="Habitantes accesibles", font=dict(size=11, color=_C_MUTED, **_FONT)),
+            title=dict(text="Habitantes por anillo isócrono", font=dict(size=11, color=_C_MUTED, **_FONT)),
             showgrid=True, gridcolor=_C_GRID,
             tickformat=",", tickfont=dict(size=10, **_FONT),
-            range=[0, max_v * 1.35],
+            range=[0, max_v * 1.45],
         ),
         yaxis=dict(
             showgrid=False,
@@ -454,7 +467,7 @@ def _fig_captacion(vals):
         plot_bgcolor="white",
         paper_bgcolor="white",
         showlegend=False,
-        margin=dict(t=16, b=44, l=70, r=16),
+        margin=dict(t=16, b=44, l=88, r=16),
         hovermode="y unified",
         bargap=0.40,
     )
@@ -542,7 +555,7 @@ def _fig_mapa(vals, lat, lon, uuid):
 # Ensamblaje público
 # ---------------------------------------------------------------------------
 
-def generar_panel_geo_visual(location_uuid, vals, clima=None):
+def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None):
     activos = {k: v for k, v in vals.items() if v is not None}
     nombre, lat, lon = _info_ubicacion(location_uuid)
 
@@ -556,8 +569,11 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None):
             ], xs=9),
             dbc.Col(
                 html.Div(
-                    dbc.Badge("Esri · datos disponibles", color="success", pill=True,
-                              className="fs-6 px-3 py-2")
+                    dbc.Badge(
+                        (f"Esri · {pd.Timestamp(fecha_captura).strftime('%d/%m/%Y')}"
+                         if fecha_captura else "Esri · datos disponibles"),
+                        color="success", pill=True, className="fs-6 px-3 py-2",
+                    )
                     if activos else
                     dbc.Badge("Esri · pendiente", color="secondary", pill=True,
                               className="fs-6 px-3 py-2"),

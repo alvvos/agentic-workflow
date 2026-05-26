@@ -141,3 +141,15 @@ def enriquecer_con_geo(df: pd.DataFrame, col_location_id: str = "location_id", c
         df[col] = geo_df[col].values
 
     return df
+
+
+def get_geo_snapshot_date(location_uuid: str) -> str | None:
+    """Returns the valid_from date of the active geo snapshot, or None if no data."""
+    store = _cargar_store()
+    snapshots = store.get(location_uuid, [])
+    if not snapshots:
+        return None
+    snapshots_ord = sorted(snapshots, key=lambda s: s.get("valid_from", ""))
+    activo = next((s for s in reversed(snapshots_ord) if s.get("valid_to") is None), None)
+    target = activo or snapshots_ord[-1]
+    return target.get("valid_from")

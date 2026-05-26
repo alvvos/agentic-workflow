@@ -10,6 +10,18 @@ def toggle_periodo_sidebar(tab):
     return {}
 
 
+@app.callback(
+    Output("pm-options-wrapper", "style"),
+    Output("bi-comparativa-wrapper", "style"),
+    Input("tabs-panel", "value"),
+)
+def toggle_sidebar_options(tab):
+    show = {"display": "block"}
+    hide = {"display": "none"}
+    return (show if tab == "tab-ejecutivo" else hide,
+            show if tab == "tab-auditoria" else hide)
+
+
 @app.callback(Output("contenedor-rango", "style"), Output("contenedor-dia", "style"), Input("tipo-fecha", "value"))
 def toggle_fecha(tipo):
     if tipo == "dia":

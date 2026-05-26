@@ -22,7 +22,7 @@ from dash import html, dcc
 import dash_bootstrap_components as dbc
 import holidays
 from src.data_processing.data_radar import obtener_info_ubicacion, obtener_clima_historico
-from src.data_processing.geo_enrichment import get_geo_vals
+from src.data_processing.geo_enrichment import get_geo_vals, get_geo_snapshot_date
 from src.reporting.geo_panel import generar_panel_geo_visual
 
 festivos_espana = holidays.ES(years=[2024, 2025, 2026])
@@ -213,7 +213,7 @@ def _fig_dias_semana(df_todas_zonas, fecha_max):
         text=text_labels,
         textposition='outside',
         textfont=dict(size=11, color=_C_DARK),
-        hovertemplate='%{x}: <b>%{y:,.0f}</b> vis. promedio<extra></extra>',
+        hovertemplate='%{x}: <b>%{y:,.0f}</b> visitantes únicos (media/día)<extra></extra>',
     ))
     fig.update_layout(
         height=160,
@@ -256,7 +256,7 @@ def _fig_finde_vs_laborable(df_todas_zonas, fecha_max):
         text=[f"{v:,.0f}" for v in vals],
         textposition='outside',
         textfont=dict(size=12, color=_C_DARK),
-        hovertemplate='%{x}: <b>%{y:,.0f}</b> visitantes/día<extra></extra>',
+        hovertemplate='%{x}: <b>%{y:,.0f}</b> visitantes únicos/día (media)<extra></extra>',
     ))
     max_v = max(vals)
     fig.update_layout(
@@ -273,10 +273,10 @@ def _fig_finde_vs_laborable(df_todas_zonas, fecha_max):
 
 
 def _fig_dwell_zonas(zonas_data):
-    """Tiempo medio de permanencia por zona — últimos 7 días."""
+    """Tiempo medio de permanencia por zona."""
     data = [
-        (z['zona'], z['r7']['estancia'], _color_zona(z['zona']))
-        for z in zonas_data if z['r7']['estancia'] > 0
+        (z['zona'], z['r']['estancia'], _color_zona(z['zona']))
+        for z in zonas_data if z['r']['estancia'] > 0
     ]
     if not data:
         return None
@@ -323,7 +323,7 @@ def _fig_embudo_conversion(zonas_data):
     pasos = sorted([z for z in zonas_data if _rol(z) < 99], key=_rol)
     if len(pasos) < 2:
         return None
-    values = [max(z['r7']['visitantes'], 0) for z in pasos]
+    values = [max(z['r']['visitantes'], 0) for z in pasos]
     if max(values) == 0:
         return None
 
@@ -364,74 +364,78 @@ def _fig_embudo_conversion(zonas_data):
 
 # ── Narrative engine ──────────────────────────────────────────────────────────
 
-def _narrativa(zonas_data, fecha_max, clima):
+def _narrativa(zonas_data, fecha_max, clima, ventana="semana"):
     """
     Genera una lista de (nivel, icon_cls, texto) con lenguaje natural para un PM.
     Sin guiones como separadores. Cada frase responde una pregunta implícita.
     Prioridad: global → día pico → estancia → alertas por zona → contexto externo.
     """
-    items = []
+    items   = []
+    periodo = "mes" if ventana == "mes" else "semana"
+    periodo_ant = "el mes" if ventana == "mes" else "la semana"
+    dias_v  = 28 if ventana == "mes" else 7
 
-    total7   = sum(z['r7']['visitantes'] for z in zonas_data)
-    total7_a = sum(z['a7']['visitantes'] for z in zonas_data)
-    dg       = calcular_delta(total7, total7_a)
+    total_p   = sum(z['r']['visitantes'] for z in zonas_data)
+    total_p_a = sum(z['a']['visitantes'] for z in zonas_data)
+    dg        = calcular_delta(total_p, total_p_a)
 
-    # 1. Resumen global de la semana
+    # 1. Resumen global del período
     if dg >= 10:
         items.append(("success", "fas fa-arrow-trend-up",
-            f"Buena semana de tráfico. El volumen total creció un {dg:.0f}% respecto a la semana pasada."))
+            f"Buen {periodo} de tráfico. El volumen total creció un {dg:.0f}% respecto a {periodo_ant} anterior."))
     elif dg <= -10:
         items.append(("danger", "fas fa-arrow-trend-down",
-            f"Semana complicada. El tráfico total bajó un {abs(dg):.0f}% respecto a la semana pasada."))
+            f"{periodo.capitalize()} complicad{'o' if periodo == 'mes' else 'a'}. "
+            f"El tráfico total bajó un {abs(dg):.0f}% respecto a {periodo_ant} anterior."))
     else:
         items.append(("secondary", "fas fa-equals",
-            f"Semana sin cambios relevantes. El tráfico se mantuvo prácticamente igual que la semana anterior ({dg:+.0f}%)."))
+            f"{periodo.capitalize()} sin cambios relevantes. "
+            f"El tráfico se mantuvo prácticamente igual que {periodo_ant} anterior ({dg:+.0f}%)."))
 
-    # 2. Día pico
+    # 2. Día pico del período
     all_dias = pd.concat(
-        [z['dias7'] for z in zonas_data if not z['dias7'].empty],
+        [z['dias_p'] for z in zonas_data if not z['dias_p'].empty],
         ignore_index=True,
-    ) if any(not z['dias7'].empty for z in zonas_data) else pd.DataFrame()
+    ) if any(not z['dias_p'].empty for z in zonas_data) else pd.DataFrame()
 
     if not all_dias.empty:
         agg  = all_dias.groupby('fecha_dt')['unique_visitors'].sum().reset_index()
         peak = agg.loc[agg['unique_visitors'].idxmax()]
         items.append(("primary", "fas fa-calendar-day",
-            f"El {formatear_fecha(peak['fecha_dt'])} fue el día con más afluencia de la semana, "
-            f"con {int(peak['unique_visitors']):,} personas."))
+            f"El {formatear_fecha(peak['fecha_dt'])} fue el día con más afluencia del {periodo}, "
+            f"con {int(peak['unique_visitors']):,} visitantes únicos."))
 
     # 3. Estancia media
-    est7   = sum(z['r7']['estancia'] * max(z['r7']['visitantes'], 1) for z in zonas_data) / max(total7,   1)
-    est7_a = sum(z['a7']['estancia'] * max(z['a7']['visitantes'], 1) for z in zonas_data) / max(total7_a, 1)
-    d_est  = calcular_delta(est7, est7_a)
+    est_p   = sum(z['r']['estancia'] * max(z['r']['visitantes'], 1) for z in zonas_data) / max(total_p,   1)
+    est_p_a = sum(z['a']['estancia'] * max(z['a']['visitantes'], 1) for z in zonas_data) / max(total_p_a, 1)
+    d_est   = calcular_delta(est_p, est_p_a)
 
-    if est7 > 0 and abs(d_est) >= 6:
+    if est_p > 0 and abs(d_est) >= 6:
         if d_est > 0:
             items.append(("success", "fas fa-clock",
-                f"Los clientes se quedaron más tiempo esta semana: {est7:.1f} min de media frente a "
-                f"{est7_a:.1f} min la semana pasada. Buena señal de interés en el espacio."))
+                f"Los clientes se quedaron más tiempo este {periodo}: {est_p:.1f} min de media frente a "
+                f"{est_p_a:.1f} min {periodo_ant} anterior. Buena señal de interés en el espacio."))
         else:
             items.append(("warning", "fas fa-clock",
-                f"Los clientes están pasando menos tiempo en tienda: {est7:.1f} min frente a "
-                f"{est7_a:.1f} min. Vale la pena revisar si algo los está alejando antes de tiempo."))
+                f"Los clientes están pasando menos tiempo en tienda: {est_p:.1f} min frente a "
+                f"{est_p_a:.1f} min. Vale la pena revisar si algo los está alejando antes de tiempo."))
 
     # 4. Alertas por zona
     for z in zonas_data:
-        zn  = z['zona']
-        zl  = zn.lower()
-        dv  = z['d7']['visitantes']
+        zn = z['zona']
+        zl = zn.lower()
+        dv = z['d']['visitantes']
 
         if 'exterior' in zl or 'calle' in zl:
             if dv <= -20:
                 items.append(("warning", "fas fa-walking",
-                    f"El tráfico de paso bajó un {abs(dv):.0f}% esta semana. "
-                    f"Antes de actuar, comprueba si hay algo externo que lo explique: obras, calle cortada o mal tiempo. "
-                    f"Mira también los interiores, pueden contar una historia diferente."))
+                    f"El tráfico de paso bajó un {abs(dv):.0f}% este {periodo}. "
+                    f"Antes de actuar, comprueba si hay algo externo que lo explique: obras, calle cortada o mal tiempo."))
         elif 'tienda' in zl:
             ext = next((z2 for z2 in zonas_data
                         if 'exterior' in z2['zona'].lower() or 'calle' in z2['zona'].lower()), None)
             if ext:
-                ext_dv = ext['d7']['visitantes']
+                ext_dv = ext['d']['visitantes']
                 if dv <= -15 and ext_dv > -5:
                     items.append(("danger", "fas fa-store",
                         f"El exterior aguantó, pero la tienda cayó un {abs(dv):.0f}%. "
@@ -443,43 +447,44 @@ def _narrativa(zonas_data, fecha_max, clima):
                         f"Estás atrayendo una mayor proporción del paso de calle."))
             elif dv <= -15:
                 items.append(("danger", "fas fa-store",
-                    f"La zona interior bajó un {abs(dv):.0f}% esta semana. Merece una revisión."))
+                    f"La zona interior bajó un {abs(dv):.0f}% este {periodo}. Merece una revisión."))
         elif 'caja' in zl:
             if dv <= -15:
                 items.append(("danger", "fas fa-cash-register",
-                    f"Menos gente llegó a caja esta semana: bajó un {abs(dv):.0f}%. "
+                    f"Menos gente llegó a caja este {periodo}: bajó un {abs(dv):.0f}%. "
                     f"Compara con el tráfico interior para saber si es un problema de conversión o de afluencia general."))
             elif dv >= 15:
                 items.append(("success", "fas fa-cash-register",
-                    f"La caja fue bien esta semana: creció un {dv:.0f}%. Más ventas cerradas."))
+                    f"La caja fue bien este {periodo}: creció un {dv:.0f}%. Más ventas cerradas."))
 
     # 5. Contexto externo: clima
     if clima:
-        fmin7    = fecha_max - timedelta(days=6)
-        dias_rec = {k: v for k, v in clima.items()
-                    if k >= fmin7.strftime('%Y-%m-%d')}
-        n_lluvia = sum(1 for v in dias_rec.values() if v.get('precip', 0) > 2)
-        if n_lluvia >= 3:
+        fmin_clima = fecha_max - timedelta(days=dias_v - 1)
+        dias_rec   = {k: v for k, v in clima.items()
+                      if k >= fmin_clima.strftime('%Y-%m-%d')}
+        n_lluvia   = sum(1 for v in dias_rec.values() if v.get('precip', 0) > 2)
+        umbral     = max(3, dias_v // 4)
+        if n_lluvia >= umbral:
             items.append(("info", "fas fa-cloud-rain",
-                f"Hubo {n_lluvia} días de lluvia esta semana. Eso puede explicar parte de la bajada "
+                f"Hubo {n_lluvia} días de lluvia este {periodo}. Eso puede explicar parte de la bajada "
                 f"en tráfico exterior. Con mejor tiempo, los números probablemente serían más altos."))
         elif dias_rec:
             tmaxes = [v.get('tmax') for v in dias_rec.values() if v.get('tmax')]
             if tmaxes and max(tmaxes) > 33:
                 items.append(("info", "fas fa-sun",
-                    f"Esta semana hizo mucho calor, con picos de hasta {max(tmaxes):.0f}°C. "
+                    f"Este {periodo} hizo mucho calor, con picos de hasta {max(tmaxes):.0f}°C. "
                     f"El tráfico de calle suele resentirse en las horas centrales cuando aprieta el sol."))
 
     # 6. Festivos
-    fmin7 = fecha_max - timedelta(days=6)
-    fest  = [(f, n) for f, n in festivos_espana.items()
-             if isinstance(f, date) and fmin7 <= f <= fecha_max]
+    fmin_fest = fecha_max - timedelta(days=dias_v - 1)
+    fest = [(f, n) for f, n in festivos_espana.items()
+            if isinstance(f, date) and fmin_fest <= f <= fecha_max]
     if fest:
         nombres = ", ".join(n for _, n in fest[:2])
         pl = "s" if len(fest) > 1 else ""
         items.append(("info", "fas fa-umbrella-beach",
-            f"Esta semana hubo festivo{pl} ({nombres}). "
-            f"Ten en cuenta que los datos de días festivos no son comparables con una semana laboral normal."))
+            f"Este {periodo} hubo festivo{pl} ({nombres}). "
+            f"Ten en cuenta que los datos de días festivos no son comparables con días laborables normales."))
 
     return items
 
@@ -527,53 +532,54 @@ def _render_narrativa(items):
     )
 
 
-def _render_zona_card(zona, r7, a7, d7, dias_28, uid):
-    """Tarjeta de zona: semáforo + nombre + una línea + sparkline."""
-    color          = _color_zona(zona)
-    badge_lbl, icon_cls, tooltip_role = _zona_meta(zona)
-    zone_slug      = _slug(zona)
-    badge_id       = f"pm-z-{zone_slug}-{uid}"
-    sem_id         = f"pm-sem-{zone_slug}-{uid}"
-    spark_info_id  = f"pm-spark-info-{zone_slug}-{uid}"
+def _render_zona_card(zona, r, a, d, dias_28, uid, periodo_label="semana"):
+    """Tarjeta de zona: % delta en grande (hero) + visitantes absolutos + sparkline."""
+    color         = _color_zona(zona)
+    badge_lbl, _, tooltip_role = _zona_meta(zona)
+    zone_slug     = _slug(zona)
+    badge_id      = f"pm-z-{zone_slug}-{uid}"
+    spark_info_id = f"pm-spark-info-{zone_slug}-{uid}"
 
-    dv = d7['visitantes']
+    dv = d['visitantes']
     if dv >= 5:
-        sem_color, sem_txt = _C_SUCCESS, f"Subió un {dv:.0f}% esta semana"
+        sem_color, arrow = _C_SUCCESS, "fas fa-arrow-up"
     elif dv <= -5:
-        sem_color, sem_txt = _C_DANGER,  f"Bajó un {abs(dv):.0f}% esta semana"
+        sem_color, arrow = _C_DANGER,  "fas fa-arrow-down"
     else:
-        sem_color, sem_txt = _C_AMBER,   "Sin cambios relevantes esta semana"
+        sem_color, arrow = _C_AMBER,   "fas fa-minus"
 
-    sem_tooltip = (
-        f"Esta semana: {r7['visitantes']:,} visitantes únicos"
-        + (f" · Semana anterior: {a7['visitantes']:,}" if a7['visitantes'] else "")
-        + (f" · Estancia media: {r7['estancia']:.1f} min" if r7['estancia'] > 0 else "")
-    )
+    pct_str  = f"{dv:+.0f}%"
+    abs_str  = f"{r['visitantes']:,.0f} visitantes únicos"
+    ant_str  = f" · ant. {a['visitantes']:,.0f}" if a['visitantes'] else ""
+    dwell_str = f" · {r['estancia']:.1f} min estancia" if r['estancia'] > 0 else ""
 
     sparkline = _fig_sparkline(dias_28, color)
 
     return dbc.Card(
         dbc.CardBody([
-            # Header de zona
-            html.Div(className="d-flex justify-content-between align-items-center mb-2",
-                     children=[
-                html.Div(className="d-flex align-items-center gap-2", children=[
-                    html.I(className="fas fa-circle", id=sem_id,
-                           style={"color": sem_color, "fontSize": "0.65rem",
-                                  "flexShrink": "0", "cursor": "help"}),
-                    dbc.Tooltip(sem_tooltip, target=sem_id, placement="top"),
-                    html.Span(zona, className="fw-bold",
-                              style={"fontSize": "0.82rem", "color": _C_DARK}),
-                    html.Span(id=badge_id, children=f"· {badge_lbl}",
-                              className="text-muted",
-                              style={"fontSize": "0.74rem", "cursor": "help"}),
-                    dbc.Tooltip(tooltip_role, target=badge_id, placement="top"),
-                ]),
+            # Nombre + rol
+            html.Div(className="d-flex align-items-center gap-2 mb-2", children=[
+                html.Span(zona, className="fw-bold",
+                          style={"fontSize": "0.80rem", "color": _C_DARK}),
+                html.Span(id=badge_id, children=f"· {badge_lbl}",
+                          className="text-muted",
+                          style={"fontSize": "0.70rem", "cursor": "help"}),
+                dbc.Tooltip(tooltip_role, target=badge_id, placement="top"),
             ]),
-            # Estado en texto
-            html.P(sem_txt,
-                   style={"fontSize": "0.76rem", "color": sem_color,
-                          "fontWeight": "600", "marginBottom": "6px"}),
+            # % como métrica principal
+            html.Div(className="d-flex align-items-baseline gap-1 mb-1", children=[
+                html.Span(pct_str,
+                          style={"fontSize": "1.8rem", "fontWeight": "800",
+                                 "color": sem_color, "lineHeight": "1"}),
+                html.I(className=f"{arrow} ms-1",
+                       style={"color": sem_color, "fontSize": "0.85rem"}),
+                html.Span(f"vs {periodo_label} ant.",
+                          style={"fontSize": "0.68rem", "color": _C_MUTED, "marginLeft": "4px"}),
+            ]),
+            # Visitantes absolutos como subtítulo
+            html.P(abs_str + ant_str + dwell_str,
+                   className="text-muted mb-2",
+                   style={"fontSize": "0.70rem", "lineHeight": "1.4"}),
             # Sparkline 28d
             html.Div([
                 html.Div(className="d-flex justify-content-between align-items-center mb-1",
@@ -581,18 +587,14 @@ def _render_zona_card(zona, r7, a7, d7, dias_28, uid):
                     html.Span("Tendencia 28d",
                               style={"fontSize": "0.62rem", "color": _C_MUTED,
                                      "textTransform": "uppercase", "letterSpacing": "0.4px"}),
-                    html.Span([
-                        html.I(className="fas fa-circle-info", id=spark_info_id,
-                               style={"color": _C_MUTED, "fontSize": "0.65rem",
-                                      "cursor": "help"}),
-                        dbc.Tooltip(
-                            "Visitantes únicos diarios · últimos 28 días. "
-                            "La línea continua muestra el tráfico real; "
-                            "la línea punteada es la tendencia lineal "
-                            "(verde = subiendo, roja = bajando).",
-                            target=spark_info_id, placement="top",
-                        ),
-                    ]),
+                    html.I(className="fas fa-circle-info", id=spark_info_id,
+                           style={"color": _C_MUTED, "fontSize": "0.65rem", "cursor": "help"}),
+                    dbc.Tooltip(
+                        "Visitantes únicos diarios · últimos 28 días. "
+                        "Línea continua = tráfico real; línea punteada = tendencia "
+                        "(verde = subiendo, roja = bajando).",
+                        target=spark_info_id, placement="top",
+                    ),
                 ]),
                 dcc.Graph(
                     id=f"spark-{zone_slug}-{uid}",
@@ -692,7 +694,7 @@ def _render_pm_questions(df, zonas_data, fecha_max, uid):
 
 # ── Main assembly ─────────────────────────────────────────────────────────────
 
-def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None):
+def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None, ventana="semana"):
     if df.empty:
         return dbc.Alert("Ausencia de datos.", color="warning", className="rounded-4")
 
@@ -718,28 +720,39 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
     )
 
     uid = _slug(location_uuid or ubi)
+    dias_v       = 28 if ventana == "mes" else 7
+    periodo_label = "mes" if ventana == "mes" else "semana"
 
     # ── Datos por zona ───────────────────────────────────────────────────
     puntos  = 0
     zonas_data = []
     for zona in df['Zona'].unique():
         dz = df[df['Zona'] == zona]
-        r7, a7, d7, fmin7, fmax7, dias7 = evaluar_periodo_zona(dz, fecha_max, 7)
-        r28, a28, d28, *_              = evaluar_periodo_zona(dz, fecha_max, 28)
+        r7,  a7,  d7,  fmin7,  fmax7,  dias7  = evaluar_periodo_zona(dz, fecha_max, 7)
+        r28, a28, d28, fmin28, fmax28, dias28  = evaluar_periodo_zona(dz, fecha_max, 28)
 
-        # Sparkline: 28 días diarios
+        # Period-specific data for cards / narrative
+        r_p  = r28  if ventana == "mes" else r7
+        a_p  = a28  if ventana == "mes" else a7
+        d_p  = d28  if ventana == "mes" else d7
+        dias_p = dias28 if ventana == "mes" else dias7
+
+        # Sparkline always 28d for visual context
         dias_28 = (
             dz[dz['fecha_dt'] >= fecha_max - timedelta(days=27)]
             .groupby('fecha_dt')['unique_visitors'].sum().reset_index()
             if 'unique_visitors' in dz.columns else pd.DataFrame()
         )
 
-        if   d7['visitantes'] >=  5: puntos += 1
-        elif d7['visitantes'] <= -5: puntos -= 1
+        if   d_p['visitantes'] >=  5: puntos += 1
+        elif d_p['visitantes'] <= -5: puntos -= 1
 
         zonas_data.append(dict(
-            zona=zona, r7=r7, a7=a7, d7=d7, r28=r28, a28=a28, d28=d28,
-            fmin7=fmin7, fmax7=fmax7, dias7=dias7, dias_28=dias_28,
+            zona=zona,
+            r=r_p, a=a_p, d=d_p, dias_p=dias_p,
+            r7=r7, a7=a7, d7=d7, fmin7=fmin7, fmax7=fmax7, dias7=dias7,
+            r28=r28, a28=a28, d28=d28,
+            dias_28=dias_28,
         ))
 
     # ── Health status ────────────────────────────────────────────────────
@@ -787,7 +800,7 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
     )
 
     # ── 2. Narrativa ─────────────────────────────────────────────────────
-    items_narrativa = _narrativa(zonas_data, fecha_max, clima)
+    items_narrativa = _narrativa(zonas_data, fecha_max, clima, ventana=ventana)
     narrativa       = _render_narrativa(items_narrativa)
 
     # ── 3. Zonas (semáforo + sparkline) ──────────────────────────────────
@@ -800,8 +813,8 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
 
     zona_cols = [
         dbc.Col(
-            _render_zona_card(z['zona'], z['r7'], z['a7'], z['d7'],
-                              z['dias_28'], uid),
+            _render_zona_card(z['zona'], z['r'], z['a'], z['d'],
+                              z['dias_28'], uid, periodo_label),
             xs=12, sm=6, xl=3, className="mb-3",
         )
         for z in sorted(zonas_data, key=_orden)
@@ -810,7 +823,7 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
     zonas_section = html.Div([
         html.P(
             [html.I(className="fas fa-layer-group me-2 text-primary"),
-             "Estado por zona · últimos 7 días"],
+             f"Estado por zona · {'últimos 28 días' if ventana == 'mes' else 'últimos 7 días'}"],
             className="fw-bold mb-3",
             style={"fontSize": "0.78rem", "color": _C_MUTED,
                    "textTransform": "uppercase", "letterSpacing": "0.5px"},
@@ -822,8 +835,10 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
     dias_section = _render_pm_questions(df, zonas_data, fecha_max, uid)
 
     # ── 5. Geo panel ─────────────────────────────────────────────────────
+    fecha_captura = get_geo_snapshot_date(location_uuid) if location_uuid else None
     geo = (
-        generar_panel_geo_visual(location_uuid, get_geo_vals(location_uuid), clima)
+        generar_panel_geo_visual(location_uuid, get_geo_vals(location_uuid), clima,
+                                  fecha_captura=fecha_captura)
         if location_uuid else html.Div()
     )
 
@@ -857,7 +872,7 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
     ])
 
 
-def generar_panel_pm(df_completo, locs, zonas_sel):
+def generar_panel_pm(df_completo, locs, zonas_sel, ventana="semana"):
     if df_completo is None or df_completo.empty:
         return dbc.Alert("Sincroniza los datos.", color="warning", className="rounded-4")
     if not locs:
@@ -867,5 +882,5 @@ def generar_panel_pm(df_completo, locs, zonas_sel):
     for ubi in df_completo[df_completo['location_id'].isin(locs)]['Ubicación'].unique():
         df_ubi   = df_completo[df_completo['Ubicación'] == ubi]
         loc_uuid = df_ubi['location_id'].iloc[0] if 'location_id' in df_ubi.columns else None
-        paneles.append(generar_mensajes_salud(df_ubi, ubi, zonas_sel, loc_uuid))
+        paneles.append(generar_mensajes_salud(df_ubi, ubi, zonas_sel, loc_uuid, ventana=ventana))
     return html.Div(paneles)

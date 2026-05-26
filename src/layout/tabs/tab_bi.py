@@ -20,23 +20,10 @@ def build_tab_bi():
 
         dbc.Row([
             dbc.Col([
-                html.Label([html.I(className="fas fa-balance-scale me-2 text-primary"), "Comparativa temporal:"], className="fw-bold mb-2 mt-2 text-secondary"),
-                dbc.RadioItems(
-                    id="bi-comparativa",
-                    options=[
-                        {"label": "Ninguna", "value": "none"},
-                        {"label": "vs. Semana Ant. (WoW)", "value": "wow"},
-                        {"label": "vs. Mes Ant. (MoM)", "value": "mom"},
-                        {"label": "vs. Año Ant. (YoY)", "value": "yoy"}
-                    ],
-                    value="none", inline=True, className="mb-2"
-                )
-            ], xs=12, lg=7),
-            dbc.Col([
-                dbc.Button([html.I(className="fas fa-file-archive me-2"), "Descargar todos (.png)"], id="btn-download-all-bi", color="secondary", outline=True, className="mt-lg-4 mt-2 w-100 rounded-pill fw-bold shadow-sm"),
+                dbc.Button([html.I(className="fas fa-file-archive me-2"), "Descargar todos (.png)"], id="btn-download-all-bi", color="secondary", outline=True, className="mt-2 w-100 rounded-pill fw-bold shadow-sm"),
                 dcc.Download(id="download-bi-zip"),
-            ], xs=12, lg=5)
-        ], className="align-items-center mb-4"),
+            ], xs=12, className="text-end mb-4")
+        ]),
 
         dcc.Loading(
             html.Div(id="bi-dynamic-content",
