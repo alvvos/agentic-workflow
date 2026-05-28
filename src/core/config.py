@@ -16,7 +16,7 @@ app = dash.Dash(
     external_stylesheets=[dbc.themes.LUX, dbc.icons.FONT_AWESOME],
     suppress_callback_exceptions=True
 )
-app.title = "Panel Analítico Predictivo"
+app.title = "Reporting Aitanna"
 
 server = app.server
 server.secret_key = os.getenv("SECRET_KEY", "dev-only-change-in-prod")

@@ -1,7 +1,6 @@
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 
-
 def build_tab_pm():
     return dcc.Tab(label='Panel PM', value='tab-ejecutivo', className="fw-bold h-min-screen", children=[
         html.Br(),
@@ -30,5 +29,5 @@ def build_tab_pm():
             ),
             delay_show=350,
             delay_hide=80,
-        )
+        ),
     ])

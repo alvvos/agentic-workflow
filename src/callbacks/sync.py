@@ -118,7 +118,7 @@ def actualizar_alerta_sync(session_id, _data_v, _tick, locs):
         dias = (ayer - fecha_mas_atrasada).days
         if dias > 1:
             return ([html.I(className="fas fa-exclamation-triangle me-2"),
-                     f"Sincronizar · {dias}d sin datos"], "warning", False)
+                     f"Sincronizar · {dias}d sin datos"], "primary", False)
     except Exception:
         pass
     return _normal

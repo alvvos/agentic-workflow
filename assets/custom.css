@@ -86,3 +86,87 @@
     border: none !important;
     padding: 0 !important;
 }
+
+/* ── Chat FAB — hover sutil ──────────────────────────────────────────────── */
+#chat-fab:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 28px rgba(0,82,204,0.50) !important;
+}
+
+/* ── Chat modal — backdrop con blur ─────────────────────────────────────── */
+.modal-backdrop {
+    backdrop-filter: blur(4px) !important;
+    -webkit-backdrop-filter: blur(4px) !important;
+    background-color: rgba(0, 0, 0, 0.35) !important;
+}
+.chat-modal-content {
+    border-radius: 16px !important;
+    border: none !important;
+    box-shadow: 0 24px 64px rgba(0, 82, 204, 0.18) !important;
+}
+
+/* ── dcc.Dropdown — chips, foco y opciones en azul corporativo ───────────── */
+.Select--multi .Select-value {
+    background-color: #e8effc !important;
+    border-color: #b3c8f5 !important;
+    color: #0052CC !important;
+}
+.Select--multi .Select-value-icon {
+    border-right-color: #b3c8f5 !important;
+    color: #0052CC !important;
+}
+.Select--multi .Select-value-icon:hover {
+    background-color: #0052CC !important;
+    color: #fff !important;
+}
+.Select-option.is-focused {
+    background-color: #e8effc !important;
+    color: #0052CC !important;
+}
+.Select-option.is-selected {
+    background-color: #0052CC !important;
+    color: #fff !important;
+}
+.Select.is-focused > .Select-control,
+.Select.is-open > .Select-control {
+    border-color: #0052CC !important;
+    box-shadow: 0 0 0 0.18rem rgba(0, 82, 204, 0.20) !important;
+}
+
+/* ── Chat @menciones — dropdown inline ──────────────────────────────────── */
+.mention-option-item:hover {
+    background-color: #e8effc !important;
+}
+.mention-option-item:last-child {
+    border-bottom: none !important;
+}
+
+/* ── Chat streaming — cursor parpadeante ─────────────────────────────────── */
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0; }
+}
+.stream-cursor {
+    display: inline-block;
+    color: #0052CC;
+    font-weight: 600;
+    animation: blink 0.75s ease-in-out infinite;
+    margin-left: 1px;
+}
+
+/* ── Chat markdown — tipografía limpia dentro de burbujas ────────────────── */
+.chat-markdown { margin: 0; font-size: 0.86rem; line-height: 1.55; }
+.chat-markdown p               { margin: 0 0 6px; }
+.chat-markdown p:last-child    { margin: 0; }
+.chat-markdown ul, .chat-markdown ol { padding-left: 18px; margin: 0 0 6px; }
+.chat-markdown li              { margin-bottom: 2px; }
+.chat-markdown strong          { font-weight: 700; }
+.chat-markdown em              { font-style: italic; }
+.chat-markdown code {
+    background: rgba(0, 82, 204, 0.07);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 0.81em;
+    font-family: monospace;
+}
+

@@ -5,6 +5,7 @@ import dash_bootstrap_components as dbc
 from src.core.config import MODO_DESARROLLO
 from src.layout.sidebar import build_sidebar
 from src.layout.tabs.tab_pm import build_tab_pm
+from src.chatbot.chat_panel import build_chat_fab, build_chat_modal
 from src.layout.tabs.tab_bi import build_tab_bi
 from src.layout.tabs.tab_reportes import build_tab_reportes
 from src.layout.tabs.tab_ml import build_tab_ml
@@ -38,7 +39,7 @@ def serve_layout():
                     build_tab_ml(),
                 ])
             ])
-        ], className="border-0 shadow-sm rounded-4 bg-white")
+        ], className="border-0 shadow-sm rounded-4")
     ])
 
     return dbc.Container([
@@ -83,8 +84,11 @@ def serve_layout():
 
         dbc.Toast(id="toast-notificacion", header="Notificación", is_open=False, dismissable=True, icon="info", duration=4000, style={"position": "fixed", "top": 20, "right": 20, "width": 350, "zIndex": 9999, "fontSize": "15px"}),
 
+        build_chat_modal(),
+        build_chat_fab(),
+
         dbc.Row([
             dbc.Col(sidebar, xs=12, lg=3, xl=2, className="mb-4 mb-lg-0"),
             dbc.Col(main_content, xs=12, lg=9, xl=10)
         ])
-    ], fluid=True, style={"padding": "30px", "backgroundColor": "#ffffff", "minHeight": "100vh"})
+    ], fluid=True, style={"padding": "30px", "minHeight": "100vh"})

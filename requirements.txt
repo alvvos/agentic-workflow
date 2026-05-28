@@ -14,3 +14,6 @@ google-generativeai
 kaleido
 fpdf2
 playwright
+anthropic
+mcp
+diskcache

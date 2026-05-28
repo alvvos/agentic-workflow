@@ -7,6 +7,7 @@ import src.callbacks.sync  # noqa: F401
 import src.callbacks.analytics  # noqa: F401
 import src.callbacks.exports  # noqa: F401
 import src.callbacks.resumen_exportacion  # noqa: F401
+import src.callbacks.chat_callbacks      # noqa: F401
 
 app.layout = serve_layout
 

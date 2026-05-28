@@ -76,6 +76,9 @@ def ingestar_snapshot_esri(
     if fecha_entrega is None:
         fecha_entrega = date.today().isoformat()
 
+    # Extraer geometría antes de la validación de keys (no es una feature del modelo)
+    catchment_rings = valores.pop("_catchment_rings", None)
+
     desconocidas = set(valores.keys()) - set(GEO_FEATURE_COLS)
     if desconocidas:
         raise ValueError(f"Features no reconocidas (no están en GEO_FEATURE_COLS): {desconocidas}")
@@ -143,6 +146,8 @@ def ingestar_snapshot_esri(
     for col in GEO_FEATURE_COLS:
         if col in valores:
             snap_completo[col] = valores[col]
+    if catchment_rings is not None:
+        snap_completo["catchment_rings"] = catchment_rings
 
     nuevos_snapshots.append(snap_completo)
     politica_log.append({
@@ -172,6 +177,45 @@ def ingestar_snapshot_esri(
         "features_registradas": [c for c in GEO_FEATURE_COLS if valores.get(c) is not None],
         "politica_aplicada": politica_log,
     }
+
+
+def actualizar_catchment_rings(location_uuid: str, lat: float, lon: float) -> bool:
+    """
+    Actualiza solo la geometría de isócronas del snapshot activo, sin crear
+    una nueva entrega ni modificar los valores de features del modelo.
+
+    Llama a ServiceArea peatonal (5/10/15 min) y sobreescribe catchment_rings
+    en el snapshot con valid_to=None. Invalida la caché del store.
+
+    Retorna True si la actualización tuvo éxito, False si ServiceArea no respondió.
+    """
+    from src.data_ingestion.esri_client import fetch_service_area_isochrones
+
+    rings = fetch_service_area_isochrones(lat, lon)
+    if rings is None:
+        return False
+
+    with open(_GEO_PATH, "r", encoding="utf-8") as f:
+        store_raw = json.load(f)
+
+    snapshots = store_raw.get(location_uuid, [])
+    activo = next((s for s in snapshots if s.get("valid_to") is None), None)
+    if activo is None:
+        return False
+
+    activo["catchment_rings"] = rings
+
+    tmp_path = _GEO_PATH.with_suffix(".tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(store_raw, f, ensure_ascii=False, indent=2)
+    os.replace(tmp_path, _GEO_PATH)
+
+    # Forzar recarga del cache en geo_enrichment (el cambio de mtime lo haría
+    # automáticamente, pero limpiar explícitamente garantiza consistencia inmediata)
+    from src.data_processing import geo_enrichment as _ge
+    _ge._store_cache.clear()
+
+    return True
 
 
 def listar_estado_geo(location_uuid: str = None) -> dict:

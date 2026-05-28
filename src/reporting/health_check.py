@@ -165,15 +165,15 @@ def _fig_sparkline(dias_28, color):
     return fig
 
 
-def _fig_dias_semana(df_todas_zonas, fecha_max):
+def _fig_dias_semana(df_todas_zonas, fecha_max, dias=28):
     """
-    Distribución media de visitantes por día de la semana (últimas 4 semanas).
-    Responde: ¿Cuándo viene la gente? ¿Qué días necesito más personal?
+    Distribución de visitantes por día de la semana.
+    Con dias=7 muestra los valores reales de esa semana; con dias=28 promedia 4 semanas.
     """
     if df_todas_zonas.empty or 'unique_visitors' not in df_todas_zonas.columns:
         return None
 
-    fmin = fecha_max - timedelta(days=27)
+    fmin = fecha_max - timedelta(days=dias - 1)
     df = df_todas_zonas[
         (df_todas_zonas['fecha_dt'] >= fmin) &
         (df_todas_zonas['fecha_dt'] <= fecha_max)
@@ -228,11 +228,11 @@ def _fig_dias_semana(df_todas_zonas, fecha_max):
     return fig
 
 
-def _fig_finde_vs_laborable(df_todas_zonas, fecha_max):
-    """Promedio visitantes/día: entre semana vs fin de semana (últimas 4 semanas)."""
+def _fig_finde_vs_laborable(df_todas_zonas, fecha_max, dias=28):
+    """Promedio visitantes/día: entre semana vs fin de semana."""
     if df_todas_zonas.empty or 'unique_visitors' not in df_todas_zonas.columns:
         return None
-    fmin = fecha_max - timedelta(days=27)
+    fmin = fecha_max - timedelta(days=dias - 1)
     df = df_todas_zonas[
         (df_todas_zonas['fecha_dt'] >= fmin) &
         (df_todas_zonas['fecha_dt'] <= fecha_max)
@@ -364,7 +364,7 @@ def _fig_embudo_conversion(zonas_data):
 
 # ── Narrative engine ──────────────────────────────────────────────────────────
 
-def _narrativa(zonas_data, fecha_max, clima, ventana="semana"):
+def _narrativa(zonas_data, fecha_max, clima, ventana="semana", geo_vals=None):
     """
     Genera una lista de (nivel, icon_cls, texto) con lenguaje natural para un PM.
     Sin guiones como separadores. Cada frase responde una pregunta implícita.
@@ -486,6 +486,51 @@ def _narrativa(zonas_data, fecha_max, clima, ventana="semana"):
             f"Este {periodo} hubo festivo{pl} ({nombres}). "
             f"Ten en cuenta que los datos de días festivos no son comparables con días laborables normales."))
 
+    # 7. Contexto geoespacial — insights AIS cuando disponibles
+    if geo_vals:
+        pob5        = geo_vals.get("poblacion_5min")
+        gasto_ropa  = geo_vals.get("gasto_ropa_calzado")
+        jovenes     = geo_vals.get("hogares_jovenes_solos")
+        familias    = geo_vals.get("hogares_familias_hijos")
+        renta_hogar = geo_vals.get("renta_hogar_anual")
+
+        # Potencial de captación: visitantes vs población accesible
+        if pob5 and total_p > 0:
+            ratio_cap = total_p / pob5
+            if ratio_cap < 0.015:
+                items.append(("warning", "fas fa-map-marker-alt",
+                    f"El catchment inmediato (5 min a pie) tiene {pob5:,.0f} personas "
+                    f"y la tienda registró {total_p:,.0f} visitas este {periodo}. "
+                    f"La tasa de captación del entorno próximo es baja — hay margen de crecimiento en visibilidad local."))
+            elif ratio_cap > 0.10:
+                items.append(("success", "fas fa-map-marker-alt",
+                    f"La ubicación extrae bien el potencial del entorno: "
+                    f"{total_p:,.0f} visitantes sobre {pob5:,.0f} personas en 5 min a pie. "
+                    f"Buena conversión de paso peatonal."))
+
+        # Gasto en ropa vs benchmark
+        if gasto_ropa is not None:
+            _REF = 1_200
+            if gasto_ropa > _REF * 1.2:
+                items.append(("success", "fas fa-shopping-bag",
+                    f"El entorno tiene un gasto en ropa y calzado de {gasto_ropa:,.0f} €/hogar/año "
+                    f"({(gasto_ropa / _REF - 1) * 100:.0f}% sobre la media nacional). "
+                    f"El perfil de gasto del área es favorable para el negocio."))
+            elif gasto_ropa < _REF * 0.85:
+                items.append(("info", "fas fa-shopping-bag",
+                    f"El gasto en ropa y calzado del entorno ({gasto_ropa:,.0f} €/hogar/año) "
+                    f"está por debajo de la media. Considera si el mix de producto o el precio "
+                    f"están adaptados al poder adquisitivo local."))
+
+        # Target demográfico Miniso
+        if jovenes is not None and familias is not None:
+            total_target = (jovenes or 0) + (familias or 0)
+            if total_target > 600:
+                items.append(("primary", "fas fa-users",
+                    f"El catchment concentra {total_target:,.0f} hogares del segmento target "
+                    f"({jovenes:,.0f} jóvenes solos y {familias:,.0f} familias con hijos). "
+                    f"Alta densidad de clientes potenciales en radio 800 m."))
+
     return items
 
 
@@ -519,8 +564,8 @@ def _render_narrativa(items):
                         },
                     ),
                     html.P(texto, className="mb-0",
-                           style={"fontSize": "0.88rem", "color": _C_DARK,
-                                  "lineHeight": "1.7", "paddingTop": "4px"}),
+                           style={"fontSize": "0.97rem", "color": _C_DARK,
+                                  "lineHeight": "1.75", "paddingTop": "4px"}),
                 ],
             )
         )
@@ -569,12 +614,12 @@ def _render_zona_card(zona, r, a, d, dias_28, uid, periodo_label="semana"):
             # % como métrica principal
             html.Div(className="d-flex align-items-baseline gap-1 mb-1", children=[
                 html.Span(pct_str,
-                          style={"fontSize": "1.8rem", "fontWeight": "800",
+                          style={"fontSize": "2.4rem", "fontWeight": "800",
                                  "color": sem_color, "lineHeight": "1"}),
                 html.I(className=f"{arrow} ms-1",
-                       style={"color": sem_color, "fontSize": "0.85rem"}),
+                       style={"color": sem_color, "fontSize": "1rem"}),
                 html.Span(f"vs {periodo_label} ant.",
-                          style={"fontSize": "0.68rem", "color": _C_MUTED, "marginLeft": "4px"}),
+                          style={"fontSize": "0.74rem", "color": _C_MUTED, "marginLeft": "6px"}),
             ]),
             # Visitantes absolutos como subtítulo
             html.P(abs_str + ant_str + dwell_str,
@@ -674,10 +719,10 @@ def _render_pm_questions(df, zonas_data, fecha_max, uid, ventana="semana"):
                 html.P(
                     pregunta,
                     className="fw-bold mb-0",
-                    style={"fontSize": "0.84rem", "color": _C_DARK},
+                    style={"fontSize": "0.96rem", "color": _C_DARK},
                 ),
                 html.P(subtitulo, className="text-muted mb-2",
-                       style={"fontSize": "0.72rem", "lineHeight": "1.4"}),
+                       style={"fontSize": "0.78rem", "lineHeight": "1.4"}),
                 dcc.Graph(
                     id=gid, figure=fig, config=_CFG_GRAPH,
                     style={"height": height},
@@ -686,8 +731,10 @@ def _render_pm_questions(df, zonas_data, fecha_max, uid, ventana="semana"):
             className="border-0 shadow-sm rounded-4 h-100 bg-white",
         )
 
-    _periodo = "último mes (28 días)" if ventana == "mes" else "últimas 4 semanas"
-    _periodo_corto = "último mes" if ventana == "mes" else "últimos 7 días"
+    dias_v = 28 if ventana == "mes" else 7
+    _periodo       = "último mes (28 días)"    if ventana == "mes" else "última semana (7 días)"
+    _periodo_corto = "último mes"              if ventana == "mes" else "última semana"
+    _lbl_dias      = "Media por día · último mes" if ventana == "mes" else "Visitantes por día · esta semana"
 
     preguntas = []
 
@@ -703,14 +750,14 @@ def _render_pm_questions(df, zonas_data, fecha_max, uid, ventana="semana"):
 
     preguntas += [
         (
-            _fig_dias_semana(df, fecha_max),
+            _fig_dias_semana(df, fecha_max, dias=dias_v),
             f"q-dias-{uid}",
             "¿Cuándo viene la gente?",
-            f"Media de visitantes únicos por día · {_periodo} · tono más oscuro = pico",
+            f"{_lbl_dias} · tono más oscuro = día pico",
             "160px",
         ),
         (
-            _fig_finde_vs_laborable(df, fecha_max),
+            _fig_finde_vs_laborable(df, fecha_max, dias=dias_v),
             f"q-finde-{uid}",
             "¿Rinde mejor el fin de semana o entre semana?",
             f"Visitantes únicos/día (media) · {_periodo}",
@@ -741,13 +788,18 @@ def _render_pm_questions(df, zonas_data, fecha_max, uid, ventana="semana"):
     if not cols:
         return html.Div()
 
+    _v_lbl = "últimos 28 días" if ventana == "mes" else "últimos 7 días"
     return html.Div([
-        html.P(
+        html.H5(
             [html.I(className="fas fa-magnifying-glass me-2 text-primary"),
-             "Comportamiento de la visita"],
-            className="fw-bold mb-3",
-            style={"fontSize": "0.78rem", "color": _C_MUTED,
-                   "textTransform": "uppercase", "letterSpacing": "0.5px"},
+             "Patrones de comportamiento"],
+            className="fw-bold mb-1",
+            style={"fontSize": "1.15rem", "color": _C_DARK},
+        ),
+        html.P(
+            f"Distribución del tráfico por día y tipo de jornada · {_v_lbl}.",
+            className="text-muted mb-3",
+            style={"fontSize": "0.84rem"},
         ),
         dbc.Row(cols, className="g-3"),
     ], className="mb-4")
@@ -860,9 +912,32 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
         style={"background": "linear-gradient(135deg, #0052CC 0%, #003d99 100%)"},
     )
 
+    # ── Geo data (loaded once — shared by narrativa and geo panel) ───────
+    geo_vals_loc  = get_geo_vals(location_uuid) if location_uuid else {}
+    fecha_captura = get_geo_snapshot_date(location_uuid) if location_uuid else None
+
     # ── 2. Narrativa ─────────────────────────────────────────────────────
-    items_narrativa = _narrativa(zonas_data, fecha_max, clima, ventana=ventana)
-    narrativa       = _render_narrativa(items_narrativa)
+    items_narrativa = _narrativa(zonas_data, fecha_max, clima, ventana=ventana,
+                                 geo_vals=geo_vals_loc)
+
+    _ventana_label = "este mes" if ventana == "mes" else "esta semana"
+    narrativa_header = html.Div([
+        html.H5(
+            [html.I(className="fas fa-comment-dots me-2 text-primary"),
+             f"¿Qué pasó {_ventana_label}?"],
+            className="fw-bold mb-1",
+            style={"fontSize": "1.15rem", "color": _C_DARK},
+        ),
+        html.P(
+            (f"Análisis de los últimos 28 días vs los 28 días anteriores."
+             if ventana == "mes" else
+             f"Análisis de los últimos 7 días vs los 7 días anteriores."),
+            className="text-muted mb-3",
+            style={"fontSize": "0.84rem"},
+        ),
+    ], className="mb-2")
+
+    narrativa = html.Div([narrativa_header, _render_narrativa(items_narrativa)])
 
     # ── 3. Zonas (semáforo + sparkline) ──────────────────────────────────
     def _orden(z):
@@ -881,13 +956,19 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
         for z in sorted(zonas_data, key=_orden)
     ]
 
+    _ventana_zona_lbl = "últimos 28 días" if ventana == "mes" else "últimos 7 días"
     zonas_section = html.Div([
-        html.P(
+        html.H5(
             [html.I(className="fas fa-layer-group me-2 text-primary"),
-             f"Estado por zona · {'últimos 28 días' if ventana == 'mes' else 'últimos 7 días'}"],
-            className="fw-bold mb-3",
-            style={"fontSize": "0.78rem", "color": _C_MUTED,
-                   "textTransform": "uppercase", "letterSpacing": "0.5px"},
+             f"Estado por zona — {_ventana_zona_lbl}"],
+            className="fw-bold mb-1",
+            style={"fontSize": "1.15rem", "color": _C_DARK},
+        ),
+        html.P(
+            "Variación de visitantes únicos respecto al período equivalente anterior. "
+            "La línea punteada en el sparkline marca la tendencia de los últimos 28 días.",
+            className="text-muted mb-3",
+            style={"fontSize": "0.84rem"},
         ),
         dbc.Row(zona_cols, className="g-3"),
     ], className="mb-4")
@@ -896,9 +977,8 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
     dias_section = _render_pm_questions(df, zonas_data, fecha_max, uid, ventana=ventana)
 
     # ── 5. Geo panel ─────────────────────────────────────────────────────
-    fecha_captura = get_geo_snapshot_date(location_uuid) if location_uuid else None
     geo = (
-        generar_panel_geo_visual(location_uuid, get_geo_vals(location_uuid), clima,
+        generar_panel_geo_visual(location_uuid, geo_vals_loc, clima,
                                   fecha_captura=fecha_captura)
         if location_uuid else html.Div()
     )
