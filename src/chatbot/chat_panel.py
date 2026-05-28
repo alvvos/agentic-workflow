@@ -146,17 +146,27 @@ def build_chat_modal() -> dbc.Modal:
 
 # ── Helpers internos ──────────────────────────────────────────────────────────
 
-def mention_option(slug: str, name: str, org: str) -> html.Div:
-    """Una fila del dropdown de @menciones."""
+def mention_option(slug: str, entry: dict) -> html.Div:
+    """Una fila del dropdown de @menciones (ubicación o zona)."""
+    is_zone   = entry.get("type") == "zone"
+    slug_color = "#4a6fa5" if is_zone else _C_PRIMARY
+
+    if is_zone:
+        detail = f"{entry.get('location_name', '')} · {entry.get('name', '')}"
+    else:
+        detail = f"{entry.get('name', '')} · {entry.get('org', '')}"
+
     return html.Div(
         [
+            html.Span(
+                "◎ " if is_zone else "",
+                style={"fontSize": "0.70rem", "color": slug_color, "marginRight": "2px"},
+            ),
             html.Span(f"@{slug}",
-                      style={"fontWeight": "600", "color": _C_PRIMARY,
+                      style={"fontWeight": "600", "color": slug_color,
                              "fontSize": "0.82rem", "marginRight": "8px"}),
-            html.Span(name,
-                      style={"fontSize": "0.80rem", "color": "#2c3e50"}),
-            html.Span(f" · {org}",
-                      style={"fontSize": "0.74rem", "color": _C_MUTED}),
+            html.Span(detail,
+                      style={"fontSize": "0.79rem", "color": _C_MUTED}),
         ],
         id={"type": "mention-option", "slug": slug},
         n_clicks=0,

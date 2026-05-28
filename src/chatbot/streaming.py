@@ -10,9 +10,14 @@ Estado en caché (TTL 5 min):
 """
 import json
 import os
+import re as _re
 import threading
 import uuid as _uuid_mod
 from pathlib import Path
+
+_UUID_RE = _re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", _re.I
+)
 
 import anthropic
 import diskcache
@@ -56,10 +61,10 @@ def _set(sid: str, **kw) -> None:
     _dc.set(sid, cur, expire=300)
 
 
-def _run(sid: str, messages: list, location_uuid, session_id: str, api_key: str) -> None:
+def _run(sid: str, messages: list, location_uuid, zone_uuid, session_id: str, api_key: str) -> None:
     client  = anthropic.Anthropic(api_key=api_key)
     history = list(messages)
-    system  = _system_prompt(location_uuid)
+    system  = _system_prompt(location_uuid, zone_uuid)
     last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
 
     try:
@@ -110,8 +115,18 @@ def _run(sid: str, messages: list, location_uuid, session_id: str, api_key: str)
                         continue
                     fn   = _TOOL_FN.get(block.name)
                     args = {**block.input}
+
+                    # Inyectar contexto cuando Claude no proporciona un UUID válido
+                    if location_uuid:
+                        for key in ("location_id", "location_uuid"):
+                            if not _UUID_RE.match(str(args.get(key, ""))):
+                                args[key] = location_uuid
+
                     if block.name == "get_pm_data":
                         args.setdefault("session_id", session_id)
+                        if zone_uuid:
+                            args.setdefault("zone_uuid", zone_uuid)
+
                     res  = fn(args) if fn else {"error": f"Herramienta desconocida: {block.name}"}
                     results.append({
                         "type":        "tool_result",
@@ -131,7 +146,12 @@ def _run(sid: str, messages: list, location_uuid, session_id: str, api_key: str)
         _set(sid, status="error", text=_humanize_error(e), tool=None)
 
 
-def start(messages: list, location_uuid=None, session_id: str = "local_dev") -> str | None:
+def start(
+    messages: list,
+    location_uuid=None,
+    zone_uuid=None,
+    session_id: str = "local_dev",
+) -> str | None:
     """Lanza el stream en background. Devuelve stream_id o None si no hay API key."""
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
@@ -140,7 +160,7 @@ def start(messages: list, location_uuid=None, session_id: str = "local_dev") -> 
     sid = _uuid_mod.uuid4().hex
     _dc.set(sid, {"status": "pending", "text": "", "tool": None}, expire=300)
     threading.Thread(
-        target=_run, args=(sid, messages, location_uuid, session_id, api_key), daemon=True
+        target=_run, args=(sid, messages, location_uuid, zone_uuid, session_id, api_key), daemon=True
     ).start()
     return sid
 

@@ -49,21 +49,25 @@ def update_mention_dropdown(value):
     if not value:
         return _DROPDOWN_HIDDEN, []
 
-    match = re.search(r"@([A-Za-z0-9_]*)$", value)
-    if not match:
+    # Buscar el último @ que no esté seguido de un espacio (= mención activa)
+    at_pos = value.rfind("@")
+    if at_pos == -1:
         return _DROPDOWN_HIDDEN, []
+    fragment = value[at_pos:]          # texto desde el último @
+    if " " in fragment:                # ya completó la mención → cerrar
+        return _DROPDOWN_HIDDEN, []
+    query = fragment[1:].lower()       # texto después del @
 
-    query = match.group(1).lower()
     try:
         mmap = get_mention_map()
     except Exception:
         return _DROPDOWN_HIDDEN, []
 
     options = [
-        mention_option(slug, entry.get("name", ""), entry.get("org", ""))
+        mention_option(slug, entry)
         for slug, entry in mmap.items()
         if not query or query in slug.lower()
-    ][:8]
+    ][:10]
 
     if not options:
         return _DROPDOWN_HIDDEN, []
@@ -132,13 +136,14 @@ def on_send(n_clicks, n_submit, user_text, history, locs, session_id):
     raw_text = user_text.strip()
     history  = history or []
 
-    clean_text, mention_uuid = parse_mention(raw_text)
+    clean_text, mention_loc_uuid, mention_zone_uuid = parse_mention(raw_text)
     dropdown_uuid = locs[0] if isinstance(locs, list) and locs else locs
-    location_uuid = mention_uuid or dropdown_uuid
+    location_uuid = mention_loc_uuid or dropdown_uuid
+    zone_uuid     = mention_zone_uuid  # None si no se mencionó zona
 
     loc_info      = _find_location(location_uuid) if location_uuid else None
     location_name = loc_info.get("name") if loc_info else None
-    display_text  = clean_text if mention_uuid else raw_text
+    display_text  = clean_text if (mention_loc_uuid or mention_zone_uuid) else raw_text
 
     history.append({"role": "user", "content": display_text})
     api_messages = [{"role": m["role"], "content": m["content"]} for m in history]
@@ -165,7 +170,12 @@ def on_send(n_clicks, n_submit, user_text, history, locs, session_id):
 
     # Iniciar stream en background
     from src.chatbot import streaming
-    sid = streaming.start(api_messages, location_uuid, session_id or "local_dev")
+    sid = streaming.start(
+        api_messages,
+        location_uuid=location_uuid,
+        zone_uuid=zone_uuid,
+        session_id=session_id or "local_dev",
+    )
 
     meta = {
         "sid":           sid,

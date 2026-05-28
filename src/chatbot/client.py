@@ -79,7 +79,7 @@ _TOOL_FN = {
 }
 
 
-def _system_prompt(location_uuid: str | None) -> str:
+def _system_prompt(location_uuid: str | None, zone_uuid: str | None = None) -> str:
     today = date.today().isoformat()
     base = (
         f"Hoy es {today}. "
@@ -95,19 +95,36 @@ def _system_prompt(location_uuid: str | None) -> str:
         "Formato: Markdown limpio — usa listas y negrita solo cuando aporten claridad. "
         "Sin emojis. Primera letra de cada oración en mayúscula; resto en minúsculas salvo nombres propios. "
         "Respuestas directas, sin frases de relleno ni introducciones genéricas."
+        "Responde únicamente lo que se pregunta. "
+        "No añadas datos adicionales, contexto no solicitado ni secciones extra. "
+        "Si la pregunta tiene una respuesta de una línea, una línea es suficiente. "
+        "CRÍTICO: nunca pidas al usuario UUIDs, location_id ni identificadores técnicos. "
+        "Tienes el UUID de la ubicación y de la zona activa en este system prompt; úsalos directamente."
     )
     if not location_uuid:
         return base
 
     loc = _find_location(location_uuid)
     if loc:
-        zonas = [z.get("zoneName", "") for z in loc.get("zones", []) if not z.get("hidden")]
+        zones      = [z for z in loc.get("zones", []) if not z.get("hidden")]
+        zonas_txt  = ", ".join(
+            f"{z['zoneName']} (uuid: {z['uuid']})" for z in zones
+        ) or "sin zonas visibles"
         base += (
             f"\n\nContexto actual: el usuario está viendo '{loc.get('name')}' "
             f"({loc.get('org', '')}). "
             f"UUID de ubicación: {location_uuid}. "
-            f"Zonas disponibles: {', '.join(zonas) or 'sin zonas visibles'}."
+            f"Zonas disponibles: {zonas_txt}."
         )
+        if zone_uuid:
+            zone_name = next(
+                (z["zoneName"] for z in zones if z["uuid"] == zone_uuid), zone_uuid
+            )
+            base += (
+                f"\nZona activa seleccionada por el usuario: '{zone_name}' "
+                f"(zone_uuid: {zone_uuid}). "
+                "Usa este zone_uuid por defecto en get_pm_data a menos que el usuario indique otro."
+            )
     return base
 
 
