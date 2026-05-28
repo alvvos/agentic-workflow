@@ -166,13 +166,12 @@ def _auto_insight_edad(vals):
     pob10 = vals.get("poblacion_10min")
     if not total_15_39:
         return None
-    pct_peak = peak / total_15_39 * 100 if total_15_39 else 0
-    txt = (f"En 800 m hay {total_15_39:,.0f} personas entre 15 y 39 años, "
-           f"el grueso del target Miniso. "
-           f"La cohorte 25–34 (peak de gasto en estilo de vida) representa el {pct_peak:.0f}% de ese grupo")
-    if pob10 and pob10 > 0:
-        txt += f", el {peak / pob10 * 100:.0f}% de toda la población accesible a 10 min"
-    txt += "."
+    pct_target = total_15_39 / pob10 * 100 if pob10 else None
+    pct_peak   = peak / total_15_39 * 100 if total_15_39 else 0
+    txt = f"En 800 m hay {total_15_39:,.0f} personas entre 15 y 39 años (target Miniso)"
+    if pct_target:
+        txt += f", el {pct_target:.0f}% del total de {pob10:,.0f} hab. en esa área"
+    txt += (f". La cohorte 25–34 (peak de gasto lifestyle) concentra el {pct_peak:.0f}% de ese grupo.")
     return txt
 
 
@@ -658,21 +657,35 @@ def _fig_captacion(vals):
 
 
 def _fig_piramide_edad(vals):
-    """Horizontal bars for age brackets 15–39 at 800 m catchment."""
+    """Pirámide completa con todas las franjas de edad (800 m). Target Miniso 15–39 resaltado."""
+
+    def _sum(*keys):
+        total = sum(vals.get(k) or 0 for k in keys)
+        return total if total > 0 else None
+
+    _C_NON_TARGET = "rgba(150,150,150,0.38)"
+    _C_TARGET_EDGE = "rgba(0,82,204,0.48)"
+    _C_TARGET_PEAK = _C_PRIMARY
+
+    # (label, value, color, is_aggregate)
     specs = [
-        ("pob_15_19", "15–19 años"),
-        ("pob_20_24", "20–24 años"),
-        ("pob_25_29", "25–29 años ★"),
-        ("pob_30_34", "30–34 años ★"),
-        ("pob_35_39", "35–39 años"),
+        ("10–14 años",  _sum("pob_0_4", "pob_5_9", "pob_10_14"),       _C_NON_TARGET),
+        ("15–19 años",  vals.get("pob_15_19"),                          _C_TARGET_EDGE),
+        ("20–24 años",  vals.get("pob_20_24"),                          _C_TARGET_EDGE),
+        ("25–29 años ★",vals.get("pob_25_29"),                          _C_TARGET_PEAK),
+        ("30–34 años ★",vals.get("pob_30_34"),                          _C_TARGET_PEAK),
+        ("35–39 años",  vals.get("pob_35_39"),                          _C_TARGET_EDGE),
+        ("40–54 años",  _sum("pob_40_44", "pob_45_49", "pob_50_54"),    _C_NON_TARGET),
+        ("55–69 años",  _sum("pob_55_59", "pob_60_64", "pob_65_69"),    _C_NON_TARGET),
+        ("70+ años",    _sum("pob_70_74", "pob_75_79", "pob_80_84", "pob_85_plus"), _C_NON_TARGET),
     ]
+
     labels, values, colors = [], [], []
-    for key, label in specs:
-        v = vals.get(key)
+    for label, v, color in specs:
         if v is not None:
             labels.append(label)
             values.append(v)
-            colors.append(_C_PRIMARY if "★" in label else "rgba(0,82,204,0.45)")
+            colors.append(color)
 
     if not labels:
         return None
@@ -689,12 +702,13 @@ def _fig_piramide_edad(vals):
     fig.update_layout(
         xaxis=dict(title=dict(text="Personas en radio 800 m", font=dict(size=11, color=_C_MUTED, **_FONT)),
                    showgrid=True, gridcolor=_C_GRID, tickformat=",",
-                   tickfont=dict(size=10, **_FONT), range=[0, max_v * 1.42]),
+                   tickfont=dict(size=10, **_FONT), range=[0, max_v * 1.50]),
         yaxis=dict(showgrid=False, tickfont=dict(size=11, color=_C_DARK, **_FONT), autorange="reversed"),
         plot_bgcolor="white", paper_bgcolor="white", showlegend=False,
-        margin=dict(t=8, b=36, l=100, r=8), hovermode="y unified", bargap=0.35,
+        margin=dict(t=8, b=36, l=100, r=8), hovermode="y unified", bargap=0.28,
         annotations=[dict(
-            text="★ peak gasto lifestyle", x=1, y=-0.14, xref="paper", yref="paper",
+            text="★ peak gasto lifestyle · azul intenso = target Miniso (15–39)",
+            x=1, y=-0.10, xref="paper", yref="paper",
             showarrow=False, font=dict(size=9, color=_C_MUTED), xanchor="right",
         )],
     )
@@ -759,9 +773,9 @@ def _fig_mapa(vals, lat, lon, uuid):
 
     # Anillos: dibujamos del mayor al menor para que los menores queden encima
     ring_specs = [
-        (2, "rgba(0,82,204,0.07)",   "rgba(0,82,204,0.28)",   "15 min  ≈ 1.2 km"),
-        (1, "rgba(243,156,18,0.10)", "rgba(243,156,18,0.42)", "10 min  ≈ 800 m"),
-        (0, "rgba(40,167,69,0.15)",  "rgba(40,167,69,0.65)",  " 5 min  ≈ 400 m"),
+        (2, "rgba(0,82,204,0.07)",   "rgba(0,82,204,0.28)",   "15 min a pie"),
+        (1, "rgba(243,156,18,0.10)", "rgba(243,156,18,0.42)", "10 min a pie"),
+        (0, "rgba(40,167,69,0.15)",  "rgba(40,167,69,0.65)",  " 5 min a pie"),
     ]
     radii = [400, 800, 1200]
 
@@ -1109,11 +1123,11 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
     if fig_cap:
         sec_a_charts.append(dbc.Col(
             _chart_card(fig_cap, f"geo-cap-{uid}", _H_CHART,
-                        title="Población al alcance a pie · por anillos de distancia (≈ 400 / 800 / 1.200 m)"),
+                        title="Población al alcance a pie · isócronas de 5 / 10 / 15 min"),
             xs=12, lg=5, className="mb-3",
         ))
     if fig_mapa:
-        iso_label = "Área de influencia · isócronas Esri" if get_catchment_rings(location_uuid) else "Área de influencia · isócronas aproximadas"
+        iso_label = "Área de influencia · isócronas peatonales Esri (WalkTime)" if get_catchment_rings(location_uuid) else "Área de influencia · isócronas aproximadas (círculos)"
         sec_a_charts.append(dbc.Col(
             _chart_card(fig_mapa, f"geo-map-{uid}", _H_CHART,
                         title=iso_label,
@@ -1124,8 +1138,8 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
     sec_a_charts2 = []
     if fig_edad:
         sec_a_charts2.append(dbc.Col(
-            _chart_card(fig_edad, f"geo-edad-{uid}", _H_MID,
-                        title="Perfil de edad · franja 15–39 años en 800 m",
+            _chart_card(fig_edad, f"geo-edad-{uid}", _H_CHART,
+                        title="Pirámide de edad · radio 800 m · target Miniso resaltado",
                         insight=ins_edad),
             xs=12, lg=6, className="mb-3",
         ))

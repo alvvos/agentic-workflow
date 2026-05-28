@@ -35,6 +35,28 @@ _SERVICE_AREA_URL = (
     "NAServer/ServiceArea_World/solveServiceArea"
 )
 
+# Travel mode JSON explícito para pedestres.
+# El parámetro `impedance=WalkTime` no es suficiente — la API usa DriveTime por defecto
+# a menos que se especifique travelMode con type="WALK" y useHierarchy=false.
+_WALK_TRAVEL_MODE = json.dumps({
+    "attributeParameterValues": [],
+    "description": "Suitable for pedestrian activity.",
+    "distanceAttributeName": "WalkTime",
+    "id": "caFAgoThrvUpkFBW",
+    "impedanceAttributeName": "WalkTime",
+    "name": "Walking",
+    "restrictionAttributeNames": [
+        "Avoid Roads Unsuitable for Pedestrians",
+        "Avoid Roads Prohibited for Pedestrians",
+    ],
+    "simplificationTolerance": 2,
+    "simplificationToleranceUnits": "esriMetersPerUnit",
+    "timeAttributeName": "WalkTime",
+    "type": "WALK",
+    "useHierarchy": False,
+    "uturnAtJunctions": "esriNFSBAllowBacktrack",
+})
+
 # Ring buffers en metros — proxy para 5/10/15 min peatonal (~80 m/min)
 _RING_BUFFERS = [400, 800, 1200]
 
@@ -47,11 +69,24 @@ _MOCK_RANGES: dict = {
     "poblacion_5min":                  (800,     8_000),
     "poblacion_10min":                 (3_000,  25_000),
     "poblacion_15min":                 (8_000,  60_000),
+    "pob_0_4":                         (80,      1_500),
+    "pob_5_9":                         (80,      1_500),
+    "pob_10_14":                       (80,      1_500),
     "pob_15_19":                       (100,     2_000),
     "pob_20_24":                       (100,     2_000),
     "pob_25_29":                       (100,     2_000),
     "pob_30_34":                       (100,     2_000),
     "pob_35_39":                       (100,     2_000),
+    "pob_40_44":                       (120,     2_200),
+    "pob_45_49":                       (120,     2_200),
+    "pob_50_54":                       (120,     2_200),
+    "pob_55_59":                       (110,     2_100),
+    "pob_60_64":                       (110,     2_100),
+    "pob_65_69":                       (90,      1_800),
+    "pob_70_74":                       (80,      1_600),
+    "pob_75_79":                       (60,      1_200),
+    "pob_80_84":                       (40,        900),
+    "pob_85_plus":                     (20,        500),
     "renta_hogar_anual":               (20_000, 55_000),
     "renta_hogar_mensual":             (1_600,   4_500),
     "renta_per_capita":                (8_000,  25_000),
@@ -196,14 +231,14 @@ def _fetch_service_area_isochrones(lat: float, lon: float, token: str) -> list |
     (anillo exterior de cada polígono, sin huecos), o None en caso de error.
     """
     params = urllib.parse.urlencode({
-        "facilities":       json.dumps({"features": [{"geometry": {"x": lon, "y": lat}}]}),
-        "defaultBreaks":    "5,10,15",
-        "travelDirection":  "esriNATravelDirectionToFacility",
-        "impedance":        "WalkTime",
-        "returnPolygons":   "true",
-        "outSR":            "4326",
-        "f":                "json",
-        "token":            token,
+        "facilities":      json.dumps({"features": [{"geometry": {"x": lon, "y": lat}}]}),
+        "defaultBreaks":   "5,10,15",
+        "travelDirection": "esriNATravelDirectionToFacility",
+        "travelMode":      _WALK_TRAVEL_MODE,
+        "returnPolygons":  "true",
+        "outSR":           "4326",
+        "f":               "json",
+        "token":           token,
     }).encode("utf-8")
 
     req = urllib.request.Request(_SERVICE_AREA_URL, data=params, method="POST")
@@ -295,19 +330,20 @@ def _llamar_enrich_real(
         "bufferRadii": _RING_BUFFERS,
     }])
 
-    params = urllib.parse.urlencode({
-        "studyAreas":         study_areas,
-        "analysisVariables":  json.dumps(analysis_vars),
-        "returnGeometry":     "true",
-        "f":                  "json",
-        "token":              token,
-    }).encode("utf-8")
+    def _call_enrich(vars_list: list) -> dict:
+        params = urllib.parse.urlencode({
+            "studyAreas":        study_areas,
+            "analysisVariables": json.dumps(vars_list),
+            "returnGeometry":    "true",
+            "f":                 "json",
+            "token":             token,
+        }).encode("utf-8")
+        req = urllib.request.Request(_ENRICH_URL, data=params, method="POST")
+        req.add_header("Content-Type", "application/x-www-form-urlencoded")
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return json.loads(resp.read())
 
-    req = urllib.request.Request(_ENRICH_URL, data=params, method="POST")
-    req.add_header("Content-Type", "application/x-www-form-urlencoded")
-
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        data = json.loads(resp.read())
+    data = _call_enrich(analysis_vars)
 
     if "error" in data:
         raise RuntimeError(f"Esri API error [{location_uuid}]: {data['error']}")
@@ -315,7 +351,22 @@ def _llamar_enrich_real(
     msgs = data.get("messages", [])
     errors = [m for m in msgs if m.get("type") == "esriJobMessageTypeError"]
     if errors:
-        raise RuntimeError(f"Esri error [{location_uuid}]: {errors[0].get('description')}")
+        desc = errors[0].get("description", "")
+        # Algunas variables no existen para ciertos países — reintento sin ellas
+        import re as _re2
+        undefined = _re2.findall(r"\w+\.\w+", desc)
+        if undefined and "not defined" in desc.lower():
+            pruned = [v for v in analysis_vars if v not in undefined]
+            if pruned and pruned != analysis_vars:
+                data = _call_enrich(pruned)
+                msgs2 = data.get("messages", [])
+                errors2 = [m for m in msgs2 if m.get("type") == "esriJobMessageTypeError"]
+                if errors2:
+                    raise RuntimeError(f"Esri error [{location_uuid}]: {errors2[0].get('description')}")
+            else:
+                raise RuntimeError(f"Esri error [{location_uuid}]: {desc}")
+        else:
+            raise RuntimeError(f"Esri error [{location_uuid}]: {desc}")
 
     features = data["results"][0]["value"]["FeatureSet"][0]["features"]
 

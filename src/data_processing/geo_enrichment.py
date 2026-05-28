@@ -18,12 +18,25 @@ GEO_FEATURE_COLS = [
     "poblacion_5min",                   # PEOPLE @ 400 m
     "poblacion_10min",                  # PEOPLE @ 800 m
     "poblacion_15min",                  # PEOPLE @ 1 200 m
-    # Bloque 2 — Demografía por edad (radio 800 m) — núcleo comprador Miniso
-    "pob_15_19",                        # POPAG15 — adolescentes
-    "pob_20_24",                        # POPAG20 — jóvenes adultos
-    "pob_25_29",                        # POPAG25 — peak gasto lifestyle
-    "pob_30_34",                        # POPAG30 — familias jóvenes
-    "pob_35_39",                        # POPAG35 — adultos establecidos
+    # Bloque 2 — Demografía por edad (radio 800 m) — pirámide completa
+    "pob_0_4",                          # POPAG0  — primera infancia
+    "pob_5_9",                          # POPAG5  — infancia
+    "pob_10_14",                        # POPAG10 — preadolescentes
+    "pob_15_19",                        # POPAG15 — adolescentes        ← target Miniso
+    "pob_20_24",                        # POPAG20 — jóvenes adultos      ← target Miniso
+    "pob_25_29",                        # POPAG25 — peak gasto lifestyle ← target Miniso ★
+    "pob_30_34",                        # POPAG30 — familias jóvenes     ← target Miniso ★
+    "pob_35_39",                        # POPAG35 — adultos establecidos ← target Miniso
+    "pob_40_44",                        # POPAG40
+    "pob_45_49",                        # POPAG45
+    "pob_50_54",                        # POPAG50
+    "pob_55_59",                        # POPAG55
+    "pob_60_64",                        # POPAG60
+    "pob_65_69",                        # POPAG65
+    "pob_70_74",                        # POPAG70
+    "pob_75_79",                        # POPAG75
+    "pob_80_84",                        # POPAG80
+    "pob_85_plus",                      # POPAG85 — 85 y más
     # Bloque 3 — Renta y composición de hogar (radio 800 m)
     "renta_hogar_anual",                # NINCHA  — renta media anual del hogar (€)
     "renta_hogar_mensual",              # NINCHM  — renta media mensual del hogar (€)
@@ -81,12 +94,25 @@ ESRI_VAR_MAP: dict = {
     "poblacion_5min":                  ("PEOPLE",    0),
     "poblacion_10min":                 ("PEOPLE",    1),
     "poblacion_15min":                 ("PEOPLE",    2),
-    # Bloque 2 — Edad (800 m)
+    # Bloque 2 — Edad (800 m) — pirámide completa
+    "pob_0_4":                         ("POPAG0",    1),
+    "pob_5_9":                         ("POPAG5",    1),
+    "pob_10_14":                       ("POPAG10",   1),
     "pob_15_19":                       ("POPAG15",   1),
     "pob_20_24":                       ("POPAG20",   1),
     "pob_25_29":                       ("POPAG25",   1),
     "pob_30_34":                       ("POPAG30",   1),
     "pob_35_39":                       ("POPAG35",   1),
+    "pob_40_44":                       ("POPAG40",   1),
+    "pob_45_49":                       ("POPAG45",   1),
+    "pob_50_54":                       ("POPAG50",   1),
+    "pob_55_59":                       ("POPAG55",   1),
+    "pob_60_64":                       ("POPAG60",   1),
+    "pob_65_69":                       ("POPAG65",   1),
+    "pob_70_74":                       ("POPAG70",   1),
+    "pob_75_79":                       ("POPAG75",   1),
+    "pob_80_84":                       ("POPAG80",   1),
+    "pob_85_plus":                     ("POPAG85",   1),
     # Bloque 3 — Renta y hogar
     "renta_hogar_anual":               ("NINCHA",    1),
     "renta_hogar_mensual":             ("NINCHM",    1),
@@ -141,11 +167,24 @@ ESRI_COLLECTION_MAP: dict = {
     "PEOPLE":    "PopulationTotalsAIS",
     "RISPORA":   "PopulationTotalsAIS",
     # 5YearIncrementsAIS
+    "POPAG0":    "5YearIncrementsAIS",
+    "POPAG5":    "5YearIncrementsAIS",
+    "POPAG10":   "5YearIncrementsAIS",
     "POPAG15":   "5YearIncrementsAIS",
     "POPAG20":   "5YearIncrementsAIS",
     "POPAG25":   "5YearIncrementsAIS",
     "POPAG30":   "5YearIncrementsAIS",
     "POPAG35":   "5YearIncrementsAIS",
+    "POPAG40":   "5YearIncrementsAIS",
+    "POPAG45":   "5YearIncrementsAIS",
+    "POPAG50":   "5YearIncrementsAIS",
+    "POPAG55":   "5YearIncrementsAIS",
+    "POPAG60":   "5YearIncrementsAIS",
+    "POPAG65":   "5YearIncrementsAIS",
+    "POPAG70":   "5YearIncrementsAIS",
+    "POPAG75":   "5YearIncrementsAIS",
+    "POPAG80":   "5YearIncrementsAIS",
+    "POPAG85":   "5YearIncrementsAIS",
     # IncomeTotalsAIS
     "NINCHA":    "IncomeTotalsAIS",
     "NINCHM":    "IncomeTotalsAIS",
@@ -201,12 +240,25 @@ GEO_FEATURES_BACKDATABLE = [
     "poblacion_5min",
     "poblacion_10min",
     "poblacion_15min",
-    # Edad
+    # Edad — pirámide completa
+    "pob_0_4",
+    "pob_5_9",
+    "pob_10_14",
     "pob_15_19",
     "pob_20_24",
     "pob_25_29",
     "pob_30_34",
     "pob_35_39",
+    "pob_40_44",
+    "pob_45_49",
+    "pob_50_54",
+    "pob_55_59",
+    "pob_60_64",
+    "pob_65_69",
+    "pob_70_74",
+    "pob_75_79",
+    "pob_80_84",
+    "pob_85_plus",
     # Renta y hogar — datos AIS 2023, valor honesto como aproximación de 2024
     "renta_hogar_anual",
     "renta_hogar_mensual",
