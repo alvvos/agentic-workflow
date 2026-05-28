@@ -15,7 +15,7 @@ from src.chatbot.history import (
     create_conversation, update_conversation,
     list_conversations, load_conversation,
 )
-from src.chatbot.mentions import parse_mention, get_mention_map
+from src.chatbot.mentions import parse_all_mentions, get_mention_map
 from src.chatbot.tools import _find_location
 
 _DROPDOWN_VISIBLE = {
@@ -204,14 +204,19 @@ def on_send(n_clicks, n_submit, user_text, history, locs, session_id, conv_id):
     history  = history or []
     sid      = session_id or "anonymous"
 
-    clean_text, mention_loc_uuid, mention_zone_uuid = parse_mention(raw_text)
+    clean_text, all_mentions = parse_all_mentions(raw_text)
+    primary       = all_mentions[0] if all_mentions else None
     dropdown_uuid = locs[0] if isinstance(locs, list) and locs else locs
-    location_uuid = mention_loc_uuid or dropdown_uuid
-    zone_uuid     = mention_zone_uuid
+    location_uuid = (primary["location_uuid"] if primary else None) or dropdown_uuid
+    zone_uuid     = primary["zone_uuid"] if primary else None
+    extra_mentions = [
+        m for m in all_mentions[1:]
+        if m["location_uuid"] != location_uuid
+    ]
 
     loc_info      = _find_location(location_uuid) if location_uuid else None
     location_name = loc_info.get("name") if loc_info else None
-    display_text  = clean_text if (mention_loc_uuid or mention_zone_uuid) else raw_text
+    display_text  = clean_text if all_mentions else raw_text
 
     # Create conversation if this is the first message
     if not conv_id:
@@ -249,15 +254,17 @@ def on_send(n_clicks, n_submit, user_text, history, locs, session_id, conv_id):
         location_uuid=location_uuid,
         zone_uuid=zone_uuid,
         session_id=session_id or "local_dev",
+        extra_mentions=extra_mentions or None,
     )
 
     meta = {
-        "sid":           stream_sid,
-        "session_id":    sid,
-        "conv_id":       conv_id,
-        "location_uuid": location_uuid,
-        "location_name": location_name,
-        "question":      display_text,
+        "sid":            stream_sid,
+        "session_id":     sid,
+        "conv_id":        conv_id,
+        "location_uuid":  location_uuid,
+        "location_name":  location_name,
+        "question":       display_text,
+        "extra_mentions": extra_mentions or [],
     }
     partial = render_history(history) + [streaming_bubble("", None)]
     return partial, history, "", None, False, meta, conv_id, conv_list

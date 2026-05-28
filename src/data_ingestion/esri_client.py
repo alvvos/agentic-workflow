@@ -388,6 +388,24 @@ def _llamar_enrich_real(
         val = attrs.get(var_id)
         result[col] = round(val, 2) if isinstance(val, float) else val
 
+    # Validar coherencia de los anillos de población: los valores son círculos acumulativos
+    # (0→400m, 0→800m, 0→1200m), por lo que ring2 ≥ ring1 ≥ 0 es condición necesaria.
+    pob5, pob10, pob15 = (
+        result.get("poblacion_5min"),
+        result.get("poblacion_10min"),
+        result.get("poblacion_15min"),
+    )
+    if pob5 is not None and pob10 is not None and pob10 < pob5:
+        raise RuntimeError(
+            f"Esri [{location_uuid}]: poblacion_10min ({pob10}) < poblacion_5min ({pob5}) — "
+            "respuesta incoherente (los radios son círculos acumulativos, no donuts)."
+        )
+    if pob10 is not None and pob15 is not None and pob15 < pob10:
+        raise RuntimeError(
+            f"Esri [{location_uuid}]: poblacion_15min ({pob15}) < poblacion_10min ({pob10}) — "
+            "respuesta incoherente."
+        )
+
     # Isócronas peatonales: preferir ServiceArea (red viaria real) sobre RingBuffer
     sa_rings = _fetch_service_area_isochrones(lat, lon, token)
     if sa_rings is not None:

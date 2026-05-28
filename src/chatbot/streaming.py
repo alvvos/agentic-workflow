@@ -61,10 +61,10 @@ def _set(sid: str, **kw) -> None:
     _dc.set(sid, cur, expire=300)
 
 
-def _run(sid: str, messages: list, location_uuid, zone_uuid, session_id: str, api_key: str) -> None:
+def _run(sid: str, messages: list, location_uuid, zone_uuid, session_id: str, api_key: str, extra_mentions=None) -> None:
     client  = anthropic.Anthropic(api_key=api_key)
     history = list(messages)
-    system  = _system_prompt(location_uuid, zone_uuid)
+    system  = _system_prompt(location_uuid, zone_uuid, extra_mentions)
     last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
 
     try:
@@ -154,6 +154,7 @@ def start(
     location_uuid=None,
     zone_uuid=None,
     session_id: str = "local_dev",
+    extra_mentions=None,
 ) -> str | None:
     """Lanza el stream en background. Devuelve stream_id o None si no hay API key."""
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -163,7 +164,7 @@ def start(
     sid = _uuid_mod.uuid4().hex
     _dc.set(sid, {"status": "pending", "text": "", "tool": None}, expire=300)
     threading.Thread(
-        target=_run, args=(sid, messages, location_uuid, zone_uuid, session_id, api_key), daemon=True
+        target=_run, args=(sid, messages, location_uuid, zone_uuid, session_id, api_key, extra_mentions), daemon=True
     ).start()
     return sid
 

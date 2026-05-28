@@ -93,33 +93,54 @@ def get_mention_map() -> dict:
     return result
 
 
-def parse_mention(text: str) -> tuple[str, str | None, str | None]:
+def parse_all_mentions(text: str) -> tuple[str, list[dict]]:
     """
-    Busca el primer @Slug en text y devuelve
-    (texto_limpio, location_uuid, zone_uuid).
-    Para ubicaciones zone_uuid es None.
-    Para zonas location_uuid es el de la ubicación padre.
-    Si no hay mención válida devuelve (texto_original, None, None).
+    Resuelve TODAS las @menciones en text.
+
+    Returns:
+        clean_text  — texto con cada @Slug reemplazado por [Nombre · Zona]
+        mentions    — lista de dicts {location_uuid, zone_uuid, name, type}
+                      en orden de aparición; solo menciones reconocidas
     """
     mention_map = get_mention_map()
-    match = re.search(r"@([A-Za-z0-9_]+)", text)
-    if not match:
+    mentions: list[dict] = []
+    clean = text
+
+    for match in re.finditer(r"@([A-Za-z0-9_]+)", text):
+        slug  = match.group(1)
+        entry = mention_map.get(slug)
+        if not entry:
+            continue
+
+        if entry["type"] == "zone":
+            display = f"{entry['location_name']} · {entry['name']}"
+            mentions.append({
+                "location_uuid": entry["location_uuid"],
+                "zone_uuid":     entry["uuid"],
+                "name":          display,
+                "type":          "zone",
+            })
+        else:
+            display = entry["name"]
+            mentions.append({
+                "location_uuid": entry["uuid"],
+                "zone_uuid":     None,
+                "name":          display,
+                "type":          "location",
+            })
+
+        clean = clean.replace(match.group(0), f"[{display}]", 1)
+
+    return clean.strip(), mentions
+
+
+def parse_mention(text: str) -> tuple[str, str | None, str | None]:
+    """Compatibilidad: resuelve solo la primera @mención. Usa parse_all_mentions internamente."""
+    clean, mentions = parse_all_mentions(text)
+    if not mentions:
         return text, None, None
-
-    slug  = match.group(1)
-    entry = mention_map.get(slug)
-    if not entry:
-        return text, None, None
-
-    display_name = entry["name"]
-    if entry["type"] == "zone":
-        display_name = f"{entry['location_name']} · {entry['name']}"
-
-    clean = text.replace(match.group(0), f"[{display_name}]").strip()
-
-    if entry["type"] == "zone":
-        return clean, entry["location_uuid"], entry["uuid"]
-    return clean, entry["uuid"], None
+    first = mentions[0]
+    return clean, first["location_uuid"], first["zone_uuid"]
 
 
 def slug_for(location_uuid: str) -> str | None:
