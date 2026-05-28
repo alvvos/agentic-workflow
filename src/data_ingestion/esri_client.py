@@ -1,20 +1,17 @@
 """
-Cliente Esri GeoEnrichment + OpenRouteService para isócronas peatonales.
+Cliente Esri GeoEnrichment — llamada real con RingBuffer.
 
-Isócronas (5/10/15 min a pie):
-  1. ORS (OpenRouteService) — primario.  Polígonos detallados siguiendo el viario
-     peatonal de OpenStreetMap. Requiere ORS_KEY en el entorno.
-     Endpoint: https://api.openrouteservice.org/v2/isochrones/foot-walking
-  2. Esri ServiceArea WalkTime — fallback si ORS no disponible.
-     Endpoint: route-api.arcgis.com/.../ServiceArea_World/solveServiceArea
+Endpoint: POST https://geoenrich.arcgis.com/arcgis/rest/services/World/
+          geoenrichmentserver/Geoenrichment/Enrich
+Auth:     token=ESRI_KEY en body (o X-Esri-Authorization: Bearer header)
+Área:     RingBuffer 400/800/1200 m como proxy de 5/10/15 min peatonal.
+          NetworkServiceArea falla si el privilegio Routing no está activo;
+          RingBuffer es el fallback recomendado hasta validar con walking SA.
 
-Enriquecimiento demográfico (GeoEnrichment):
-  Endpoint: geoenrich.arcgis.com/.../Geoenrichment/Enrich
-  Área: RingBuffer 400/800/1200 m (proxy rígido necesario para indexar los datos).
-
-Privilegios requeridos en la API key Esri:
+Privilegios requeridos en la API key (location.arcgis.com):
   - premium:user:geoenrichment   ← para el Enrich endpoint
-  - premium:user:networkanalysis ← solo necesario para el fallback ServiceArea
+  - premium:user:networkanalysis ← solo necesario para NetworkServiceArea
+  - premium:user:places          ← para fase 2 (competidores/POI)
 """
 import json
 import os
@@ -37,7 +34,6 @@ _SERVICE_AREA_URL = (
     "https://route-api.arcgis.com/arcgis/rest/services/World/ServiceAreas/"
     "NAServer/ServiceArea_World/solveServiceArea"
 )
-_ORS_ISOCHRONE_URL = "https://api.openrouteservice.org/v2/isochrones/foot-walking"
 
 # Travel mode JSON explícito para pedestres.
 # El parámetro `impedance=WalkTime` no es suficiente — la API usa DriveTime por defecto
@@ -212,21 +208,13 @@ def cargar_todas_ubicaciones(
 
 def fetch_service_area_isochrones(lat: float, lon: float) -> list | None:
     """
-    Isócronas peatonales reales (5/10/15 min).
+    Isócronas peatonales reales (5 / 10 / 15 min) vía ArcGIS ServiceArea.
 
-    Intenta ORS (OpenRouteService) primero — polígonos detallados OSM.
-    Si ORS no está disponible, cae en ArcGIS ServiceArea WalkTime.
-    Retorna None si USE_MOCK está activo o ambas fuentes fallan.
+    Retorna lista de 3 dicts [{lats, lons}, ...] ordenados [5 min, 10 min, 15 min]
+    (anillo exterior de cada polígono), o None si USE_MOCK está activo o la llamada falla.
     """
     if USE_MOCK:
         return None
-
-    ors_key = os.environ.get("ORS_KEY", "")
-    if ors_key:
-        rings = _fetch_ors_isochrones(lat, lon, ors_key)
-        if rings is not None:
-            return rings
-
     token = os.environ.get("ESRI_KEY", "")
     if not token:
         return None
@@ -235,61 +223,9 @@ def fetch_service_area_isochrones(lat: float, lon: float) -> list | None:
 
 # ── Internals ─────────────────────────────────────────────────────────────────
 
-def _fetch_ors_isochrones(lat: float, lon: float, ors_key: str) -> list | None:
-    """
-    Isócronas peatonales 5/10/15 min vía OpenRouteService (foot-walking).
-
-    Los polígonos de ORS siguen el viario real de OSM y producen formas
-    irregulares que reflejan la accesibilidad peatonal real.
-
-    Retorna lista de 3 dicts [{lats, lons}] ordenados [5, 10, 15 min],
-    o None en caso de error.
-    """
-    body = json.dumps({
-        "locations":  [[lon, lat]],
-        "range":      [900, 600, 300],  # segundos: 15min, 10min, 5min
-        "range_type": "time",
-        "smoothing":  0,
-    }).encode("utf-8")
-
-    req = urllib.request.Request(_ORS_ISOCHRONE_URL, data=body, method="POST")
-    req.add_header("Content-Type", "application/json")
-    req.add_header("Authorization", ors_key)
-
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read())
-    except Exception:
-        return None
-
-    features = data.get("features", [])
-    if len(features) != 3:
-        return None
-
-    # ORS devuelve los polígonos de mayor a menor (15→10→5 min)
-    # Ordenamos de menor a mayor para que coincidan con el índice [0]=5min, [1]=10min, [2]=15min
-    def _value(feat):
-        return feat.get("properties", {}).get("value", 0)
-
-    features_sorted = sorted(features, key=_value)
-
-    rings = []
-    for feat in features_sorted:
-        coords = feat.get("geometry", {}).get("coordinates", [[]])
-        outer = coords[0] if coords else []
-        if not outer:
-            rings.append(None)
-        else:
-            rings.append({
-                "lons": [pt[0] for pt in outer],
-                "lats": [pt[1] for pt in outer],
-            })
-    return rings if any(r is not None for r in rings) else None
-
-
 def _fetch_service_area_isochrones(lat: float, lon: float, token: str) -> list | None:
     """
-    Isócronas peatonales 5/10/15 min vía ArcGIS ServiceArea WalkTime (fallback).
+    Llama a ArcGIS ServiceArea con impedance=WalkTime para 5/10/15 min.
 
     Retorna lista de 3 dicts [{lats, lons}] ordenados [5 min, 10 min, 15 min]
     (anillo exterior de cada polígono, sin huecos), o None en caso de error.
@@ -300,7 +236,6 @@ def _fetch_service_area_isochrones(lat: float, lon: float, token: str) -> list |
         "travelDirection": "esriNATravelDirectionToFacility",
         "travelMode":      _WALK_TRAVEL_MODE,
         "returnPolygons":  "true",
-        "outputType":      "esriNAOutputPolygonDetailed",
         "outSR":           "4326",
         "f":               "json",
         "token":           token,
@@ -446,15 +381,10 @@ def _llamar_enrich_real(
         val = attrs.get(var_id)
         result[col] = round(val, 2) if isinstance(val, float) else val
 
-    # Isócronas peatonales: ORS primero (viario OSM detallado), luego Esri SA, luego RingBuffer
-    iso_rings = None
-    ors_key = os.environ.get("ORS_KEY", "")
-    if ors_key:
-        iso_rings = _fetch_ors_isochrones(lat, lon, ors_key)
-    if iso_rings is None:
-        iso_rings = _fetch_service_area_isochrones(lat, lon, token)
-    if iso_rings is not None:
-        result["_catchment_rings"] = iso_rings
+    # Isócronas peatonales: preferir ServiceArea (red viaria real) sobre RingBuffer
+    sa_rings = _fetch_service_area_isochrones(lat, lon, token)
+    if sa_rings is not None:
+        result["_catchment_rings"] = sa_rings
     else:
         # Fallback: geometría del RingBuffer devuelta por GeoEnrichment
         catchment_rings = []
