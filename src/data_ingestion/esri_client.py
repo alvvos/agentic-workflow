@@ -49,8 +49,6 @@ _WALK_TRAVEL_MODE = json.dumps({
         "Avoid Roads Unsuitable for Pedestrians",
         "Avoid Roads Prohibited for Pedestrians",
     ],
-    "simplificationTolerance": 2,
-    "simplificationToleranceUnits": "esriMetersPerUnit",
     "timeAttributeName": "WalkTime",
     "type": "WALK",
     "useHierarchy": False,
@@ -266,11 +264,20 @@ def _fetch_service_area_isochrones(lat: float, lon: float, token: str) -> list |
         if not geom_rings:
             rings.append(None)
             continue
+        # First ring is the outer boundary; subsequent rings are holes (e.g. sea/coast cut-outs).
+        # Store all so the renderer can punch holes correctly.
         outer = geom_rings[0]
-        rings.append({
+        holes = [
+            {"lons": [pt[0] for pt in r], "lats": [pt[1] for pt in r]}
+            for r in geom_rings[1:]
+        ]
+        entry = {
             "lons": [pt[0] for pt in outer],
             "lats": [pt[1] for pt in outer],
-        })
+        }
+        if holes:
+            entry["holes"] = holes
+        rings.append(entry)
 
     return rings if any(r is not None for r in rings) else None
 

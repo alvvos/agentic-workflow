@@ -141,6 +141,16 @@
     border-bottom: none !important;
 }
 
+/* ── Chat — sidebar de conversaciones ───────────────────────────────────── */
+.chat-conv-item:hover {
+    background-color: #f0f4ff !important;
+    border-left-color: #b3c8f5 !important;
+}
+.chat-conv-item.active {
+    background-color: #eef3ff !important;
+    border-left-color: #0052CC !important;
+}
+
 /* ── Chat streaming — cursor parpadeante ─────────────────────────────────── */
 @keyframes blink {
     0%, 100% { opacity: 1; }

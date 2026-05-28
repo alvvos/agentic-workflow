@@ -71,24 +71,6 @@ def _fmt_eur(v, decimals=0):
     return f"{v:.{decimals}f} €"
 
 
-def _isochrone(lat, lon, r_m, seed=0, n=90):
-    rng = random.Random(seed + int(r_m))
-    phases = [rng.uniform(0, 2 * math.pi) for _ in range(5)]
-    pts_lat, pts_lon = [], []
-    for i in range(n + 1):
-        a = 2 * math.pi * i / n
-        noise = (
-            0.16 * math.sin(3  * a + phases[0]) +
-            0.10 * math.sin(5  * a + phases[1]) +
-            0.07 * math.cos(9  * a + phases[2]) +
-            0.04 * math.sin(14 * a + phases[3]) +
-            0.03 * math.cos(19 * a + phases[4])
-        )
-        r = r_m * max(0.52, 1.0 + noise)
-        pts_lat.append(lat + (r * math.cos(a)) / 111_320)
-        pts_lon.append(lon + (r * math.sin(a)) / (111_320 * math.cos(math.radians(lat))))
-    return pts_lat, pts_lon
-
 
 def _info_ubicacion(uuid):
     try:
@@ -168,10 +150,10 @@ def _auto_insight_edad(vals):
         return None
     pct_target = total_15_39 / pob10 * 100 if pob10 else None
     pct_peak   = peak / total_15_39 * 100 if total_15_39 else 0
-    txt = f"En 800 m hay {total_15_39:,.0f} personas entre 15 y 39 años (target Miniso)"
+    txt = f"En 800 m hay {total_15_39:,.0f} personas entre 15 y 39 años"
     if pct_target:
         txt += f", el {pct_target:.0f}% del total de {pob10:,.0f} hab. en esa área"
-    txt += (f". La cohorte 25–34 (peak de gasto lifestyle) concentra el {pct_peak:.0f}% de ese grupo.")
+    txt += (f". La cohorte 25–34 concentra el {pct_peak:.0f}% de ese grupo.")
     return txt
 
 
@@ -189,7 +171,7 @@ def _auto_insight_hogar(vals):
     txt = (f"Hay {nhog:,.0f} hogares en radio de 800 m")
     if tam:
         txt += f" (media {tam:.1f} personas/hogar)"
-    txt += f". De ellos, {n_target:,.0f} ({pct:.0f}%) son jóvenes solos, parejas jóvenes o familias con hijos, los perfiles con mayor afinidad natural al concepto Miniso."
+    txt += f". De ellos, {n_target:,.0f} ({pct:.0f}%) son jóvenes solos, parejas jóvenes o familias con hijos."
     if mono:
         pct_m = mono / nhog * 100
         txt += f" Las familias monoparentales ({mono:,.0f} hogares, {pct_m:.0f}%) también buscan valor por precio."
@@ -250,7 +232,7 @@ def _auto_insight_gasto(vals):
            f"un {abs(pct):.0f}% {verb} que la media nacional ({_REF_GASTO_ROPA:,.0f} €).")
     if gasto_pers:
         txt += (f" El gasto en cuidado personal suma {gasto_pers:,.0f} €/hogar, "
-                "señal de predisposición a marcas de lifestyle y autocuidado, categorías directas de Miniso.")
+                "señal de predisposición a marcas de lifestyle y autocuidado.")
     if gasto_ocio:
         txt += f" El ocio y la cultura absorben {gasto_ocio:,.0f} €/hogar, indicando disponibilidad para gasto no esencial."
     return txt
@@ -268,7 +250,7 @@ def _auto_insight_online(vals):
     if propuspo:
         pct_ropa = propuspo / nhog * 100
         txt += (f" De ellos, el {pct_ropa:.0f}% ya ha comprado ropa o deporte online, "
-                "presión omnicanal directa sobre la categoría de Miniso.")
+                "presión omnicanal directa sobre la categoría.")
     if whelain:
         pct_mes = whelain / nhog * 100
         txt += (f" El {pct_mes:.0f}% realizó alguna compra online el último mes: "
@@ -441,7 +423,7 @@ def _build_metric_cards(vals):
         if familias:  parts.append(f"{familias:,.0f} familias c/ hijos")
         pct_str = f"{total_target/nhog*100:.0f}% del área" if nhog else None
         cards.append(dict(
-            icon="fas fa-users", label="Hogares target Miniso",
+            icon="fas fa-users", label="Hogares target",
             main_val=f"{total_target:,.0f}", unit=f"hogares target en 800 m{(' · ' + pct_str) if pct_str else ''}",
             badge_txt=nivel, badge_col=badge_col,
             border_color=_C_AMBER, funnel=None, detail=" · ".join(parts) if parts else None,
@@ -657,35 +639,31 @@ def _fig_captacion(vals):
 
 
 def _fig_piramide_edad(vals):
-    """Pirámide completa con todas las franjas de edad (800 m). Target Miniso 15–39 resaltado."""
+    """Pirámide de población por franjas de edad en radio 800 m."""
 
     def _sum(*keys):
         total = sum(vals.get(k) or 0 for k in keys)
         return total if total > 0 else None
 
-    _C_NON_TARGET = "rgba(150,150,150,0.38)"
-    _C_TARGET_EDGE = "rgba(0,82,204,0.48)"
-    _C_TARGET_PEAK = _C_PRIMARY
+    _C_BAR = "rgba(0,82,204,0.55)"
 
-    # (label, value, color, is_aggregate)
     specs = [
-        ("10–14 años",  _sum("pob_0_4", "pob_5_9", "pob_10_14"),       _C_NON_TARGET),
-        ("15–19 años",  vals.get("pob_15_19"),                          _C_TARGET_EDGE),
-        ("20–24 años",  vals.get("pob_20_24"),                          _C_TARGET_EDGE),
-        ("25–29 años ★",vals.get("pob_25_29"),                          _C_TARGET_PEAK),
-        ("30–34 años ★",vals.get("pob_30_34"),                          _C_TARGET_PEAK),
-        ("35–39 años",  vals.get("pob_35_39"),                          _C_TARGET_EDGE),
-        ("40–54 años",  _sum("pob_40_44", "pob_45_49", "pob_50_54"),    _C_NON_TARGET),
-        ("55–69 años",  _sum("pob_55_59", "pob_60_64", "pob_65_69"),    _C_NON_TARGET),
-        ("70+ años",    _sum("pob_70_74", "pob_75_79", "pob_80_84", "pob_85_plus"), _C_NON_TARGET),
+        ("10–14 años", _sum("pob_0_4", "pob_5_9", "pob_10_14")),
+        ("15–19 años", vals.get("pob_15_19")),
+        ("20–24 años", vals.get("pob_20_24")),
+        ("25–29 años", vals.get("pob_25_29")),
+        ("30–34 años", vals.get("pob_30_34")),
+        ("35–39 años", vals.get("pob_35_39")),
+        ("40–54 años", _sum("pob_40_44", "pob_45_49", "pob_50_54")),
+        ("55–69 años", _sum("pob_55_59", "pob_60_64", "pob_65_69")),
+        ("70+ años",   _sum("pob_70_74", "pob_75_79", "pob_80_84", "pob_85_plus")),
     ]
 
-    labels, values, colors = [], [], []
-    for label, v, color in specs:
+    labels, values = [], []
+    for label, v in specs:
         if v is not None:
             labels.append(label)
             values.append(v)
-            colors.append(color)
 
     if not labels:
         return None
@@ -693,7 +671,7 @@ def _fig_piramide_edad(vals):
     max_v = max(values) if max(values) > 0 else 1
     fig = go.Figure(go.Bar(
         y=labels, x=values, orientation="h",
-        marker=dict(color=colors, line=dict(color="white", width=1)),
+        marker=dict(color=_C_BAR, line=dict(color="white", width=1)),
         text=[f"{v:,.0f}" for v in values],
         textposition="outside", constraintext="none",
         textfont=dict(size=11, color=_C_DARK, **_FONT),
@@ -705,12 +683,7 @@ def _fig_piramide_edad(vals):
                    tickfont=dict(size=10, **_FONT), range=[0, max_v * 1.50]),
         yaxis=dict(showgrid=False, tickfont=dict(size=11, color=_C_DARK, **_FONT), autorange="reversed"),
         plot_bgcolor="white", paper_bgcolor="white", showlegend=False,
-        margin=dict(t=8, b=36, l=100, r=8), hovermode="y unified", bargap=0.28,
-        annotations=[dict(
-            text="★ peak gasto lifestyle · azul intenso = target Miniso (15–39)",
-            x=1, y=-0.10, xref="paper", yref="paper",
-            showarrow=False, font=dict(size=9, color=_C_MUTED), xanchor="right",
-        )],
+        margin=dict(t=8, b=8, l=100, r=8), hovermode="y unified", bargap=0.28,
     )
     return fig
 
@@ -763,9 +736,9 @@ def _fig_mapa(vals, lat, lon, uuid):
     n_comp    = int(vals.get("n_competidores_500m") or 0)
     dist_near = vals.get("dist_competidor_cercano_m") or 200
     pob5      = vals.get("poblacion_5min")
-    iso_seed  = int(uuid.replace("-", ""), 16) % (2 ** 31)
+    comp_seed = int(uuid.replace("-", ""), 16) % (2 ** 31)
 
-    # Geometría real de Esri (returnGeometry=true) — índices [0]=400m, [1]=800m, [2]=1200m
+    # Isócronas reales Esri ServiceArea — índices [0]=5 min, [1]=10 min, [2]=15 min
     catchment = get_catchment_rings(uuid)
     usa_geo_real = catchment is not None and len(catchment) == 3
 
@@ -777,24 +750,27 @@ def _fig_mapa(vals, lat, lon, uuid):
         (1, "rgba(243,156,18,0.10)", "rgba(243,156,18,0.42)", "10 min a pie"),
         (0, "rgba(40,167,69,0.15)",  "rgba(40,167,69,0.65)",  " 5 min a pie"),
     ]
-    radii = [400, 800, 1200]
 
-    for idx, fill_col, line_col, name in ring_specs:
-        if usa_geo_real and catchment[idx] is not None:
-            lats_c = catchment[idx]["lats"]
-            lons_c = catchment[idx]["lons"]
-        else:
-            lats_c, lons_c = _isochrone(lat, lon, radii[idx], seed=iso_seed)
-
-        fig.add_trace(go.Scattermapbox(
-            lat=lats_c, lon=lons_c, mode="lines",
-            fill="toself", fillcolor=fill_col,
-            line=dict(color=line_col, width=2),
-            name=name, hoverinfo="skip",
-        ))
+    if usa_geo_real:
+        for idx, fill_col, line_col, name in ring_specs:
+            ring = catchment[idx]
+            if ring is None:
+                continue
+            # Build coordinate arrays: outer ring + any holes (holes separated by None).
+            lats = list(ring["lats"])
+            lons = list(ring["lons"])
+            for hole in ring.get("holes", []):
+                lats += [None] + list(hole["lats"])
+                lons += [None] + list(hole["lons"])
+            fig.add_trace(go.Scattermapbox(
+                lat=lats, lon=lons,
+                mode="lines", fill="toself", fillcolor=fill_col,
+                line=dict(color=line_col, width=2),
+                name=name, hoverinfo="skip",
+            ))
 
     if n_comp > 0:
-        comps = _mock_competitors(lat, lon, n_comp, dist_near, iso_seed)
+        comps = _mock_competitors(lat, lon, n_comp, dist_near, comp_seed)
         fig.add_trace(go.Scattermapbox(
             lat=[c[0] for c in comps], lon=[c[1] for c in comps],
             mode="markers",
@@ -814,17 +790,6 @@ def _fig_mapa(vals, lat, lon, uuid):
         name="Ubicación", hovertemplate=store_tip,
     ))
 
-    annotations = []
-    if not usa_geo_real:
-        annotations.append(dict(
-            x=0.99, y=0.99, xref="paper", yref="paper",
-            text="⚠ Isócronas aproximadas — sin geometría Esri",
-            showarrow=False, font=dict(size=9, color="rgba(80,80,80,0.75)"),
-            align="right", xanchor="right", yanchor="top",
-            bgcolor="rgba(255,255,255,0.82)",
-            bordercolor="rgba(0,0,0,0.12)", borderwidth=1, borderpad=4,
-        ))
-
     fig.update_layout(
         mapbox=dict(style="carto-positron", center=dict(lat=lat, lon=lon), zoom=14),
         margin=dict(t=0, b=0, l=0, r=0),
@@ -834,7 +799,6 @@ def _fig_mapa(vals, lat, lon, uuid):
                     bordercolor="#ddd", borderwidth=1,
                     font=dict(size=11, color=_C_DARK, **_FONT)),
         paper_bgcolor="white",
-        annotations=annotations,
     )
     return fig
 
@@ -1082,7 +1046,7 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
 
     # ── Tarjetas A: Alcance ───────────────────────────────────────────────────
     cards_a = [c for c in all_cards if c["label"] in
-               {"Captación peatonal", "Hogares target Miniso"}]
+               {"Captación peatonal", "Hogares target"}]
     # ── Tarjetas B: Capacidad económica ───────────────────────────────────────
     cards_b = [c for c in all_cards if c["label"] in
                {"Renta del hogar", "Salud financiera del hogar", "Mercado inmobiliario"}]
@@ -1139,7 +1103,7 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
     if fig_edad:
         sec_a_charts2.append(dbc.Col(
             _chart_card(fig_edad, f"geo-edad-{uid}", _H_CHART,
-                        title="Pirámide de edad · radio 800 m · target Miniso resaltado",
+                        title="Pirámide de edad · radio 800 m",
                         insight=ins_edad),
             xs=12, lg=6, className="mb-3",
         ))

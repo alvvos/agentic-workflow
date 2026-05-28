@@ -116,11 +116,14 @@ def _run(sid: str, messages: list, location_uuid, zone_uuid, session_id: str, ap
                     fn   = _TOOL_FN.get(block.name)
                     args = {**block.input}
 
-                    # Inyectar contexto cuando Claude no proporciona un UUID válido
+                    # Inyectar UUID solo en el parámetro que cada herramienta acepta
                     if location_uuid:
-                        for key in ("location_id", "location_uuid"):
-                            if not _UUID_RE.match(str(args.get(key, ""))):
-                                args[key] = location_uuid
+                        if block.name == "get_gis_data":
+                            if not _UUID_RE.match(str(args.get("location_uuid", ""))):
+                                args["location_uuid"] = location_uuid
+                        else:
+                            if not _UUID_RE.match(str(args.get("location_id", ""))):
+                                args["location_id"] = location_uuid
 
                     if block.name == "get_pm_data":
                         args.setdefault("session_id", session_id)

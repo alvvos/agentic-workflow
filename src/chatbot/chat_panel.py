@@ -1,6 +1,8 @@
 """
 Componente UI del asistente de chat — botón flotante + modal global.
 """
+import time
+
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 
@@ -69,16 +71,48 @@ def build_chat_modal() -> dbc.Modal:
             ),
 
             dbc.ModalBody(
-                html.Div(
-                    id="chat-history",
-                    style={
-                        "height":    "400px",
-                        "overflowY": "auto",
-                        "padding":   "12px 4px",
-                    },
-                    children=_initial_history_content(),
-                ),
-                style={"padding": "16px 20px 8px"},
+                html.Div([
+                    # ── Sidebar de conversaciones ─────────────────────────────
+                    html.Div([
+                        dbc.Button(
+                            [html.I(className="fas fa-plus me-1"), "Nueva"],
+                            id="chat-new-btn",
+                            size="sm",
+                            color="primary",
+                            outline=True,
+                            n_clicks=0,
+                            className="w-100 mb-2",
+                            style={"fontSize": "0.76rem", "borderRadius": "8px",
+                                   "padding": "5px 8px"},
+                        ),
+                        html.Div(
+                            id="chat-conv-list",
+                            style={"overflowY": "auto", "flex": "1",
+                                   "minHeight": "0"},
+                        ),
+                    ], style={
+                        "width":         "185px",
+                        "minWidth":      "185px",
+                        "borderRight":   f"2px solid {_C_GRID}",
+                        "padding":       "10px 8px",
+                        "display":       "flex",
+                        "flexDirection": "column",
+                        "height":        "420px",
+                    }),
+
+                    # ── Área de chat ──────────────────────────────────────────
+                    html.Div(
+                        id="chat-history",
+                        style={
+                            "flex":      "1",
+                            "height":    "420px",
+                            "overflowY": "auto",
+                            "padding":   "12px 12px 8px 14px",
+                        },
+                        children=initial_history_content(),
+                    ),
+                ], style={"display": "flex", "height": "420px"}),
+                style={"padding": "0"},
             ),
 
             dbc.ModalFooter(
@@ -127,6 +161,7 @@ def build_chat_modal() -> dbc.Modal:
 
             dcc.Store(id="chat-messages-store", data=[]),
             dcc.Store(id="chat-stream-id",      data=None),
+            dcc.Store(id="chat-conv-id",        data=None),
             dcc.Interval(
                 id="chat-stream-interval",
                 interval=80,
@@ -142,6 +177,66 @@ def build_chat_modal() -> dbc.Modal:
         scrollable=False,
         contentClassName="chat-modal-content",
     )
+
+
+# ── Helpers de conversaciones ─────────────────────────────────────────────────
+
+def _rel_time(ts: float) -> str:
+    diff = time.time() - ts
+    if diff < 3600:
+        return "ahora"
+    if diff < 86400:
+        return "hoy"
+    if diff < 172800:
+        return "ayer"
+    days = int(diff / 86400)
+    return f"hace {days}d"
+
+
+def conv_item(conv: dict) -> html.Div:
+    cid   = conv["id"]
+    title = conv.get("title", "Conversación")
+    ts    = conv.get("updated_at", 0)
+
+    return html.Div(
+        [
+            html.Div(title, style={
+                "fontSize":     "0.77rem",
+                "fontWeight":   "400",
+                "color":        "#2c3e50",
+                "overflow":     "hidden",
+                "textOverflow": "ellipsis",
+                "whiteSpace":   "nowrap",
+                "lineHeight":   "1.3",
+            }),
+            html.Div(_rel_time(ts), style={
+                "fontSize":  "0.66rem",
+                "color":     _C_MUTED,
+                "marginTop": "2px",
+            }),
+        ],
+        id={"type": "conv-item", "id": cid},
+        n_clicks=0,
+        style={
+            "padding":      "6px 7px",
+            "cursor":       "pointer",
+            "borderRadius": "6px",
+            "borderLeft":   f"3px solid transparent",
+            "marginBottom": "2px",
+        },
+        className="chat-conv-item",
+    )
+
+
+def build_conv_list(convs: list[dict]) -> list:
+    if not convs:
+        return [html.Div("Sin conversaciones", style={
+            "fontSize":  "0.74rem",
+            "color":     _C_MUTED,
+            "textAlign": "center",
+            "marginTop": "20px",
+        })]
+    return [conv_item(c) for c in convs]
 
 
 # ── Helpers internos ──────────────────────────────────────────────────────────
@@ -207,7 +302,7 @@ def _suggestion_chips() -> html.Div:
               "border": f"1px solid {_C_GRID}"})
 
 
-def _initial_history_content() -> list:
+def initial_history_content() -> list:
     return [_welcome_message(), _suggestion_chips()]
 
 
