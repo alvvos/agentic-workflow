@@ -13,7 +13,11 @@ from datetime import date
 
 import anthropic
 
-from src.chatbot.tools import get_pm_data, get_gis_data, get_weather_holidays, _find_location, _load_ubicaciones
+from src.chatbot.tools import (
+    get_pm_data, get_gis_data, get_weather_holidays,
+    get_forecast, get_anomalies, get_hourly_breakdown, compare_locations,
+    _find_location, _load_ubicaciones,
+)
 from src.chatbot.cache import get_cached, set_cached
 
 _MODEL = "claude-sonnet-4-6"
@@ -55,6 +59,81 @@ _TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "get_forecast",
+        "description": (
+            "Ejecuta el modelo predictivo XGBoost y devuelve las visitas previstas "
+            "para los próximos N días de una zona concreta. Incluye métricas de precisión "
+            "(accuracy, MAE, WMAPE) si hay datos reales recientes con los que comparar."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location_uuid": {"type": "string", "description": "UUID de la ubicación."},
+                "zone_uuid":     {"type": "string", "description": "UUID de la zona a predecir."},
+                "n_dias":        {"type": "integer", "description": "Horizonte de predicción en días (1-90). Default 14."},
+            },
+            "required": ["location_uuid", "zone_uuid"],
+        },
+    },
+    {
+        "name": "get_anomalies",
+        "description": (
+            "Detecta días con tráfico anómalo (z-score > 2σ) en un rango de fechas. "
+            "Devuelve picos y caídas ordenados por magnitud, con contexto de la media "
+            "del periodo. Útil para identificar eventos, incidencias o patrones atípicos."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location_uuid": {"type": "string", "description": "UUID de la ubicación."},
+                "fecha_inicio":  {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
+                "fecha_fin":     {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
+                "zone_uuid":     {"type": "string", "description": "UUID de zona específica (opcional)."},
+            },
+            "required": ["location_uuid", "fecha_inicio", "fecha_fin"],
+        },
+    },
+    {
+        "name": "get_hourly_breakdown",
+        "description": (
+            "Devuelve el perfil horario de visitas: hora pico global, y por cada día de la semana "
+            "la hora pico y las visitas medias. Útil para responder preguntas sobre cuándo llega "
+            "el mayor tráfico, diferencias entre días laborables y fin de semana, etc."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location_uuid": {"type": "string", "description": "UUID de la ubicación."},
+                "fecha_inicio":  {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
+                "fecha_fin":     {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
+                "zone_uuid":     {"type": "string", "description": "UUID de zona específica (opcional)."},
+            },
+            "required": ["location_uuid", "fecha_inicio", "fecha_fin"],
+        },
+    },
+    {
+        "name": "compare_locations",
+        "description": (
+            "Compara métricas de tráfico entre dos o más ubicaciones en el mismo periodo. "
+            "Devuelve totales, medias diarias y un ranking. Métricas disponibles: "
+            "total_visits, unique_visitors, new_visitors, dwell_time."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location_uuids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Lista de UUIDs de ubicaciones a comparar.",
+                },
+                "fecha_inicio": {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
+                "fecha_fin":    {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
+                "metrica":      {"type": "string", "description": "Métrica a comparar (default: unique_visitors)."},
+            },
+            "required": ["location_uuids", "fecha_inicio", "fecha_fin"],
+        },
+    },
+    {
         "name": "get_gis_data",
         "description": (
             "Devuelve el perfil geoespacial local de una ubicación: población accesible "
@@ -76,6 +155,10 @@ _TOOL_FN = {
     "get_pm_data":           lambda args: get_pm_data(**args),
     "get_gis_data":          lambda args: get_gis_data(**args),
     "get_weather_holidays":  lambda args: get_weather_holidays(**args),
+    "get_forecast":          lambda args: get_forecast(**args),
+    "get_anomalies":         lambda args: get_anomalies(**args),
+    "get_hourly_breakdown":  lambda args: get_hourly_breakdown(**args),
+    "compare_locations":     lambda args: compare_locations(**args),
 }
 
 

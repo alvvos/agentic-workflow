@@ -82,6 +82,21 @@ def serve_layout():
            contentClassName="border-0 rounded-4",
            style={"boxShadow": "0 20px 60px rgba(0,0,0,0.15)"}),
 
+        dbc.Modal([
+            dbc.ModalBody(
+                html.Div([
+                    html.Div([
+                        dbc.Spinner(color="primary", size="sm"),
+                        html.H6(id="modal-ml-label", children="Entrenando modelo…", className="ms-3 mb-0 text-primary fw-bold"),
+                    ], className="d-flex align-items-center mb-3"),
+                    html.P("El motor XGBoost está procesando el histórico. Esto puede tardar unos segundos.", className="text-muted small mb-0"),
+                ], className="p-4"),
+                className="p-0",
+            ),
+        ], id="modal-ml-loading", is_open=False, backdrop="static", keyboard=False, centered=True,
+           contentClassName="border-0 rounded-4",
+           style={"boxShadow": "0 20px 60px rgba(0,0,0,0.15)"}),
+
         dbc.Toast(id="toast-notificacion", header="Notificación", is_open=False, dismissable=True, icon="info", duration=4000, style={"position": "fixed", "top": 20, "right": 20, "width": 350, "zIndex": 9999, "fontSize": "15px"}),
 
         build_chat_modal(),

@@ -93,6 +93,7 @@ def construir_figura_bi(df, df_hist, metrica, titulo, zonas_ordenadas, color_map
         angulo_x = -90 if len(fechas_unicas) > 10 else 0
 
     has_historical = not df_hist.empty and offset_dias > 0
+    mostrar_numeros = len(fechas_unicas) <= 14
 
     for zona in zonas_ordenadas:
         df_z = df[df['Zona'] == zona].copy()
@@ -124,7 +125,7 @@ def construir_figura_bi(df, df_hist, metrica, titulo, zonas_ordenadas, color_map
             if not df_z_hist.empty:
                 df_z_hist = df_z_hist.sort_values('fecha_alineada')
                 fig.add_trace(go.Bar(x=df_z_hist['fecha_alineada'], y=df_z_hist[metrica], name=f"{zona} (Ant.)", marker_color=color_zona, opacity=0.15, marker_line_width=1, marker_line_color=color_zona, hoverinfo='skip', showlegend=False, customdata=[zona]*len(df_z_hist)))
-            bar_text = [f"{int(round(v)):,}" if pd.notna(v) and v > 0 else "" for v in df_z[metrica]]
+            bar_text = [f"{int(round(v)):,}" if (mostrar_numeros and pd.notna(v) and v > 0) else "" for v in df_z[metrica]]
             fig.add_trace(go.Bar(x=df_z['fecha_dia'], y=df_z[metrica], name=zona, marker_color=color_zona, hoverinfo='text', hovertext=hover_texts, opacity=0.9, customdata=[zona]*len(df_z), text=bar_text, textposition='inside', insidetextanchor='middle', constraintext='none', textfont=dict(size=10, color='white', family='Arial Black, Arial, sans-serif')))
         else:
             if not df_z_hist.empty:

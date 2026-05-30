@@ -24,7 +24,10 @@ import diskcache
 
 from src.chatbot.cache import set_cached
 from src.chatbot.client import _TOOL_DEFINITIONS, _system_prompt
-from src.chatbot.tools import get_pm_data, get_gis_data, get_weather_holidays
+from src.chatbot.tools import (
+    get_pm_data, get_gis_data, get_weather_holidays,
+    get_forecast, get_anomalies, get_hourly_breakdown, compare_locations,
+)
 
 _CACHE_DIR = Path(__file__).parent.parent / "data" / ".stream_cache"
 _dc = diskcache.Cache(str(_CACHE_DIR))
@@ -33,12 +36,20 @@ _TOOL_LABELS = {
     "get_pm_data":          "Consultando datos de tráfico…",
     "get_gis_data":         "Consultando perfil geoespacial…",
     "get_weather_holidays": "Consultando clima y festivos…",
+    "get_forecast":         "Ejecutando modelo predictivo…",
+    "get_anomalies":        "Analizando anomalías…",
+    "get_hourly_breakdown": "Calculando perfil horario…",
+    "compare_locations":    "Comparando ubicaciones…",
 }
 
 _TOOL_FN = {
     "get_pm_data":          lambda args: get_pm_data(**args),
     "get_gis_data":         lambda args: get_gis_data(**args),
     "get_weather_holidays": lambda args: get_weather_holidays(**args),
+    "get_forecast":         lambda args: get_forecast(**args),
+    "get_anomalies":        lambda args: get_anomalies(**args),
+    "get_hourly_breakdown": lambda args: get_hourly_breakdown(**args),
+    "compare_locations":    lambda args: compare_locations(**args),
 }
 
 

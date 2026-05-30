@@ -149,7 +149,7 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
         )
         geo_features_activos = [c for c in GEO_FEATURE_COLS if geo_rows[c].notna().any()]
         for col in geo_features_activos:
-            train[col] = geo_rows[col].values
+            train[col] = pd.to_numeric(geo_rows[col], errors='coerce').values
 
         features = [
             'es_finde', 'es_festivo', 'llueve', 'dia_semana', 'dia_mes', 'mes',
@@ -226,7 +226,7 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
                 'mucho_calor': 1 if t_max >= 32.0 else 0,
                 'mucho_frio': 1 if t_min <= 8.0 else 0,
                 'clima_ideal': 1 if (18.0 <= t_max <= 26.0 and llueve == 0) else 0,
-                **{col: geo_vals_pred[col] for col in geo_features_activos}
+                **{col: (float(geo_vals_pred[col]) if geo_vals_pred[col] is not None else np.nan) for col in geo_features_activos}
             }])
 
             pred = np.maximum(0, np.round(modelo.predict(row[features])[0]))

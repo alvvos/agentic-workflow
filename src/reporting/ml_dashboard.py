@@ -118,7 +118,12 @@ def filtrar_zonas_desde_global(locs):
      Output('ml-card-iter', 'children'), Output('ml-graph-res', 'figure'), Output('ml-error-msg', 'children')],
     [Input('ml-btn-run', 'n_clicks')],
     [State('drop-locs', 'value'), State('ml-drop-zone', 'value'), State('ml-date-falso', 'date'),
-     State('ml-slider-horiz', 'value'), State('session-id', 'data')]
+     State('ml-slider-horiz', 'value'), State('session-id', 'data')],
+    running=[
+        (Output('modal-ml-loading', 'is_open'), True, False),
+        (Output('modal-ml-label', 'children'), 'Entrenando modelo…', 'Entrenando modelo…'),
+        (Output('ml-btn-run', 'disabled'), True, False),
+    ],
 )
 def ejecutar_auditoria(n, locs, zone, fecha, horiz, session_id):
     if n is None: return no_update, no_update, no_update, no_update, go.Figure().update_layout(template='plotly_white'), ""
@@ -169,7 +174,12 @@ def ejecutar_auditoria(n, locs, zone, fecha, horiz, session_id):
     [Output('ml-forecast-manana', 'children'), Output('ml-manana-msg', 'children')],
     [Input('ml-btn-manana', 'n_clicks')],
     [State('drop-locs', 'value'), State('session-id', 'data')],
-    prevent_initial_call=True
+    prevent_initial_call=True,
+    running=[
+        (Output('modal-ml-loading', 'is_open'), True, False),
+        (Output('modal-ml-label', 'children'), 'Calculando proyección de mañana…', 'Calculando proyección de mañana…'),
+        (Output('ml-btn-manana', 'disabled'), True, False),
+    ],
 )
 def ejecutar_forecast_manana(n, locs, session_id):
     if n is None:
