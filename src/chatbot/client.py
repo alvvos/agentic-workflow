@@ -286,7 +286,8 @@ def chat(
                     continue
                 fn   = _TOOL_FN.get(block.name)
                 args = {**block.input}
-                if block.name == "get_pm_data":
+                _TOOLS_SESSION = {"get_pm_data", "get_forecast", "get_anomalies", "get_hourly_breakdown", "compare_locations"}
+                if block.name in _TOOLS_SESSION:
                     args.setdefault("session_id", session_id)
 
                 result = fn(args) if fn else {"error": f"Herramienta desconocida: {block.name}"}

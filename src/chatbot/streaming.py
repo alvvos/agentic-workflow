@@ -127,19 +127,25 @@ def _run(sid: str, messages: list, location_uuid, zone_uuid, session_id: str, ap
                     fn   = _TOOL_FN.get(block.name)
                     args = {**block.input}
 
-                    # Inyectar UUID solo en el parámetro que cada herramienta acepta
+                    # Inyectar UUID según el nombre de parámetro que acepta cada herramienta
+                    _TOOLS_UUID_PARAM  = {"get_gis_data", "get_forecast", "get_anomalies", "get_hourly_breakdown"}
+                    _TOOLS_ID_PARAM    = {"get_pm_data", "get_weather_holidays"}
+                    _TOOLS_SESSION     = {"get_pm_data", "get_forecast", "get_anomalies", "get_hourly_breakdown", "compare_locations"}
+                    _TOOLS_ZONE_INJECT = {"get_forecast", "get_anomalies", "get_hourly_breakdown", "get_pm_data"}
+
                     if location_uuid:
-                        if block.name == "get_gis_data":
+                        if block.name in _TOOLS_UUID_PARAM:
                             if not _UUID_RE.match(str(args.get("location_uuid", ""))):
                                 args["location_uuid"] = location_uuid
-                        else:
+                        elif block.name in _TOOLS_ID_PARAM:
                             if not _UUID_RE.match(str(args.get("location_id", ""))):
                                 args["location_id"] = location_uuid
 
-                    if block.name == "get_pm_data":
+                    if block.name in _TOOLS_SESSION:
                         args.setdefault("session_id", session_id)
-                        if zone_uuid:
-                            args.setdefault("zone_uuid", zone_uuid)
+
+                    if zone_uuid and block.name in _TOOLS_ZONE_INJECT:
+                        args.setdefault("zone_uuid", zone_uuid)
 
                     res  = fn(args) if fn else {"error": f"Herramienta desconocida: {block.name}"}
                     results.append({

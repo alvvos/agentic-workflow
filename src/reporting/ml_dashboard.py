@@ -31,7 +31,11 @@ def generar_panel_ml():
     return html.Div([
         dbc.Row([
             dbc.Col([
-                html.H4([html.I(className="fas fa-brain me-2 text-primary"), "Motor Predictivo (Machine Learning)"], className="fw-bold mb-1 text-dark"),
+                html.H4([
+                    html.I(className="fas fa-brain me-2 text-primary"),
+                    "Forecasting",
+                    dbc.Badge("Beta", color="warning", pill=True, className="ms-2 align-middle small fw-normal"),
+                ], className="fw-bold mb-1 text-dark"),
                 html.P("Entrena un modelo de forecasting al instante para predecir el flujo futuro de visitantes basado en el histórico sincronizado.", className="text-muted small")
             ], width=12)
         ], className="mb-4"),
