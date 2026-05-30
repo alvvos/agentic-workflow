@@ -248,11 +248,30 @@ def get_forecast(
         return {"error": "n_dias debe estar entre 1 y 90."}
 
     from src.services.ml_predictivo import ejecutar_auditoria_predictiva
+    from src.data_processing.constructor_master import cargar_csv_crudo, enriquecer_datos_ubicacion
     from datetime import date
 
-    df = _load_dataset(session_id)
-    if df.empty:
+    archivo = str(_DATA_DIR / f"dataset_{session_id}.csv")
+    if not Path(archivo).exists():
+        files = sorted(glob(_RAW_GLOB))
+        if not files:
+            return {"error": "No hay datos disponibles."}
+        archivo = files[-1]
+
+    df_crudo = cargar_csv_crudo(archivo)
+    if df_crudo is None or df_crudo.empty:
         return {"error": "No hay datos disponibles."}
+
+    # Si el CSV ya tiene las columnas enriquecidas (ej. tests), úsalas directamente
+    # para evitar llamadas externas innecesarias y conflictos de columnas en el merge.
+    _ML_COLS = {"es_festivo", "llueve", "temp_max", "temp_min"}
+    if _ML_COLS.issubset(df_crudo.columns):
+        df = df_crudo[df_crudo["location_id"] == location_uuid].copy()
+    else:
+        df = enriquecer_datos_ubicacion(df_crudo, location_uuid, str(_UBIC_PATH))
+
+    if df.empty:
+        return {"error": f"Sin datos para la ubicación {location_uuid}."}
 
     falso_hoy = date.today().isoformat()
     result = ejecutar_auditoria_predictiva(df, location_uuid, zone_uuid, falso_hoy, n_dias)
@@ -446,6 +465,8 @@ def compare_locations(
         t0, t1 = pd.Timestamp(fecha_inicio), pd.Timestamp(fecha_fin)
     except Exception:
         return {"error": "Formato de fecha no válido. Usa YYYY-MM-DD."}
+    if t1 < t0:
+        return {"error": "La fecha de inicio debe ser anterior a la fecha de fin."}
 
     df = _load_dataset(session_id)
     if df.empty:
