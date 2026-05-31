@@ -91,13 +91,13 @@ def build_chat_modal() -> dbc.Modal:
                                    "minHeight": "0"},
                         ),
                     ], style={
-                        "width":         "185px",
-                        "minWidth":      "185px",
+                        "width":         "220px",
+                        "minWidth":      "220px",
                         "borderRight":   f"2px solid {_C_GRID}",
                         "padding":       "10px 8px",
                         "display":       "flex",
                         "flexDirection": "column",
-                        "height":        "420px",
+                        "height":        "65vh",
                     }),
 
                     # ── Área de chat ──────────────────────────────────────────
@@ -105,13 +105,13 @@ def build_chat_modal() -> dbc.Modal:
                         id="chat-history",
                         style={
                             "flex":      "1",
-                            "height":    "420px",
+                            "height":    "65vh",
                             "overflowY": "auto",
                             "padding":   "12px 12px 8px 14px",
                         },
                         children=initial_history_content(),
                     ),
-                ], style={"display": "flex", "height": "420px"}),
+                ], style={"display": "flex", "height": "65vh"}),
                 style={"padding": "0"},
             ),
 
@@ -172,7 +172,7 @@ def build_chat_modal() -> dbc.Modal:
         ],
         id="chat-modal",
         is_open=False,
-        size="lg",
+        size="xl",
         centered=True,
         backdrop=True,
         scrollable=False,
