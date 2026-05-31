@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-_RUTA_JSON     = 'src/data/todas_las_ubicaciones.json'
+_RUTA_JSON     = './todas_las_ubicaciones.json'
 _URL_AITANNA   = 'https://platform.aitanna.ai/api/v1/get-all-locations-and-zones'
 _NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search'
 _NOMINATIM_UA  = 'agentic-workflow/1.0 (alvaro.salis@69summer.com)'

@@ -3,16 +3,19 @@ from dash import html, dcc
 import dash_bootstrap_components as dbc
 
 from src.core.config import MODO_DESARROLLO
+from src.core.auth import get_current_role
 from src.layout.sidebar import build_sidebar
 from src.layout.tabs.tab_pm import build_tab_pm
 from src.chatbot.chat_panel import build_chat_fab, build_chat_modal
 from src.layout.tabs.tab_bi import build_tab_bi
 from src.layout.tabs.tab_reportes import build_tab_reportes
 from src.layout.tabs.tab_ml import build_tab_ml
+from src.layout.tabs.tab_admin import build_tab_admin
 
 
 def serve_layout():
     session_id = "local_dev" if MODO_DESARROLLO else flask.session.get('user', '')
+    role = get_current_role()
 
     sidebar = build_sidebar()
 
@@ -36,7 +39,8 @@ def serve_layout():
                     build_tab_pm(),
                     build_tab_bi(),
                     build_tab_reportes(),
-                    build_tab_ml(),
+                    *([] if role != "admin" else [build_tab_ml()]),
+                    *([] if role != "admin" else [build_tab_admin()]),
                 ])
             ])
         ], className="border-0 shadow-sm rounded-4")

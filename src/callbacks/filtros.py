@@ -5,7 +5,7 @@ from src.core.data_master import mapa_locs_por_org, mapa_zonas_por_loc
 
 @app.callback(Output("sidebar-periodo-wrapper", "style"), Input("tabs-panel", "value"))
 def toggle_periodo_sidebar(tab):
-    if tab in ('tab-ejecutivo', 'tab-ml'):
+    if tab in ('tab-ejecutivo', 'tab-ml', 'tab-admin'):
         return {"display": "none"}
     return {}
 

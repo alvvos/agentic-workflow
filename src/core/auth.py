@@ -6,11 +6,46 @@ from src.core.config import MODO_DESARROLLO, server
 
 _USERS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'users.json')
 
-def _load_users():
+
+def _load_users() -> dict:
     if not os.path.exists(_USERS_FILE):
         return {}
     with open(_USERS_FILE) as f:
         return json.load(f)
+
+
+def _save_users(users: dict) -> None:
+    with open(_USERS_FILE, 'w') as f:
+        json.dump(users, f, indent=2)
+
+
+def _get_entry(users: dict, username: str) -> dict:
+    """Normaliza la entrada del usuario al formato {password, role} sea cual sea el formato en disco."""
+    entry = users.get(username)
+    if entry is None:
+        return {}
+    if isinstance(entry, str):
+        return {"password": entry, "role": "user"}
+    return entry
+
+
+def get_current_user() -> str:
+    """Devuelve el nombre del usuario autenticado o '' en modo desarrollo."""
+    if MODO_DESARROLLO:
+        return "local_dev"
+    return flask.session.get('user', '')
+
+
+def get_current_role() -> str:
+    """Devuelve el rol del usuario autenticado ('admin' | 'user')."""
+    if MODO_DESARROLLO:
+        return "admin"
+    return flask.session.get('role', 'user')
+
+
+def is_admin() -> bool:
+    return get_current_role() == "admin"
+
 
 _LOGIN_HTML = """<!DOCTYPE html>
 <html lang="es">
@@ -48,7 +83,7 @@ _LOGIN_HTML = """<!DOCTYPE html>
           <label class="form-label fw-bold small text-muted">Contraseña</label>
           <div class="input-group">
             <input type="password" id="password" name="password" class="form-control rounded-start-3" required>
-            <button type="button" class="btn btn-outline-secondary toggle-pwd rounded-end-3" onclick="togglePwd()" tabindex="-1" aria-label="Mostrar contraseña">
+            <button type="button" class="btn toggle-pwd rounded-end-3" onclick="togglePwd()" tabindex="-1" aria-label="Mostrar contraseña">
               <svg id="eye-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/>
                 <path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/>
@@ -96,8 +131,10 @@ def login():
         username = flask.request.form.get('username', '').strip()
         password = flask.request.form.get('password', '')
         users = _load_users()
-        if username in users and check_password_hash(users[username], password):
+        entry = _get_entry(users, username)
+        if entry and check_password_hash(entry['password'], password):
             flask.session['user'] = username
+            flask.session['role'] = entry.get('role', 'user')
             return flask.redirect('/')
         return flask.render_template_string(_LOGIN_HTML, error='Usuario o contraseña incorrectos')
     return flask.render_template_string(_LOGIN_HTML, error=None)
@@ -106,4 +143,5 @@ def login():
 @server.route('/logout')
 def logout():
     flask.session.pop('user', None)
+    flask.session.pop('role', None)
     return flask.redirect('/login')
