@@ -14,6 +14,7 @@ from src.chatbot.chat_panel import (
 from src.chatbot.history import (
     create_conversation, update_conversation,
     list_conversations, load_conversation,
+    rename_conversation, delete_conversation,
 )
 from src.chatbot.mentions import parse_all_mentions, get_mention_map
 from src.chatbot.tools import _find_location
@@ -99,6 +100,83 @@ def on_select_conversation(n_clicks_list, session_id):
         return no_update, no_update, no_update
     messages = conv.get("messages", [])
     return conv_id, messages, render_history(messages)
+
+
+# ── Renombrar conversación ───────────────────────────────────────────────────
+
+@callback(
+    Output("chat-conv-editing",   "data"),
+    Output("chat-conv-list",      "children", allow_duplicate=True),
+    Input({"type": "conv-rename-btn", "id": ALL}, "n_clicks"),
+    State("session-id", "data"),
+    prevent_initial_call=True,
+)
+def start_rename(n_clicks_list, session_id):
+    if not any(n_clicks_list or []):
+        return no_update, no_update
+    from dash import ctx
+    conv_id = ctx.triggered_id["id"]
+    convs   = list_conversations(session_id or "anonymous")
+    return conv_id, build_conv_list(convs, editing_id=conv_id)
+
+
+@callback(
+    Output("chat-conv-editing",   "data",     allow_duplicate=True),
+    Output("chat-conv-list",      "children", allow_duplicate=True),
+    Input({"type": "conv-rename-confirm", "id": ALL}, "n_clicks"),
+    Input({"type": "conv-rename-input",   "id": ALL}, "n_submit"),
+    State({"type": "conv-rename-input",   "id": ALL}, "value"),
+    State("session-id", "data"),
+    prevent_initial_call=True,
+)
+def confirm_rename(n_confirm, n_submit_list, values, session_id):
+    if not any(n_confirm or []) and not any(n_submit_list or []):
+        return no_update, no_update
+    from dash import ctx
+    conv_id   = ctx.triggered_id["id"]
+    new_title = (values[0] if values else "").strip() or "Conversación"
+    sid       = session_id or "anonymous"
+    rename_conversation(sid, conv_id, new_title)
+    return None, build_conv_list(list_conversations(sid))
+
+
+@callback(
+    Output("chat-conv-editing",   "data",     allow_duplicate=True),
+    Output("chat-conv-list",      "children", allow_duplicate=True),
+    Input({"type": "conv-rename-cancel", "id": ALL}, "n_clicks"),
+    State("session-id", "data"),
+    prevent_initial_call=True,
+)
+def cancel_rename(n_clicks_list, session_id):
+    if not any(n_clicks_list or []):
+        return no_update, no_update
+    return None, build_conv_list(list_conversations(session_id or "anonymous"))
+
+
+# ── Eliminar conversación ────────────────────────────────────────────────────
+
+@callback(
+    Output("chat-conv-list",      "children", allow_duplicate=True),
+    Output("chat-conv-id",        "data",     allow_duplicate=True),
+    Output("chat-messages-store", "data",     allow_duplicate=True),
+    Output("chat-history",        "children", allow_duplicate=True),
+    Input({"type": "conv-delete-btn", "id": ALL}, "n_clicks"),
+    State("session-id",    "data"),
+    State("chat-conv-id",  "data"),
+    prevent_initial_call=True,
+)
+def on_delete_conversation(n_clicks_list, session_id, active_conv_id):
+    if not any(n_clicks_list or []):
+        return no_update, no_update, no_update, no_update
+    from dash import ctx
+    conv_id = ctx.triggered_id["id"]
+    sid     = session_id or "anonymous"
+    delete_conversation(sid, conv_id)
+    convs   = list_conversations(sid)
+    new_list = build_conv_list(convs)
+    if conv_id == active_conv_id:
+        return new_list, None, [], initial_history_content()
+    return new_list, no_update, no_update, no_update
 
 
 # ── Dropdown de @menciones — mostrar/filtrar al escribir @ ───────────────────

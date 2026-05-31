@@ -159,9 +159,10 @@ def build_chat_modal() -> dbc.Modal:
                        "padding": "10px 20px"},
             ),
 
-            dcc.Store(id="chat-messages-store", data=[]),
-            dcc.Store(id="chat-stream-id",      data=None),
-            dcc.Store(id="chat-conv-id",        data=None),
+            dcc.Store(id="chat-messages-store",  data=[]),
+            dcc.Store(id="chat-stream-id",       data=None),
+            dcc.Store(id="chat-conv-id",         data=None),
+            dcc.Store(id="chat-conv-editing",    data=None),
             dcc.Interval(
                 id="chat-stream-interval",
                 interval=80,
@@ -193,42 +194,103 @@ def _rel_time(ts: float) -> str:
     return f"hace {days}d"
 
 
-def conv_item(conv: dict) -> html.Div:
+_BTN_ACTION = {
+    "fontSize":   "0.58rem",
+    "color":      "#c0c8d8",
+    "background": "none",
+    "border":     "none",
+    "cursor":     "pointer",
+    "padding":    "1px 3px",
+    "lineHeight": "1",
+}
+
+
+def conv_item(conv: dict, editing: bool = False) -> html.Div:
     cid   = conv["id"]
     title = conv.get("title", "Conversación")
     ts    = conv.get("updated_at", 0)
 
-    return html.Div(
-        [
-            html.Div(title, style={
-                "fontSize":     "0.77rem",
-                "fontWeight":   "400",
-                "color":        "#2c3e50",
-                "overflow":     "hidden",
-                "textOverflow": "ellipsis",
-                "whiteSpace":   "nowrap",
-                "lineHeight":   "1.3",
-            }),
+    if editing:
+        body = html.Div([
+            dbc.Input(
+                id={"type": "conv-rename-input", "id": cid},
+                value=title,
+                debounce=False,
+                n_submit=0,
+                size="sm",
+                autofocus=True,
+                style={"fontSize": "0.74rem", "height": "24px",
+                       "padding": "2px 5px", "marginBottom": "3px"},
+            ),
+            html.Div([
+                html.Button(
+                    html.I(className="fas fa-check"),
+                    id={"type": "conv-rename-confirm", "id": cid},
+                    n_clicks=0,
+                    style={**_BTN_ACTION, "color": "white",
+                           "background": "#28a745", "borderRadius": "4px",
+                           "padding": "2px 7px", "marginRight": "3px"},
+                ),
+                html.Button(
+                    html.I(className="fas fa-times"),
+                    id={"type": "conv-rename-cancel", "id": cid},
+                    n_clicks=0,
+                    style={**_BTN_ACTION, "color": "white",
+                           "background": "#6c757d", "borderRadius": "4px",
+                           "padding": "2px 7px"},
+                ),
+            ], style={"display": "flex"}),
+        ], style={"padding": "4px 6px"})
+    else:
+        body = html.Div([
+            html.Div([
+                # Área clickable — sólo el título, separada de los botones
+                html.Div(title,
+                    id={"type": "conv-item", "id": cid},
+                    n_clicks=0,
+                    style={
+                        "fontSize":     "0.77rem",
+                        "color":        "#2c3e50",
+                        "overflow":     "hidden",
+                        "textOverflow": "ellipsis",
+                        "whiteSpace":   "nowrap",
+                        "lineHeight":   "1.3",
+                        "flex":         "1",
+                        "minWidth":     "0",
+                        "cursor":       "pointer",
+                        "paddingRight": "2px",
+                    }),
+                # Botones de acción — hermanos del título, sin bubbling
+                html.Div([
+                    html.Button(html.I(className="fas fa-pen"),
+                        id={"type": "conv-rename-btn", "id": cid},
+                        n_clicks=0, title="Renombrar", style=_BTN_ACTION),
+                    html.Button(html.I(className="fas fa-trash"),
+                        id={"type": "conv-delete-btn", "id": cid},
+                        n_clicks=0, title="Eliminar",
+                        style={**_BTN_ACTION, "color": "#e8b4b8"}),
+                ], className="conv-actions",
+                   style={"display": "flex", "flexShrink": "0"}),
+            ], style={"display": "flex", "alignItems": "center"}),
             html.Div(_rel_time(ts), style={
                 "fontSize":  "0.66rem",
                 "color":     _C_MUTED,
-                "marginTop": "2px",
+                "marginTop": "1px",
             }),
-        ],
-        id={"type": "conv-item", "id": cid},
-        n_clicks=0,
+        ])
+
+    return html.Div(body,
         style={
-            "padding":      "6px 7px",
-            "cursor":       "pointer",
+            "padding":      "5px 6px",
             "borderRadius": "6px",
-            "borderLeft":   f"3px solid transparent",
+            "borderLeft":   "3px solid transparent",
             "marginBottom": "2px",
         },
         className="chat-conv-item",
     )
 
 
-def build_conv_list(convs: list[dict]) -> list:
+def build_conv_list(convs: list[dict], editing_id: str | None = None) -> list:
     if not convs:
         return [html.Div("Sin conversaciones", style={
             "fontSize":  "0.74rem",
@@ -236,7 +298,7 @@ def build_conv_list(convs: list[dict]) -> list:
             "textAlign": "center",
             "marginTop": "20px",
         })]
-    return [conv_item(c) for c in convs]
+    return [conv_item(c, editing=(c["id"] == editing_id)) for c in convs]
 
 
 # ── Helpers internos ──────────────────────────────────────────────────────────

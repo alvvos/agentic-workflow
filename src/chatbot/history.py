@@ -124,6 +124,36 @@ def update_conversation(
     _save_index(session_id, index[:MAX_CONVS])
 
 
+def rename_conversation(session_id: str, conv_id: str, new_title: str) -> None:
+    new_title = new_title.strip() or "Conversación"
+    p = _conv_path(session_id, conv_id)
+    if p.exists():
+        try:
+            with open(p, encoding="utf-8") as f:
+                conv = json.load(f)
+            conv["title"] = new_title
+            _atomic_write(p, conv)
+        except Exception:
+            pass
+    index = _load_index(session_id)
+    for entry in index:
+        if entry["id"] == conv_id:
+            entry["title"] = new_title
+            break
+    _save_index(session_id, index)
+
+
+def delete_conversation(session_id: str, conv_id: str) -> None:
+    p = _conv_path(session_id, conv_id)
+    if p.exists():
+        try:
+            p.unlink()
+        except Exception:
+            pass
+    index = _load_index(session_id)
+    _save_index(session_id, [e for e in index if e["id"] != conv_id])
+
+
 def list_conversations(session_id: str) -> list[dict]:
     return _load_index(session_id)
 
