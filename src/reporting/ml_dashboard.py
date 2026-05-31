@@ -123,6 +123,7 @@ def filtrar_zonas_desde_global(locs):
     [Input('ml-btn-run', 'n_clicks')],
     [State('drop-locs', 'value'), State('ml-drop-zone', 'value'), State('ml-date-falso', 'date'),
      State('ml-slider-horiz', 'value'), State('session-id', 'data')],
+    prevent_initial_call=True,
     running=[
         (Output('modal-ml-loading', 'is_open'), True, False),
         (Output('modal-ml-label', 'children'), 'Entrenando modelo…', 'Entrenando modelo…'),
