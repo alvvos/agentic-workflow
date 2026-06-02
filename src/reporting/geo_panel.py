@@ -37,7 +37,6 @@ _H_SM    = "280px"
 
 _REF_RENTA      = 25_000
 _REF_GASTO_ROPA = 1_200
-_UBIC_PATH = Path(__file__).parent.parent / "data" / "todas_las_ubicaciones.json"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -74,15 +73,10 @@ def _fmt_eur(v, decimals=0):
 
 def _info_ubicacion(uuid):
     try:
-        with open(_UBIC_PATH, encoding="utf-8") as f:
-            datos = json.load(f)
-        for org in datos:
-            for loc in org.get("locations", []):
-                if loc.get("uuid") == uuid:
-                    nombre = loc.get("name", uuid[:8])
-                    lat = loc.get("lat") or loc.get("latitude")
-                    lon = loc.get("lon") or loc.get("longitude")
-                    return nombre, (float(lat) if lat else None), (float(lon) if lon else None)
+        from src.db.queries import get_location_by_uuid
+        loc = get_location_by_uuid(uuid)
+        if loc:
+            return loc['name'], loc.get('lat'), loc.get('lon')
     except Exception:
         pass
     return uuid[:8], None, None

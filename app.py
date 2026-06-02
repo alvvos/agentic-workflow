@@ -13,4 +13,4 @@ import src.callbacks.admin               # noqa: F401
 app.layout = serve_layout
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=8051)
+    app.run(debug=True, use_reloader=False, host='0.0.0.0', port=8051)

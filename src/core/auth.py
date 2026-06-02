@@ -130,11 +130,39 @@ def login():
     if flask.request.method == 'POST':
         username = flask.request.form.get('username', '').strip()
         password = flask.request.form.get('password', '')
-        users = _load_users()
-        entry = _get_entry(users, username)
-        if entry and check_password_hash(entry['password'], password):
+
+        authenticated = False
+        role = 'user'
+
+        # Primary: DuckDB dim_usuarios
+        try:
+            from src.db.store import get_conn
+            conn = get_conn()
+            row = conn.execute(
+                "SELECT password_hash, role FROM dim_usuarios WHERE user_id = ?",
+                [username],
+            ).fetchone()
+            if row and check_password_hash(row[0], password):
+                authenticated = True
+                role = row[1] or 'user'
+                conn.execute(
+                    "UPDATE dim_usuarios SET last_login = current_timestamp WHERE user_id = ?",
+                    [username],
+                )
+        except Exception:
+            pass
+
+        # Fallback: users.json (transitional, while DB is being populated)
+        if not authenticated:
+            users = _load_users()
+            entry = _get_entry(users, username)
+            if entry and check_password_hash(entry['password'], password):
+                authenticated = True
+                role = entry.get('role', 'user')
+
+        if authenticated:
             flask.session['user'] = username
-            flask.session['role'] = entry.get('role', 'user')
+            flask.session['role'] = role
             return flask.redirect('/')
         return flask.render_template_string(_LOGIN_HTML, error='Usuario o contraseña incorrectos')
     return flask.render_template_string(_LOGIN_HTML, error=None)

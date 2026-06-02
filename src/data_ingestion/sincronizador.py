@@ -9,51 +9,83 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 load_dotenv()
 AITANNA_API_KEY = os.getenv("AITANNA_API_KEY")
 
-_DIR = os.path.dirname(os.path.abspath(__file__))
-_DEFAULT_JSON = os.path.join(_DIR, "..", "data", "todas_las_ubicaciones.json")
 
-def obtener_uuids_geolocalizados(ruta_json=_DEFAULT_JSON):
-    if not os.path.exists(ruta_json):
-        print(f"Error: No se encuentra el archivo {ruta_json}")
-        return []
-        
-    with open(ruta_json, 'r', encoding='utf-8') as f:
-        datos = json.load(f)
-        
-    uuids = set()
-    for org in datos:
-        for loc in org.get("locations", []):
-            if 'postal_code' in loc and 'lat' in loc and 'lon' in loc and 'uuid' in loc:
-                uuids.add(loc["uuid"])
-    return list(uuids)
+def _get_location_ids(ubicaciones_seleccionadas=None):
+    try:
+        from src.db.queries import get_locations_with_coords
+        uuids = get_locations_with_coords()
+        if uuids:
+            return uuids
+    except Exception:
+        pass
+    return []
+
 
 def peticion_dia(loc_id, fecha_str):
     url = f"https://platform.aitanna.ai/api/v1/internal/get-anonymous-report/location/{loc_id}/date/{fecha_str}"
     headers = {"x-api-key": AITANNA_API_KEY}
     try:
         res = requests.get(url, headers=headers, timeout=15)
-        if res.status_code == 200: return fecha_str, res.json(), "OK"
-        elif res.status_code == 404: return fecha_str, None, "404 No Data"
-        else: return fecha_str, None, f"Error {res.status_code}"
+        if res.status_code == 200:
+            return fecha_str, res.json(), "OK"
+        elif res.status_code == 404:
+            return fecha_str, None, "404"
+        else:
+            return fecha_str, None, f"Error {res.status_code}"
     except Exception as e:
         return fecha_str, None, f"Exception: {str(e)}"
 
-def actualizar_datos_csv(ubicaciones_seleccionadas=None, archivo_destino="src/data/dataset_global_raw.csv",
-                         stop_event=None, progress_cb=None):
-    os.makedirs(os.path.dirname(archivo_destino), exist_ok=True)
-    
-    if os.path.exists(archivo_destino):
-        df_master = pd.read_csv(archivo_destino)
-        df_master['fecha'] = pd.to_datetime(df_master['fecha'])
-        print(f"Archivo detectado con {len(df_master)} registros.")
-    else:
-        df_master = pd.DataFrame()
-        print("Empezando descarga masiva desde cero...")
 
-    location_ids = ubicaciones_seleccionadas if ubicaciones_seleccionadas else obtener_uuids_geolocalizados()
-    if not location_ids: 
-        print("No hay ubicaciones geolocalizadas para sincronizar.")
-        return df_master
+def _upsert_visitas(rows: list) -> None:
+    from src.db.store import get_conn
+    if not rows:
+        return
+    get_conn().executemany(
+        """
+        INSERT INTO fact_visitas
+            (fecha, zone_uuid, location_uuid, org_uuid,
+             total_visits, unique_visitors, new_visitors,
+             uv_7d, uv_28d, uv_month, uv_year,
+             freq_7d, freq_28d, freq_month, freq_year,
+             dwell_time_min, dwell_hist, hourly_visits)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT (fecha, zone_uuid) DO UPDATE SET
+            total_visits    = excluded.total_visits,
+            unique_visitors = excluded.unique_visitors,
+            new_visitors    = excluded.new_visitors,
+            uv_7d = excluded.uv_7d, uv_28d = excluded.uv_28d,
+            uv_month = excluded.uv_month, uv_year = excluded.uv_year,
+            freq_7d = excluded.freq_7d, freq_28d = excluded.freq_28d,
+            freq_month = excluded.freq_month, freq_year = excluded.freq_year,
+            dwell_time_min = excluded.dwell_time_min,
+            dwell_hist = excluded.dwell_hist,
+            hourly_visits = excluded.hourly_visits
+        """,
+        rows,
+    )
+
+
+def actualizar_datos(ubicaciones_seleccionadas=None, stop_event=None, progress_cb=None):
+    """
+    Descarga datos de Aitanna y los persiste directamente en fact_visitas (PostgreSQL).
+    Incremental: solo descarga desde la última fecha registrada por location.
+    """
+    from src.db.store import get_conn
+    from src.db.queries import get_ultima_fecha_por_location
+
+    conn = get_conn()
+
+    # org_uuid map para el INSERT
+    org_map = dict(conn.execute(
+        "SELECT location_uuid, org_uuid FROM dim_ubicaciones"
+    ).fetchall())
+
+    ultima_fecha_db = get_ultima_fecha_por_location()
+
+    location_ids = ubicaciones_seleccionadas if ubicaciones_seleccionadas else list(org_map.keys())
+    if not location_ids:
+        print("No hay ubicaciones para sincronizar.")
+        return
 
     fecha_hoy = datetime.today()
     total_locs = len(location_ids)
@@ -61,68 +93,74 @@ def actualizar_datos_csv(ubicaciones_seleccionadas=None, archivo_destino="src/da
 
     for idx, loc_id in enumerate(location_ids, 1):
         if stop_event and stop_event.is_set():
-            print("Sincronización cancelada por el usuario.")
+            print("Sincronización cancelada.")
             break
+
         if progress_cb:
             progress_cb(idx, total_locs)
-        if not df_master.empty and 'location_id' in df_master.columns and loc_id in df_master['location_id'].values:
-            ultima_fecha_loc = df_master[df_master['location_id'] == loc_id]['fecha'].max()
+
+        ultima = ultima_fecha_db.get(loc_id)
+        if ultima:
+            ultima_dt = pd.to_datetime(ultima)
         else:
-            ultima_fecha_loc = datetime.strptime("2024-01-01", "%Y-%m-%d")
+            ultima_dt = datetime.strptime("2024-01-01", "%Y-%m-%d")
 
-        dias_diferencia = (fecha_hoy - ultima_fecha_loc).days
-        if dias_diferencia <= 0: continue
+        dias_diferencia = (fecha_hoy - ultima_dt).days
+        if dias_diferencia <= 0:
+            continue
 
-        fechas_a_descargar = [(fecha_hoy - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(dias_diferencia + 1)]
-        print(f"[{idx:02d}/{total_locs}] UUID: {loc_id[:8]}... | Descargando {len(fechas_a_descargar):03d} días...", end="\r")
+        fechas_a_descargar = [
+            (fecha_hoy - timedelta(days=i)).strftime("%Y-%m-%d")
+            for i in range(dias_diferencia + 1)
+        ]
+
+        print(f"[{idx:02d}/{total_locs}] {loc_id[:8]}... | {len(fechas_a_descargar)} días", end="\r")
 
         filas_buffer = []
+        org_uuid = org_map.get(loc_id, '')
 
         with ThreadPoolExecutor(max_workers=5) as executor:
             futuros = [executor.submit(peticion_dia, loc_id, f) for f in fechas_a_descargar]
             for futuro in as_completed(futuros):
                 fecha_str, datos, status = futuro.result()
-                
-                if status == "OK" and datos:
-                    for zona in datos:
-                        hours_data = zona.get("visitorsHour", [])
-                        hourly_array = [h.get("value", 0) for h in sorted(hours_data, key=lambda x: x.get("hour", 0))] if isinstance(hours_data, list) else [0]*24
-                        
-                        filas_buffer.append({
-                            "fecha": fecha_str,
-                            "location_id": loc_id,
-                            "zone_uuid": zona.get("zoneUUID", ""),
-                            "total_visits": zona.get("totalVisits", 0),
-                            "unique_visitors": zona.get("uniqueVisitor", 0),
-                            "new_visitors": zona.get("newVisitor", 0), 
-                            
-                            "uv_7d": zona.get("uniqueVisitorLast7days", 0),
-                            "uv_28d": zona.get("uniqueVisitorLast28days", 0),
-                            "uv_month": zona.get("uniqueVisitorCurrentMonth", 0),
-                            "uv_year": zona.get("uniqueVisitorCurrentYear", 0),
-                            
-                            "freq_7d": zona.get("frequencyLast7days", 0.0), 
-                            "freq_28d": zona.get("frequencyLast28days", 0.0),
-                            "freq_month": zona.get("frequencyCurrentMonth", 0.0),
-                            "freq_year": zona.get("frequencyCurrentYear", 0.0),
-                            
-                            "dwell_time": zona.get("dwellTime", 0.0),
-                            "dwell_hist": str(zona.get("dwellTimeHistogram", [])), 
-                            "hourly_visits": str(hourly_array)
-                        })
+                if status != "OK" or not datos:
+                    continue
+                for zona in datos:
+                    hours_data = zona.get("visitorsHour", [])
+                    hourly_array = (
+                        [h.get("value", 0) for h in sorted(hours_data, key=lambda x: x.get("hour", 0))]
+                        if isinstance(hours_data, list) else [0] * 24
+                    )
+                    filas_buffer.append((
+                        fecha_str,
+                        zona.get("zoneUUID", ""),
+                        loc_id,
+                        org_uuid,
+                        int(zona.get("totalVisits", 0) or 0),
+                        int(zona.get("uniqueVisitor", 0) or 0),
+                        int(zona.get("newVisitor", 0) or 0),
+                        float(zona.get("uniqueVisitorLast7days", 0) or 0),
+                        float(zona.get("uniqueVisitorLast28days", 0) or 0),
+                        float(zona.get("uniqueVisitorCurrentMonth", 0) or 0),
+                        float(zona.get("uniqueVisitorCurrentYear", 0) or 0),
+                        float(zona.get("frequencyLast7days", 0.0) or 0),
+                        float(zona.get("frequencyLast28days", 0.0) or 0),
+                        float(zona.get("frequencyCurrentMonth", 0.0) or 0),
+                        float(zona.get("frequencyCurrentYear", 0.0) or 0),
+                        float(zona.get("dwellTime", 0.0) or 0),
+                        str(zona.get("dwellTimeHistogram", [])),
+                        str(hourly_array),
+                    ))
 
         if filas_buffer:
-            df_new = pd.DataFrame(filas_buffer)
-            df_new['fecha'] = pd.to_datetime(df_new['fecha'])
-            df_master = pd.concat([df_master, df_new]).drop_duplicates(subset=['fecha', 'location_id', 'zone_uuid'])
-            df_master.to_csv(archivo_destino, index=False)
-            registros_nuevos_totales += len(df_new)
-            print(f"[{idx:02d}/{total_locs}] UUID: {loc_id[:8]}... | Guardado ({len(df_new):03d} regs).")
+            _upsert_visitas(filas_buffer)
+            registros_nuevos_totales += len(filas_buffer)
+            print(f"[{idx:02d}/{total_locs}] {loc_id[:8]}... | +{len(filas_buffer)} registros guardados.")
         else:
-            print(f"[{idx:02d}/{total_locs}] UUID: {loc_id[:8]}... | Sin datos.               ")
+            print(f"[{idx:02d}/{total_locs}] {loc_id[:8]}... | Sin datos.              ")
 
-    print(f"\nSincronización finalizada. Registros descargados hoy: {registros_nuevos_totales}")
-    return df_master
+    print(f"\nSincronización finalizada. Registros nuevos: {registros_nuevos_totales}")
+
 
 if __name__ == "__main__":
-    actualizar_datos_csv()
+    actualizar_datos()

@@ -17,3 +17,4 @@ playwright
 anthropic
 mcp
 diskcache
+psycopg2-binary>=2.9

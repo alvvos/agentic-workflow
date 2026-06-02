@@ -1,4 +1,3 @@
-import os
 import io
 import pandas as pd
 from datetime import datetime, timedelta
@@ -12,6 +11,7 @@ from src.core.data_master import mapa_tiendas, mapa_zonas, mapa_orgs
 from src.core.config import dias_semana_es, orden_dias
 from src.core.utils import filtrar_dataframe_fechas
 from src.reporting.generador_html import generar_reporte_html
+from src.db.queries import get_df_visitas
 
 
 @app.callback(
@@ -21,16 +21,13 @@ from src.reporting.generador_html import generar_reporte_html
     State("session-id", "data"), State("drop-org", "value"), prevent_initial_call=True
 )
 def generar_html(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, session_id, org_uuid):
-    archivo_usuario = os.path.join('src', 'data', f'dataset_{session_id}.csv')
-    if not os.path.exists(archivo_usuario):
-        return dash.no_update, "Sincroniza los datos primero."
-
-    df_completo = pd.read_csv(archivo_usuario)
-    if locs:
-        df_completo = df_completo[df_completo['location_id'].isin(locs)]
+    if not locs:
+        return dash.no_update, "Selecciona una ubicación primero."
+    df_completo = get_df_visitas(locs)
+    if df_completo.empty:
+        return dash.no_update, "Sin datos. Sincroniza primero."
     df_completo['Ubicación'] = df_completo['location_id'].map(mapa_tiendas).fillna('Desconocida')
     df_completo['Zona'] = df_completo['zone_uuid'].map(mapa_zonas).fillna('SinNombre') if 'zone_uuid' in df_completo.columns else 'SinNombre'
-    df_completo['fecha'] = pd.to_datetime(df_completo['fecha'])
 
     res = filtrar_dataframe_fechas(df_completo, tipo_fecha, start_rango, end_rango, dia_unico)
     if res[0] is None:
@@ -59,16 +56,13 @@ def generar_html(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, 
     State("session-id", "data"), State("drop-org", "value"), prevent_initial_call=True
 )
 def generar_pdf(n_clicks, locs, tipo_fecha, start_rango, end_rango, dia_unico, session_id, org_uuid):
-    archivo_usuario = os.path.join('src', 'data', f'dataset_{session_id}.csv')
-    if not os.path.exists(archivo_usuario):
-        return dash.no_update, "Sincroniza los datos primero."
-
-    df_completo = pd.read_csv(archivo_usuario)
-    if locs:
-        df_completo = df_completo[df_completo['location_id'].isin(locs)]
+    if not locs:
+        return dash.no_update, "Selecciona una ubicación primero."
+    df_completo = get_df_visitas(locs)
+    if df_completo.empty:
+        return dash.no_update, "Sin datos. Sincroniza primero."
     df_completo['Ubicación'] = df_completo['location_id'].map(mapa_tiendas).fillna('Desconocida')
     df_completo['Zona'] = df_completo['zone_uuid'].map(mapa_zonas).fillna('SinNombre') if 'zone_uuid' in df_completo.columns else 'SinNombre'
-    df_completo['fecha'] = pd.to_datetime(df_completo['fecha'])
 
     res = filtrar_dataframe_fechas(df_completo, tipo_fecha, start_rango, end_rango, dia_unico)
     if res[0] is None:
@@ -138,18 +132,13 @@ def descargar_todos_graficos_bi(n, figures, ids):
     prevent_initial_call=True
 )
 def descargar_auditoria_excel(n, locs, t_f, sd, ed, dia, zones_bi, session_id):
-    if not n or not locs or not session_id:
+    if not n or not locs:
         return dash.no_update
-    archivo = os.path.join('src', 'data', f'dataset_{session_id}.csv')
-    if not os.path.exists(archivo):
-        return dash.no_update
-    df = pd.read_csv(archivo)
+    df = get_df_visitas(locs)
     if df.empty:
         return dash.no_update
-    df = df[df['location_id'].isin(locs)]
     df['Ubicación'] = df['location_id'].map(mapa_tiendas).fillna('Desconocida')
     df['Zona'] = df['zone_uuid'].map(mapa_zonas).fillna('SinNombre') if 'zone_uuid' in df.columns else 'SinNombre'
-    df['fecha'] = pd.to_datetime(df['fecha'])
     hoy = datetime.today().date()
     start = end = pd.to_datetime(hoy - timedelta(days=1))
     if t_f == "7d_rel":

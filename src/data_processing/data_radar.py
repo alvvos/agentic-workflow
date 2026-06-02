@@ -8,17 +8,15 @@ import requests
 import json
 import os
 
-def obtener_info_ubicacion(nombre_ubi, ruta_json='src/data/todas_las_ubicaciones.json'):
+def obtener_info_ubicacion(nombre_ubi, ruta_json=None):
     lat, lon, region_code = 40.4168, -3.7038, 'MD'
-    if os.path.exists(ruta_json):
-        try:
-            with open(ruta_json, 'r', encoding='utf-8') as f:
-                datos = json.load(f)
-                for org in datos:
-                    for loc in org.get('locations', []):
-                        if loc.get('name') == nombre_ubi:
-                            return loc.get('lat', lat), loc.get('lon', lon), loc.get('region_code', region_code)
-        except Exception: pass
+    try:
+        from src.db.queries import get_location_by_name
+        loc = get_location_by_name(nombre_ubi)
+        if loc:
+            return loc.get('lat', lat), loc.get('lon', lon), loc.get('region_code', region_code)
+    except Exception:
+        pass
     return lat, lon, region_code
 
 def obtener_clima_historico(lat, lon, fecha_inicio, fecha_fin):

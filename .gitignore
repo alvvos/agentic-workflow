@@ -2,6 +2,7 @@
 venv/
 env/
 .env
+lab/
 
 # Archivos de caché de Python
 __pycache__/

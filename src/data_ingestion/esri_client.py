@@ -18,7 +18,6 @@ import os
 import random
 import urllib.parse
 import urllib.request
-from pathlib import Path
 
 from src.data_processing.geo_enrichment import (
     ESRI_COLLECTION_MAP,
@@ -57,8 +56,6 @@ _WALK_TRAVEL_MODE = json.dumps({
 
 # Ring buffers en metros — proxy para 5/10/15 min peatonal (~80 m/min)
 _RING_BUFFERS = [400, 800, 1200]
-
-_UBIC_PATH = Path(__file__).parent.parent / "data" / "todas_las_ubicaciones.json"
 
 # Mock habilitado solo si ESRI_KEY no está en el entorno
 USE_MOCK = not bool(os.environ.get("ESRI_KEY", ""))
@@ -172,8 +169,23 @@ def cargar_todas_ubicaciones(
     """
     from src.data_ingestion.ingesta_geo import ingestar_snapshot_esri
 
-    with open(_UBIC_PATH, "r", encoding="utf-8") as f:
-        orgs = json.load(f)
+    from src.db.store import get_conn
+    conn = get_conn()
+    org_rows = conn.execute(
+        "SELECT org_uuid, nombre FROM dim_organizaciones ORDER BY nombre"
+    ).fetchall()
+    loc_rows = conn.execute(
+        "SELECT location_uuid, org_uuid, nombre, lat, lon FROM dim_ubicaciones WHERE activa = TRUE"
+    ).fetchall()
+    locs_by_org: dict = {}
+    for l in loc_rows:
+        locs_by_org.setdefault(l[1], []).append(
+            {"uuid": l[0], "name": l[2], "lat": l[3], "lon": l[4]}
+        )
+    orgs = [
+        {"uuid": o[0], "name": o[1], "locations": locs_by_org.get(o[0], [])}
+        for o in org_rows
+    ]
 
     resultados = []
     for org in orgs:

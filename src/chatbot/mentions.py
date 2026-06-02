@@ -12,11 +12,11 @@ Funciones públicas:
 """
 import re
 import unicodedata
-from functools import lru_cache
-from pathlib import Path
-import json
+import time
 
-_UBIC_PATH = Path(__file__).parent.parent / "data" / "todas_las_ubicaciones.json"
+_mention_map_cache: dict = {}
+_mention_map_ts: float = 0.0
+_MENTION_TTL = 30.0
 
 
 def _normalize(text: str) -> str:
@@ -27,19 +27,21 @@ def _normalize(text: str) -> str:
     return re.sub(r"[^a-zA-Z0-9]", "", token).capitalize()
 
 
-@lru_cache(maxsize=1)
 def get_mention_map() -> dict:
     """
-    Devuelve {slug: entry}.
+    Devuelve {slug: entry} construido desde DuckDB (caché TTL 30 s).
     Tipos de entry:
       location: {type, uuid, label, org, name}
       zone:     {type, uuid, location_uuid, label, org, name, location_name}
     """
+    global _mention_map_cache, _mention_map_ts
+    if time.time() - _mention_map_ts < _MENTION_TTL and _mention_map_cache:
+        return _mention_map_cache
+
     try:
-        with open(_UBIC_PATH, encoding="utf-8") as f:
-            orgs = json.load(f)
+        from src.db.queries import get_all_orgs, get_locs_for_org, get_zones_for_loc
     except Exception:
-        return {}
+        return _mention_map_cache
 
     result: dict     = {}
     seen_slugs: dict = {}
@@ -51,45 +53,48 @@ def get_mention_map() -> dict:
         seen_slugs[base] += 1
         return f"{base}{seen_slugs[base]}"
 
-    for org in orgs:
-        org_token = _normalize(org.get("name", "Org"))
-        for loc in org.get("locations", []):
-            loc_uuid  = loc.get("uuid")
-            loc_token = _normalize(loc.get("name", "Loc"))
-            if not loc_uuid or not loc_token:
-                continue
-
-            # ── Ubicación ────────────────────────────────────────────────────
-            loc_slug = _unique_slug(f"{org_token}_{loc_token}")
-            result[loc_slug] = {
-                "type":  "location",
-                "uuid":  loc_uuid,
-                "label": f"@{loc_slug}",
-                "org":   org.get("name", ""),
-                "name":  loc.get("name", ""),
-            }
-
-            # ── Zonas (solo visibles) ─────────────────────────────────────────
-            for zone in loc.get("zones", []):
-                if zone.get("hidden"):
-                    continue
-                zone_uuid = zone.get("uuid")
-                zone_name = zone.get("zoneName", "")
-                zone_token = _normalize(zone_name)
-                if not zone_uuid or not zone_token:
+    try:
+        for org in get_all_orgs():
+            org_token = _normalize(org['nombre'])
+            for loc in get_locs_for_org(org['org_uuid']):
+                loc_uuid  = loc['location_uuid']
+                loc_token = _normalize(loc['nombre'])
+                if not loc_uuid or not loc_token:
                     continue
 
-                zone_slug = _unique_slug(f"{org_token}_{loc_token}_{zone_token}")
-                result[zone_slug] = {
-                    "type":          "zone",
-                    "uuid":          zone_uuid,
-                    "location_uuid": loc_uuid,
-                    "label":         f"@{zone_slug}",
-                    "org":           org.get("name", ""),
-                    "name":          zone_name,
-                    "location_name": loc.get("name", ""),
+                loc_slug = _unique_slug(f"{org_token}_{loc_token}")
+                result[loc_slug] = {
+                    "type":  "location",
+                    "uuid":  loc_uuid,
+                    "label": f"@{loc_slug}",
+                    "org":   org['nombre'],
+                    "name":  loc['nombre'],
                 }
 
+                for zone in get_zones_for_loc(loc_uuid):
+                    if zone['hidden']:
+                        continue
+                    zone_uuid  = zone['zone_uuid']
+                    zone_name  = zone['nombre']
+                    zone_token = _normalize(zone_name)
+                    if not zone_uuid or not zone_token:
+                        continue
+
+                    zone_slug = _unique_slug(f"{org_token}_{loc_token}_{zone_token}")
+                    result[zone_slug] = {
+                        "type":          "zone",
+                        "uuid":          zone_uuid,
+                        "location_uuid": loc_uuid,
+                        "label":         f"@{zone_slug}",
+                        "org":           org['nombre'],
+                        "name":          zone_name,
+                        "location_name": loc['nombre'],
+                    }
+    except Exception:
+        return _mention_map_cache
+
+    _mention_map_cache = result
+    _mention_map_ts    = time.time()
     return result
 
 

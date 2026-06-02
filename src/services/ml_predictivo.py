@@ -7,8 +7,26 @@ from sklearn.metrics import mean_absolute_error
 import holidays
 import gc
 from datetime import datetime, timedelta
-from src.data_processing.geo_enrichment import get_geo_vals, GEO_FEATURE_COLS
+from src.data_processing.supercalendario import get_calendario_features, CALENDARIO_FEATURE_COLS
+from src.data_processing.eventos_client import get_eventos_features, EVENTOS_FEATURE_COLS
+from src.db.queries import get_org_info
 
+# Holiday calendar cache keyed by (pais_codigo, year)
+_HOL_CACHE: dict = {}
+
+def _get_festivos(pais_codigo: str, years: list) -> object:
+    key = (pais_codigo, tuple(sorted(years)))
+    if key not in _HOL_CACHE:
+        try:
+            if pais_codigo == 'MX':
+                _HOL_CACHE[key] = holidays.Mexico(years=years)
+            else:
+                _HOL_CACHE[key] = holidays.ES(years=years)
+        except Exception:
+            _HOL_CACHE[key] = {}
+    return _HOL_CACHE[key]
+
+# Keep the global ES calendar as a backward-compatible fallback
 festivos_espana = holidays.ES(years=[2024, 2025, 2026])
 
 # ── Registro de modelos ──────────────────────────────────────────────────────
@@ -22,32 +40,14 @@ def _registry_paths(location_uuid, zone_uuid):
         os.path.join(_REGISTRY_DIR, f"{key}.meta.json"),
     )
 
-def _current_geo_version(location_uuid):
-    """Devuelve valid_from del snapshot activo, o None si no hay datos Esri."""
-    try:
-        from src.data_processing.geo_enrichment import _GEO_PATH
-        with open(_GEO_PATH, 'r', encoding='utf-8') as f:
-            store = json.load(f)
-        snapshots = store.get(location_uuid, [])
-        activo = next((s for s in snapshots if isinstance(s, dict) and s.get('valid_to') is None), None)
-        return activo.get('valid_from') if activo else None
-    except Exception:
-        return None
-
-def _load_cached_model(location_uuid, zone_uuid, geo_version, features):
-    """
-    Carga modelo en caché si es válido.
-    Inválido si: no existe, geo_version ha cambiado, features distintas, o tiene > 7 días.
-    Devuelve (modelo, metrics_dict) o (None, {}).
-    """
+def _load_cached_model(location_uuid, zone_uuid, features):
+    """Inválido si: no existe, features distintas, o tiene > 7 días."""
     model_path, meta_path = _registry_paths(location_uuid, zone_uuid)
     if not os.path.exists(model_path) or not os.path.exists(meta_path):
         return None, {}
     try:
         with open(meta_path) as f:
             meta = json.load(f)
-        if meta.get('geo_snapshot_version') != geo_version:
-            return None, {}
         if meta.get('features') != features:
             return None, {}
         age_days = (datetime.now() - datetime.fromisoformat(meta['trained_at'])).days
@@ -59,33 +59,33 @@ def _load_cached_model(location_uuid, zone_uuid, geo_version, features):
     except Exception:
         return None, {}
 
-def _save_model(modelo, location_uuid, zone_uuid, features, metrics, geo_version):
+def _save_model(modelo, location_uuid, zone_uuid, features, metrics):
     model_path, meta_path = _registry_paths(location_uuid, zone_uuid)
     modelo.save_model(model_path)
+    trained_at = datetime.now()
     with open(meta_path, 'w') as f:
         json.dump({
             'location_uuid': location_uuid,
             'zone_uuid': zone_uuid,
-            'trained_at': datetime.now().isoformat(),
-            'geo_snapshot_version': geo_version,
+            'trained_at': trained_at.isoformat(),
             'features': features,
             'metrics': metrics,
         }, f, indent=2)
-
-def invalidar_modelos_location(location_uuid):
-    """
-    Elimina todos los modelos en caché de una ubicación.
-    Llamado automáticamente tras ingestar_snapshot_esri().
-    """
-    if not os.path.exists(_REGISTRY_DIR):
-        return
-    prefix = location_uuid
-    eliminados = 0
-    for fname in os.listdir(_REGISTRY_DIR):
-        if fname.startswith(prefix):
-            os.remove(os.path.join(_REGISTRY_DIR, fname))
-            eliminados += 1
-    return eliminados
+    try:
+        from src.db.store import get_conn
+        get_conn().execute("""
+            INSERT INTO model_registry (model_id, location_uuid, zone_uuid, trained_at, features, metrics, model_path, is_valid)
+            VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)
+            ON CONFLICT (model_id) DO UPDATE SET
+                trained_at = excluded.trained_at,
+                features   = excluded.features,
+                metrics    = excluded.metrics,
+                model_path = excluded.model_path,
+                is_valid   = TRUE
+        """, [f"{location_uuid}_{zone_uuid}", location_uuid, zone_uuid, trained_at,
+              json.dumps(features), json.dumps(metrics), model_path])
+    except Exception:
+        pass
 
 
 # ── Predicción ───────────────────────────────────────────────────────────────
@@ -93,6 +93,18 @@ def invalidar_modelos_location(location_uuid):
 def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy, horizonte_dias):
     modelo = None
     try:
+        # Org context (pais, calendar config) — graceful degradation if DB unavailable
+        try:
+            org = get_org_info(location_uuid)
+            pais_codigo  = org['pais_codigo']
+            org_config   = org['config_calendario']
+        except Exception:
+            pais_codigo  = 'ES'
+            org_config   = {}
+
+        años = list({2024, 2025, 2026, datetime.today().year})
+        festivos = _get_festivos(pais_codigo, años)
+
         # 1. EXTRACCIÓN DE HISTÓRICO
         df_tienda = df_master[
             (df_master['location_id'] == location_uuid) &
@@ -111,8 +123,6 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
             'es_festivo': 'max'
         }).reset_index().sort_values('fecha').reset_index(drop=True)
 
-        geo_vals_pred = get_geo_vals(location_uuid)
-
         # 2. SEPARACIÓN DEL PASADO (TRAIN SET)
         fecha_corte = pd.to_datetime(falso_hoy)
         train = df_tienda[df_tienda['fecha'] < fecha_corte].copy()
@@ -126,7 +136,7 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
         train['mes'] = train['fecha'].dt.month
         train['quincena'] = (train['dia_mes'] > 15).astype(int)
         train['vispera_festivo'] = train['fecha'].apply(
-            lambda d: 1 if (d + timedelta(days=1)) in festivos_espana else 0
+            lambda d: 1 if (d + timedelta(days=1)) in festivos else 0
         )
         train['mucho_calor'] = (train['temp_max'] >= 32.0).astype(int)
         train['mucho_frio'] = (train['temp_min'] <= 8.0).astype(int)
@@ -142,21 +152,27 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
         train['std_7d'] = train['total_visits'].rolling(7).std().fillna(0)
         train = train.dropna().reset_index(drop=True)
 
-        # Join temporal geoespacial
-        geo_rows = pd.DataFrame(
-            [get_geo_vals(location_uuid, fecha) for fecha in train['fecha']],
+        # Join supercalendario (country-aware via org_config from DuckDB)
+        cal_rows = pd.DataFrame(
+            [get_calendario_features(fecha, org_config=org_config) for fecha in train['fecha']],
             index=train.index
         )
-        geo_features_activos = [c for c in GEO_FEATURE_COLS if geo_rows[c].notna().any()]
-        for col in geo_features_activos:
-            train[col] = pd.to_numeric(geo_rows[col], errors='coerce').values
+        for col in CALENDARIO_FEATURE_COLS:
+            train[col] = cal_rows[col].values
+
+        ev_rows = pd.DataFrame(
+            [get_eventos_features(fecha, location_uuid=location_uuid) for fecha in train['fecha']],
+            index=train.index
+        )
+        for col in EVENTOS_FEATURE_COLS:
+            train[col] = ev_rows[col].values
 
         features = [
             'es_finde', 'es_festivo', 'llueve', 'dia_semana', 'dia_mes', 'mes',
             'lag_1d', 'lag_7d', 'media_7d', 'quincena', 'vispera_festivo',
             'lag_14d', 'media_14d', 'std_7d', 'finde_lluvioso',
             'mucho_calor', 'mucho_frio', 'clima_ideal'
-        ] + geo_features_activos
+        ] + CALENDARIO_FEATURE_COLS + EVENTOS_FEATURE_COLS
 
         X_train, y_train = train[features], train['total_visits']
 
@@ -165,12 +181,11 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
         # En backtesting (falso_hoy en el pasado) siempre reentrenamos.
         hoy = datetime.today().date()
         es_produccion = abs((pd.to_datetime(falso_hoy).date() - hoy).days) <= 2
-        geo_version = _current_geo_version(location_uuid) if es_produccion else None
 
         cache_hit = False
         cached_metrics = {}
         if es_produccion:
-            modelo, cached_metrics = _load_cached_model(location_uuid, zone_uuid, geo_version, features)
+            modelo, cached_metrics = _load_cached_model(location_uuid, zone_uuid, features)
             if modelo is not None:
                 cache_hit = True
 
@@ -204,7 +219,7 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
             real_visits = real_row['total_visits'].values[0] if tiene_real else None
             valores_reales.append(real_visits)
 
-            es_festivo = 1 if current_date in festivos_espana else 0
+            es_festivo = 1 if current_date in festivos else 0
             es_finde = 1 if current_date.dayofweek in [5, 6] else 0
 
             visits_array = df_work['total_visits'].values
@@ -215,18 +230,21 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
             media_14d = np.mean(visits_array[-14:]) if len(visits_array) >= 14 else 0
             std_7d = np.std(visits_array[-7:]) if len(visits_array) >= 7 else 0
 
+            cal_feats = get_calendario_features(current_date, org_config=org_config)
+            ev_feats = get_eventos_features(current_date, location_uuid=location_uuid)
             row = pd.DataFrame([{
                 'es_finde': es_finde, 'es_festivo': es_festivo, 'llueve': llueve,
                 'dia_semana': current_date.dayofweek, 'dia_mes': current_date.day,
                 'mes': current_date.month, 'lag_1d': lag_1d, 'lag_7d': lag_7d,
                 'media_7d': media_7d, 'quincena': 1 if current_date.day > 15 else 0,
-                'vispera_festivo': 1 if (current_date + timedelta(days=1)) in festivos_espana else 0,
+                'vispera_festivo': 1 if (current_date + timedelta(days=1)) in festivos else 0,
                 'lag_14d': lag_14d, 'media_14d': media_14d, 'std_7d': std_7d,
                 'finde_lluvioso': es_finde * llueve,
                 'mucho_calor': 1 if t_max >= 32.0 else 0,
                 'mucho_frio': 1 if t_min <= 8.0 else 0,
                 'clima_ideal': 1 if (18.0 <= t_max <= 26.0 and llueve == 0) else 0,
-                **{col: (float(geo_vals_pred[col]) if geo_vals_pred[col] is not None else np.nan) for col in geo_features_activos}
+                **cal_feats,
+                **ev_feats,
             }])
 
             pred = np.maximum(0, np.round(modelo.predict(row[features])[0]))
@@ -251,11 +269,10 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
         best_iter = cached_metrics.get('best_iteration') if cache_hit else getattr(modelo, 'best_iteration', None)
 
         # Persistir el modelo recién entrenado
-        if not cache_hit and es_produccion and geo_version is not None:
+        if not cache_hit and es_produccion:
             _save_model(
                 modelo, location_uuid, zone_uuid, features,
                 {"accuracy": acc_val, "mae": mae_val, "wmape_pct": wmape_val, "best_iteration": best_iter},
-                geo_version,
             )
 
         return {

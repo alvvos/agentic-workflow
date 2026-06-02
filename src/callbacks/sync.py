@@ -1,74 +1,35 @@
-import os
-import json
 import threading
-import pandas as pd
 from datetime import datetime, timedelta
 import dash
 from dash import Output, Input, State, html
-import dash_bootstrap_components as dbc
 from src.core.config import app
-from src.data_ingestion.sincronizador import actualizar_datos_csv
+from src.data_ingestion.sincronizador import actualizar_datos
 
-# ── Hilos activos en este worker (cancel Event local) ───────────────────────
-_sync_threads: dict = {}
-
-_RUTA_DATA = os.path.join('src', 'data')
-
-
-def _status_path(session_id):
-    return os.path.join(_RUTA_DATA, f'dataset_{session_id}.status.json')
-
-
-def _cancel_path(session_id):
-    return os.path.join(_RUTA_DATA, f'dataset_{session_id}.cancel')
+# ── Estado en memoria (single-worker gunicorn) ───────────────────────────────
+_sync_threads: dict = {}   # session_id → threading.Event (cancel)
+_sync_status:  dict = {}   # session_id → {status, current, total, error}
+_sync_lock = threading.Lock()
 
 
 def _write_status(session_id, **kwargs):
-    try:
-        with open(_status_path(session_id), 'w') as f:
-            json.dump(kwargs, f)
-    except Exception:
-        pass
+    _sync_status[session_id] = kwargs
 
 
 def _read_status(session_id):
-    try:
-        with open(_status_path(session_id)) as f:
-            return json.load(f)
-    except Exception:
-        return None
+    return _sync_status.get(session_id)
 
 
-def _acquire_sync_lock(lock_file, max_age=600):
-    if os.path.exists(lock_file):
-        age = (datetime.now() - datetime.fromtimestamp(os.path.getmtime(lock_file))).total_seconds()
-        if age < max_age:
-            return False
-        os.remove(lock_file)
-    open(lock_file, 'w').close()
-    return True
-
-
-def _release_sync_lock(lock_file):
-    if os.path.exists(lock_file):
-        os.remove(lock_file)
-
-
-def _run_sync(session_id, locs, archivo_usuario, lock_file):
+def _run_sync(session_id, locs):
     cancel_event = _sync_threads.get(session_id)
-    cancel_file = _cancel_path(session_id)
 
     def progress_cb(current, total):
         _write_status(session_id, status="running", current=current, total=total)
-        # Señal de cancelación cross-worker: fichero en disco
-        if cancel_event and (os.path.exists(cancel_file) or cancel_event.is_set()):
-            if cancel_event:
-                cancel_event.set()
+        if cancel_event and cancel_event.is_set():
+            pass  # sincronizador revisa stop_event en cada iteración
 
     try:
-        actualizar_datos_csv(
-            locs if locs else [],
-            archivo_usuario,
+        actualizar_datos(
+            locs if locs else None,
             stop_event=cancel_event,
             progress_cb=progress_cb,
         )
@@ -77,12 +38,8 @@ def _run_sync(session_id, locs, archivo_usuario, lock_file):
     except Exception as e:
         _write_status(session_id, status="error", current=0, total=0, error=str(e))
     finally:
-        _release_sync_lock(lock_file)
-        _sync_threads.pop(session_id, None)
-        try:
-            os.remove(cancel_file)
-        except FileNotFoundError:
-            pass
+        with _sync_lock:
+            _sync_threads.pop(session_id, None)
 
 
 # ── Alerta de datos obsoletos ────────────────────────────────────────────────
@@ -98,22 +55,19 @@ def _run_sync(session_id, locs, archivo_usuario, lock_file):
 )
 def actualizar_alerta_sync(session_id, _data_v, _tick, locs):
     _normal = ([html.I(className="fas fa-sync-alt me-2"), "Sincronizar"], "primary", True)
-
-    if not session_id:
+    if not locs:
         return _normal
-
-    archivo = os.path.join('src', 'data', f'dataset_{session_id}.csv')
-    if not os.path.exists(archivo):
-        return ([html.I(className="fas fa-exclamation-circle me-2"), "Sin datos — sincronizar"],
-                "danger", False)
     try:
-        df_tmp = pd.read_csv(archivo, usecols=['fecha', 'location_id'])
-        df_tmp['fecha'] = pd.to_datetime(df_tmp['fecha'])
-        if locs:
-            df_tmp = df_tmp[df_tmp['location_id'].isin(locs)]
-        if df_tmp.empty:
-            return _normal
-        fecha_mas_atrasada = df_tmp.groupby('location_id')['fecha'].max().min().date()
+        from src.db.queries import get_ultima_fecha_por_location
+        ultima_por_loc = get_ultima_fecha_por_location()
+        if not ultima_por_loc:
+            return ([html.I(className="fas fa-exclamation-circle me-2"), "Sin datos — sincronizar"],
+                    "danger", False)
+        fechas_locs = [ultima_por_loc[l] for l in locs if l in ultima_por_loc]
+        if not fechas_locs:
+            return ([html.I(className="fas fa-exclamation-circle me-2"), "Sin datos — sincronizar"],
+                    "danger", False)
+        fecha_mas_atrasada = min(pd.to_datetime(f).date() for f in fechas_locs)
         ayer = datetime.today().date() - timedelta(days=1)
         dias = (ayer - fecha_mas_atrasada).days
         if dias > 1:
@@ -150,22 +104,21 @@ def ejecutar_sincronizacion(trigger, locs, session_id):
     if not trigger:
         return True, 0
 
-    lock_file = os.path.join(_RUTA_DATA, f'dataset_{session_id}.lock')
-    archivo_usuario = os.path.join(_RUTA_DATA, f'dataset_{session_id}.csv')
+    with _sync_lock:
+        if session_id in _sync_threads:
+            return False, dash.no_update  # ya en curso
 
-    if not _acquire_sync_lock(lock_file):
-        return False, dash.no_update  # ya hay sync en curso, seguir polling
+        cancel_event = threading.Event()
+        _sync_threads[session_id] = cancel_event
 
-    cancel_event = threading.Event()
-    _sync_threads[session_id] = cancel_event
     _write_status(session_id, status="running", current=0, total=0)
 
     threading.Thread(
         target=_run_sync,
-        args=(session_id, locs, archivo_usuario, lock_file),
+        args=(session_id, locs),
         daemon=True,
     ).start()
-    return False, 0  # activa el interval de polling
+    return False, 0
 
 
 # ── Polling de progreso ──────────────────────────────────────────────────────
@@ -200,11 +153,7 @@ def poll_sync_progress(_, session_id):
     if status == "running":
         return True, _no, _no, _no, _no, _no, False, progress_text, pct
 
-    # Terminado — borrar fichero de estado
-    try:
-        os.remove(_status_path(session_id))
-    except FileNotFoundError:
-        pass
+    _sync_status.pop(session_id, None)
 
     if status == "done":
         return (False, True, "Datos sincronizados correctamente.",
@@ -226,17 +175,13 @@ def poll_sync_progress(_, session_id):
     prevent_initial_call=True,
 )
 def cancelar_sincronizacion(_, session_id):
-    # Señal cross-worker: fichero en disco
-    cancel_file = _cancel_path(session_id)
-    open(cancel_file, 'w').close()
-    # Señal in-process si el hilo está en este worker
     ev = _sync_threads.get(session_id)
     if ev:
         ev.set()
     return "Cancelando… finalizando ubicación actual."
 
 
-# ── Flush de datos ───────────────────────────────────────────────────────────
+# ── Flush (limpia caché de modelos ML, no los datos) ────────────────────────
 
 @app.callback(
     Output("toast-notificacion", "is_open", allow_duplicate=True),
@@ -248,10 +193,17 @@ def cancelar_sincronizacion(_, session_id):
     prevent_initial_call=True,
 )
 def limpiar_memoria(n, session_id):
-    archivo_usuario = os.path.join('src', 'data', f'dataset_{session_id}.csv')
+    import os, glob
+    from src.services.ml_predictivo import _REGISTRY_DIR
     try:
-        if os.path.exists(archivo_usuario):
-            os.remove(archivo_usuario)
-        return True, "Memoria limpiada con éxito.", "success", "Flush data"
+        removed = 0
+        for f in glob.glob(os.path.join(_REGISTRY_DIR, "*")):
+            os.remove(f)
+            removed += 1
+        msg = f"Caché de modelos ML limpiada ({removed} ficheros)."
+        return True, msg, "success", "Flush caché ML"
     except Exception as e:
-        return True, f"Error al limpiar memoria: {str(e)}", "danger", "Error"
+        return True, f"Error: {str(e)}", "danger", "Error"
+
+
+import pandas as pd  # noqa: E402 — needed by actualizar_alerta_sync

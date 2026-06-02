@@ -1,20 +1,26 @@
-import json
-import os
+"""
+Mapas de dimensiones en memoria, alimentados desde DuckDB.
+La API exportada es idéntica a la versión JSON para que los callbacks no necesiten cambios.
+"""
+import time
 
-_UBIC_PATH = 'src/data/todas_las_ubicaciones.json'
-_mtime: float = 0.0
-
-# Módulos externos importan estas variables directamente (from data_master import ...).
+# Los módulos externos importan estas variables directamente.
 # Se mutan en lugar de reasignarse para que los módulos ya importados vean los cambios.
-opciones_orgs:     list = []
-mapa_locs_por_org: dict = {}
-mapa_tiendas:      dict = {}
-mapa_zonas:        dict = {}
+opciones_orgs:      list = []
+mapa_locs_por_org:  dict = {}
+mapa_tiendas:       dict = {}
+mapa_zonas:         dict = {}
 mapa_zonas_por_loc: dict = {}
-mapa_orgs:         dict = {}
+mapa_orgs:          dict = {}
+
+_last_load: float = 0.0
+_TTL = 5.0  # segundos mínimos entre recargas
 
 
-def _parse(datos_loc: list) -> None:
+def _load_from_db() -> None:
+    from src.db.store import get_conn
+    conn = get_conn()
+
     opciones_orgs.clear()
     mapa_locs_por_org.clear()
     mapa_tiendas.clear()
@@ -22,45 +28,48 @@ def _parse(datos_loc: list) -> None:
     mapa_zonas_por_loc.clear()
     mapa_orgs.clear()
 
-    for org in datos_loc:
-        if not org.get('uuid'):
-            continue
-        opciones_orgs.append({'label': org.get('name'), 'value': org['uuid']})
-        mapa_orgs[org['uuid']] = org.get('name', '')
-        locs_list = []
-        for loc in org.get('locations', []):
-            if not loc.get('uuid'):
-                continue
-            locs_list.append({'label': loc.get('name'), 'value': loc['uuid']})
-            mapa_tiendas[loc['uuid']] = loc.get('name')
-            zonas_loc = []
-            for z in loc.get('zones', []):
-                if z.get('uuid'):
-                    nombre_zona = z.get('zoneName', 'Zona')
-                    mapa_zonas[z['uuid']] = nombre_zona
-                    zonas_loc.append({
-                        'label': nombre_zona,
-                        'value': nombre_zona,
-                        'tipo':  z.get('zoneType', ''),
-                    })
-            mapa_zonas_por_loc[loc['uuid']] = zonas_loc
-        mapa_locs_por_org[org['uuid']] = locs_list
+    for org_uuid, nombre in conn.execute(
+        "SELECT org_uuid, nombre FROM dim_organizaciones ORDER BY nombre"
+    ).fetchall():
+        opciones_orgs.append({'label': nombre, 'value': org_uuid})
+        mapa_orgs[org_uuid] = nombre
+        mapa_locs_por_org[org_uuid] = []
+
+    for loc_uuid, org_uuid, nombre in conn.execute(
+        "SELECT location_uuid, org_uuid, nombre FROM dim_ubicaciones WHERE activa = TRUE ORDER BY nombre"
+    ).fetchall():
+        mapa_tiendas[loc_uuid] = nombre
+        mapa_locs_por_org.setdefault(org_uuid, []).append({'label': nombre, 'value': loc_uuid})
+        mapa_zonas_por_loc[loc_uuid] = []
+
+    for zone_uuid, loc_uuid, nombre, zone_type in conn.execute(
+        "SELECT zone_uuid, location_uuid, nombre, zone_type FROM dim_zonas WHERE hidden = FALSE ORDER BY nombre"
+    ).fetchall():
+        mapa_zonas[zone_uuid] = nombre
+        mapa_zonas_por_loc.setdefault(loc_uuid, []).append({
+            'label': nombre,
+            'value': nombre,        # los dropdowns BI usan el nombre como valor
+            'tipo':  zone_type or '',
+        })
 
 
 def reload_if_changed() -> bool:
-    """Re-lee el JSON solo si el archivo cambió en disco. Devuelve True si recargó."""
-    global _mtime
+    """Recarga desde DuckDB con TTL de 5 s. Devuelve True si recargó."""
+    global _last_load
+    now = time.time()
+    if now - _last_load < _TTL:
+        return False
     try:
-        mtime = os.path.getmtime(_UBIC_PATH)
-    except OSError:
+        _load_from_db()
+        _last_load = now
+        return True
+    except Exception:
         return False
-    if mtime == _mtime:
-        return False
-    with open(_UBIC_PATH, 'r', encoding='utf-8') as f:
-        _parse(json.load(f))
-    _mtime = mtime
-    return True
 
 
 # Carga inicial al importar el módulo
-reload_if_changed()
+try:
+    _load_from_db()
+    _last_load = time.time()
+except Exception:
+    pass

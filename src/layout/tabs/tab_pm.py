@@ -6,7 +6,7 @@ def build_tab_pm():
         html.Br(),
         dbc.Row([
             dbc.Col([
-                html.Label([html.I(className="fas fa-filter me-2 text-primary"), "Zonas analíticas (Last Zones):"], className="fw-bold mb-3 text-secondary"),
+                html.Label([html.I(className="fas fa-filter me-2 text-primary"), "Zonas analíticas:"], className="fw-bold mb-3 text-secondary"),
                 dbc.Checklist(
                     id="ejecutivo-drop-zonas", options=[], value=[], inline=True,
                     input_class_name="btn-check", label_class_name="btn btn-outline-primary mb-2 me-2 fw-bold shadow-sm rounded-pill"

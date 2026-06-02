@@ -1,4 +1,3 @@
-import os
 import pandas as pd
 from datetime import datetime, timedelta
 import dash
@@ -11,6 +10,7 @@ from src.core.data_master import mapa_tiendas, mapa_zonas
 from src.reporting.health_check import generar_panel_pm
 from src.data_processing.data_radar import generar_tabla_auditoria
 from src.models.anomalys import generar_panel_bi_completo
+from src.db.queries import get_df_visitas
 
 
 @app.callback(
@@ -26,18 +26,12 @@ def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, zones_exe,
     if not locs:
         return html.Div(), "Esperando selección de ubicación...", html.Div(), html.Div()
 
-    archivo_usuario = os.path.join('src', 'data', f'dataset_{s_id}.csv')
-    if not os.path.exists(archivo_usuario):
-        return html.Div(), "Sincroniza para descargar datos.", html.Div(), html.Div()
-
-    df = pd.read_csv(archivo_usuario)
+    df = get_df_visitas(locs)
     if df.empty:
-        return html.Div(), "El dataset está vacío.", html.Div(), html.Div()
+        return html.Div(), "Sin datos. Sincroniza para descargar.", html.Div(), html.Div()
 
-    df = df[df['location_id'].isin(locs)]
     df['Ubicación'] = df['location_id'].map(mapa_tiendas).fillna('Desconocida')
     df['Zona'] = df['zone_uuid'].map(mapa_zonas).fillna('SinNombre') if 'zone_uuid' in df.columns else 'SinNombre'
-    df['fecha'] = pd.to_datetime(df['fecha'])
 
     lista_zonas_exe = zones_exe if zones_exe else []
     informe_ejecutivo = generar_panel_pm(df, locs, lista_zonas_exe, ventana=pm_ventana or "semana")

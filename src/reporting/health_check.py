@@ -65,19 +65,15 @@ def _zona_meta(zona):
 
 # ── Data helpers ──────────────────────────────────────────────────────────────
 
-def obtener_zonas_validas(ruta='src/data/todas_las_ubicaciones.json'):
-    validas = set()
-    if os.path.exists(ruta):
-        try:
-            with open(ruta, encoding='utf-8') as f:
-                for org in json.load(f):
-                    for loc in org.get('locations', []):
-                        for z in loc.get('zones', []):
-                            if z.get('zoneType', '').lower() == 'last_zone':
-                                validas.add(z.get('zoneName', ''))
-        except Exception:
-            pass
-    return validas
+def obtener_zonas_validas(ruta=None):
+    try:
+        from src.db.store import get_conn
+        rows = get_conn().execute(
+            "SELECT nombre FROM dim_zonas WHERE zone_type = 'last_zone' AND hidden = FALSE"
+        ).fetchall()
+        return {r[0] for r in rows}
+    except Exception:
+        return set()
 
 
 def formatear_fecha(fecha_obj):
@@ -455,7 +451,7 @@ def _narrativa(zonas_data, fecha_max, clima, ventana="semana", geo_vals=None):
                     f"Compara con el tráfico interior para saber si es un problema de conversión o de afluencia general."))
             elif dv >= 15:
                 items.append(("success", "fas fa-cash-register",
-                    f"La caja fue bien este {periodo}: creció un {dv:.0f}%. Más ventas cerradas."))
+                    f"La caja fue bien este {periodo}"))
 
     # 5. Contexto externo: clima
     if clima:

@@ -1,169 +1,150 @@
 """
-Historial persistente de conversaciones por usuario.
-Almacena conversaciones completas en src/data/conversations/<session_id>/.
+Historial persistente de conversaciones por usuario — almacenado en DuckDB.
+Tablas: chat_conversaciones, chat_mensajes
 """
 import json
-import os
 import time
 import uuid
-from pathlib import Path
+from datetime import datetime
+from typing import Optional
 
-_CONV_ROOT = Path(__file__).parent.parent / "data" / "conversations"
-MAX_CONVS  = 50
+from src.db.store import get_conn
 
-
-def _user_dir(session_id: str) -> Path:
-    safe = "".join(c for c in session_id if c.isalnum() or c in "-_") or "anonymous"
-    d = _CONV_ROOT / safe
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+MAX_CONVS = 50
 
 
-def _index_path(session_id: str) -> Path:
-    return _user_dir(session_id) / "_index.json"
-
-
-def _conv_path(session_id: str, conv_id: str) -> Path:
-    return _user_dir(session_id) / f"{conv_id}.json"
-
-
-def _load_index(session_id: str) -> list:
-    p = _index_path(session_id)
-    if not p.exists():
-        return []
+def _ts_to_epoch(ts) -> float:
+    if ts is None:
+        return time.time()
+    if isinstance(ts, (int, float)):
+        return float(ts)
     try:
-        with open(p, encoding="utf-8") as f:
-            return json.load(f)
+        return ts.timestamp()
     except Exception:
-        return []
+        return time.time()
 
 
-def _save_index(session_id: str, index: list) -> None:
-    p = _index_path(session_id)
-    tmp = p.with_suffix(".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(index, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, p)
+def _serialize(content) -> str:
+    if isinstance(content, str):
+        return content
+    return json.dumps(content, ensure_ascii=False)
 
 
-def _atomic_write(path: Path, data: dict) -> None:
-    tmp = path.with_suffix(".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, path)
+def _deserialize(text: Optional[str]):
+    if text is None:
+        return ""
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, (list, dict)):
+            return parsed
+    except Exception:
+        pass
+    return text
 
 
-def create_conversation(session_id: str, location_uuid: str | None = None) -> str:
+def create_conversation(session_id: str, location_uuid: Optional[str] = None) -> str:
     conv_id = uuid.uuid4().hex[:8]
-    now = time.time()
-    conv = {
-        "id":            conv_id,
-        "title":         "Nueva conversación",
-        "created_at":    now,
-        "updated_at":    now,
-        "location_uuid": location_uuid,
-        "messages":      [],
-    }
-    _atomic_write(_conv_path(session_id, conv_id), conv)
-    index = _load_index(session_id)
-    index.insert(0, {
-        "id":            conv_id,
-        "title":         "Nueva conversación",
-        "updated_at":    now,
-        "location_uuid": location_uuid,
-    })
-    _save_index(session_id, index[:MAX_CONVS])
+    get_conn().execute(
+        "INSERT INTO chat_conversaciones (conv_id, user_id, title, location_uuid) VALUES (?, ?, 'Nueva conversación', ?)",
+        [conv_id, session_id, location_uuid],
+    )
     return conv_id
 
 
 def update_conversation(
-    session_id:    str,
-    conv_id:       str,
-    messages:      list,
-    location_uuid: str | None = None,
+    session_id: str,
+    conv_id: str,
+    messages: list,
+    location_uuid: Optional[str] = None,
 ) -> None:
-    """Persiste el array completo de mensajes. Auto-genera título del primer mensaje de usuario."""
-    p = _conv_path(session_id, conv_id)
-    now = time.time()
-    if p.exists():
-        try:
-            with open(p, encoding="utf-8") as f:
-                conv = json.load(f)
-        except Exception:
-            conv = {"id": conv_id, "title": "Nueva conversación", "created_at": now}
-    else:
-        conv = {"id": conv_id, "title": "Nueva conversación", "created_at": now}
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT title FROM chat_conversaciones WHERE conv_id = ?", [conv_id]
+    ).fetchone()
 
-    if conv.get("title") == "Nueva conversación":
-        first_user = next((m["content"] for m in messages if m["role"] == "user"), None)
+    new_title = row[0] if row else "Nueva conversación"
+    if new_title == "Nueva conversación":
+        first_user = next(
+            (m["content"] for m in messages
+             if m.get("role") == "user" and isinstance(m.get("content"), str)),
+            None,
+        )
         if first_user:
-            conv["title"] = first_user[:50].rstrip()
+            new_title = first_user[:50].rstrip()
 
-    conv["updated_at"] = now
-    conv["messages"]   = messages
-    if location_uuid:
-        conv["location_uuid"] = location_uuid
-    _atomic_write(p, conv)
-
-    index = _load_index(session_id)
-    for entry in index:
-        if entry["id"] == conv_id:
-            entry["title"]      = conv["title"]
-            entry["updated_at"] = now
-            if location_uuid:
-                entry["location_uuid"] = location_uuid
-            break
+    now = datetime.now()
+    if row:
+        conn.execute(
+            "UPDATE chat_conversaciones SET title = ?, updated_at = ?, location_uuid = COALESCE(?, location_uuid) WHERE conv_id = ?",
+            [new_title, now, location_uuid, conv_id],
+        )
     else:
-        index.insert(0, {
-            "id":            conv_id,
-            "title":         conv["title"],
-            "updated_at":    now,
-            "location_uuid": location_uuid,
-        })
-    index.sort(key=lambda e: e["updated_at"], reverse=True)
-    _save_index(session_id, index[:MAX_CONVS])
+        conn.execute(
+            "INSERT INTO chat_conversaciones (conv_id, user_id, title, location_uuid, updated_at) VALUES (?, ?, ?, ?, ?)",
+            [conv_id, session_id, new_title, location_uuid, now],
+        )
+
+    conn.execute("DELETE FROM chat_mensajes WHERE conv_id = ?", [conv_id])
+    if messages:
+        conn.executemany(
+            "INSERT INTO chat_mensajes (conv_id, seq, role, content) VALUES (?, ?, ?, ?)",
+            [(conv_id, i, m.get("role", "user"), _serialize(m.get("content", "")))
+             for i, m in enumerate(messages)],
+        )
 
 
 def rename_conversation(session_id: str, conv_id: str, new_title: str) -> None:
     new_title = new_title.strip() or "Conversación"
-    p = _conv_path(session_id, conv_id)
-    if p.exists():
-        try:
-            with open(p, encoding="utf-8") as f:
-                conv = json.load(f)
-            conv["title"] = new_title
-            _atomic_write(p, conv)
-        except Exception:
-            pass
-    index = _load_index(session_id)
-    for entry in index:
-        if entry["id"] == conv_id:
-            entry["title"] = new_title
-            break
-    _save_index(session_id, index)
+    get_conn().execute(
+        "UPDATE chat_conversaciones SET title = ? WHERE conv_id = ? AND user_id = ?",
+        [new_title, conv_id, session_id],
+    )
 
 
 def delete_conversation(session_id: str, conv_id: str) -> None:
-    p = _conv_path(session_id, conv_id)
-    if p.exists():
-        try:
-            p.unlink()
-        except Exception:
-            pass
-    index = _load_index(session_id)
-    _save_index(session_id, [e for e in index if e["id"] != conv_id])
+    conn = get_conn()
+    conn.execute("DELETE FROM chat_mensajes WHERE conv_id = ?", [conv_id])
+    conn.execute(
+        "DELETE FROM chat_conversaciones WHERE conv_id = ? AND user_id = ?",
+        [conv_id, session_id],
+    )
 
 
 def list_conversations(session_id: str) -> list[dict]:
-    return _load_index(session_id)
+    rows = get_conn().execute(
+        "SELECT conv_id, title, updated_at, location_uuid FROM chat_conversaciones WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?",
+        [session_id, MAX_CONVS],
+    ).fetchall()
+    return [
+        {
+            "id":            r[0],
+            "title":         r[1] or "Nueva conversación",
+            "updated_at":    _ts_to_epoch(r[2]),
+            "location_uuid": r[3],
+        }
+        for r in rows
+    ]
 
 
-def load_conversation(session_id: str, conv_id: str) -> dict | None:
-    p = _conv_path(session_id, conv_id)
-    if not p.exists():
+def load_conversation(session_id: str, conv_id: str) -> Optional[dict]:
+    conn = get_conn()
+    conv_row = conn.execute(
+        "SELECT conv_id, title, created_at, updated_at, location_uuid FROM chat_conversaciones WHERE conv_id = ? AND user_id = ?",
+        [conv_id, session_id],
+    ).fetchone()
+    if conv_row is None:
         return None
-    try:
-        with open(p, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return None
+
+    msg_rows = conn.execute(
+        "SELECT role, content FROM chat_mensajes WHERE conv_id = ? ORDER BY seq",
+        [conv_id],
+    ).fetchall()
+
+    return {
+        "id":            conv_row[0],
+        "title":         conv_row[1] or "Nueva conversación",
+        "created_at":    _ts_to_epoch(conv_row[2]),
+        "updated_at":    _ts_to_epoch(conv_row[3]),
+        "location_uuid": conv_row[4],
+        "messages":      [{"role": r[0], "content": _deserialize(r[1])} for r in msg_rows],
+    }

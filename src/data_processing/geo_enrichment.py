@@ -1,8 +1,4 @@
-import json
 import pandas as pd
-from pathlib import Path
-
-_GEO_PATH = Path(__file__).parent.parent / "data" / "geo_features.json"
 
 # ── Feature catalogue ─────────────────────────────────────────────────────────
 #
@@ -312,22 +308,58 @@ GEO_FEATURES_DINAMICAS = [
     "dist_competidor_cercano_m",
 ]
 
-# Cache con invalidación por mtime — evita releer el JSON en cada llamada durante training
-_store_cache: dict = {}
-_store_mtime: float = 0.0
+# Cache en memoria invalidado por ubicación en cada ingesta Esri.
+# Clave: (location_uuid, fecha_str | None)  →  {col: value}
+_geo_cache: dict = {}
 
 
-def _cargar_store() -> dict:
-    global _store_cache, _store_mtime
-    if not _GEO_PATH.exists():
+def invalidate_geo_cache(location_uuid: str = None) -> None:
+    """Elimina entradas de caché. Sin argumento limpia todo."""
+    if location_uuid is None:
+        _geo_cache.clear()
+    else:
+        for k in [k for k in _geo_cache if k[0] == location_uuid]:
+            del _geo_cache[k]
+
+
+def _fetch_snapshot_features(location_uuid: str, fecha=None) -> dict:
+    """
+    Consulta store_geo_snapshots y devuelve {feature_key: value} del snapshot aplicable.
+    Retorna dict vacío si no hay datos para esta ubicación.
+    """
+    from src.db.store import get_conn
+    conn = get_conn()
+
+    if fecha is None:
+        row = conn.execute("""
+            SELECT DISTINCT valid_from FROM store_geo_snapshots
+            WHERE location_uuid = ? AND valid_to IS NULL
+            ORDER BY valid_from DESC LIMIT 1
+        """, [location_uuid]).fetchone()
+        if not row:
+            row = conn.execute("""
+                SELECT DISTINCT valid_from FROM store_geo_snapshots
+                WHERE location_uuid = ? ORDER BY valid_from DESC LIMIT 1
+            """, [location_uuid]).fetchone()
+    else:
+        fecha_str = str(fecha)[:10]
+        row = conn.execute("""
+            SELECT DISTINCT valid_from FROM store_geo_snapshots
+            WHERE location_uuid = ?
+              AND valid_from <= ?
+              AND (valid_to IS NULL OR valid_to >= ?)
+            ORDER BY valid_from DESC LIMIT 1
+        """, [location_uuid, fecha_str, fecha_str]).fetchone()
+
+    if not row:
         return {}
-    mtime = _GEO_PATH.stat().st_mtime
-    if not _store_cache or _store_mtime != mtime:
-        with open(_GEO_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        _store_cache = {k: v for k, v in data.items() if not k.startswith("_")}
-        _store_mtime = mtime
-    return _store_cache
+
+    valid_from = row[0]
+    rows = conn.execute("""
+        SELECT feature_key, value FROM store_geo_snapshots
+        WHERE location_uuid = ? AND valid_from = ?
+    """, [location_uuid, valid_from]).fetchall()
+    return {k: v for k, v in rows}
 
 
 def get_geo_vals(location_uuid: str, fecha=None) -> dict:
@@ -341,31 +373,14 @@ def get_geo_vals(location_uuid: str, fecha=None) -> dict:
     Si no hay snapshot aplicable devuelve None en todos los campos, lo que hace que
     get_geo_features_activos() devuelva lista vacía y el modelo ignore las geo features.
     """
-    store = _cargar_store()
-    snapshots = store.get(location_uuid, [])
-    if not snapshots:
-        return {col: None for col in GEO_FEATURE_COLS}
+    cache_key = (location_uuid, str(fecha)[:10] if fecha is not None else None)
+    if cache_key in _geo_cache:
+        return _geo_cache[cache_key]
 
-    # Snapshots ordenados cronológicamente (por si el JSON no lo está)
-    snapshots_ord = sorted(snapshots, key=lambda s: s.get("valid_from", ""))
-
-    if fecha is None:
-        # Snapshot activo: valid_to=null, o el más reciente si todos tienen cierre
-        activo = next((s for s in reversed(snapshots_ord) if s.get("valid_to") is None), None)
-        target = activo or snapshots_ord[-1]
-    else:
-        ts = pd.Timestamp(fecha)
-        target = None
-        for s in snapshots_ord:
-            vf = pd.Timestamp(s.get("valid_from", "1900-01-01"))
-            vt = pd.Timestamp(s["valid_to"]) if s.get("valid_to") else pd.Timestamp.max
-            if vf <= ts <= vt:
-                target = s
-                break
-        if target is None:
-            return {col: None for col in GEO_FEATURE_COLS}
-
-    return {col: target.get(col) for col in GEO_FEATURE_COLS}
+    raw = _fetch_snapshot_features(location_uuid, fecha)
+    result = {col: raw.get(col) for col in GEO_FEATURE_COLS}
+    _geo_cache[cache_key] = result
+    return result
 
 
 def get_geo_features_activos(location_uuid: str, fecha=None) -> list:
@@ -382,8 +397,7 @@ def enriquecer_con_geo(df: pd.DataFrame, col_location_id: str = "location_id", c
     Solo añade columnas que tengan al menos un valor no nulo en el resultado.
     No-op si el store está vacío o todos los valores son null.
     """
-    store = _cargar_store()
-    if not store:
+    if col_location_id not in df.columns:
         return df
 
     usa_fecha = col_fecha in df.columns
@@ -391,9 +405,6 @@ def enriquecer_con_geo(df: pd.DataFrame, col_location_id: str = "location_id", c
     def _lookup(row):
         fecha = row[col_fecha] if usa_fecha else None
         return get_geo_vals(row[col_location_id], fecha)
-
-    if col_location_id not in df.columns:
-        return df
 
     geo_df = df[[col_location_id] + ([col_fecha] if usa_fecha else [])].apply(_lookup, axis=1, result_type="expand")
 
@@ -409,30 +420,22 @@ def enriquecer_con_geo(df: pd.DataFrame, col_location_id: str = "location_id", c
 
 
 def get_catchment_rings(location_uuid: str):
-    """
-    Devuelve la geometría real de las isócronas almacenada en el snapshot activo.
-
-    Retorna una lista de 3 dicts [{lats, lons}, ...] correspondientes a 400 / 800 / 1200 m,
-    o None si aún no se han solicitado geometrías reales a Esri (returnGeometry=true).
-    """
-    store = _cargar_store()
-    snapshots = store.get(location_uuid, [])
-    if not snapshots:
-        return None
-    snapshots_ord = sorted(snapshots, key=lambda s: s.get("valid_from", ""))
-    activo = next((s for s in reversed(snapshots_ord) if s.get("valid_to") is None), None)
-    if not activo:
-        return None
-    return activo.get("catchment_rings")
+    """Retorna geometría de isócronas (pendiente migración a DB). Devuelve None por ahora."""
+    return None
 
 
 def get_geo_snapshot_date(location_uuid: str) -> str | None:
     """Returns the valid_from date of the active geo snapshot, or None if no data."""
-    store = _cargar_store()
-    snapshots = store.get(location_uuid, [])
-    if not snapshots:
-        return None
-    snapshots_ord = sorted(snapshots, key=lambda s: s.get("valid_from", ""))
-    activo = next((s for s in reversed(snapshots_ord) if s.get("valid_to") is None), None)
-    target = activo or snapshots_ord[-1]
-    return target.get("valid_from")
+    from src.db.store import get_conn
+    row = get_conn().execute("""
+        SELECT valid_from FROM store_geo_snapshots
+        WHERE location_uuid = ? AND valid_to IS NULL
+        ORDER BY valid_from DESC LIMIT 1
+    """, [location_uuid]).fetchone()
+    if row:
+        return str(row[0])
+    row = get_conn().execute("""
+        SELECT valid_from FROM store_geo_snapshots
+        WHERE location_uuid = ? ORDER BY valid_from DESC LIMIT 1
+    """, [location_uuid]).fetchone()
+    return str(row[0]) if row else None

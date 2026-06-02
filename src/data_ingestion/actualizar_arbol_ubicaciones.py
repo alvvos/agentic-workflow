@@ -7,38 +7,54 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-_RUTA_JSON     = './todas_las_ubicaciones.json'
 _URL_AITANNA   = 'https://platform.aitanna.ai/api/v1/get-all-locations-and-zones'
 _NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search'
 _NOMINATIM_UA  = 'agentic-workflow/1.0 (alvaro.salis@69summer.com)'
 
-_CAMPOS_GEO = ('lat', 'lon', 'postal_code', 'region_code', 'country_code')
+_COUNTRY_MAP = {
+    'España': 'ES', 'Spain': 'ES',
+    'México': 'MX', 'Mexico': 'MX',
+    'Estados Unidos': 'US', 'USA': 'US', 'United States': 'US',
+}
+
+_PRESET_ES = {
+    'rebajas_invierno': True, 'rebajas_verano': True,
+    'black_friday': True, 'cyber_monday': True,
+    'navidad_compras': True, 'reyes_compras': True,
+    'san_valentin': True, 'dia_madre': True,
+    'buen_fin_mx': False, 'dia_muertos': False,
+    'independencia_mx': False, 'dia_madre_mx': False,
+    'regreso_clases_mx': False, 'dia_nino_mx': False,
+}
+
+_PRESET_MX = {
+    'rebajas_invierno': False, 'rebajas_verano': False,
+    'black_friday': False, 'cyber_monday': True,
+    'navidad_compras': True, 'reyes_compras': True,
+    'san_valentin': True, 'dia_madre': False,
+    'buen_fin_mx': True, 'dia_muertos': True,
+    'independencia_mx': True, 'dia_madre_mx': True,
+    'regreso_clases_mx': True, 'dia_nino_mx': True,
+}
+
+_PRESETS = {'ES': _PRESET_ES, 'MX': _PRESET_MX}
+
+
+def _pais(loc: dict) -> str:
+    if loc.get('country_code'):
+        return loc['country_code'].upper()
+    by_name = _COUNTRY_MAP.get(loc.get('country', ''), '')
+    if by_name:
+        return by_name
+    addr = (loc.get('address') or '').lower()
+    if any(k in addr for k in ('méxico', 'mexico', 'cdmx', 'ciudad de méxico')):
+        return 'MX'
+    if any(k in addr for k in ('españa', 'spain', 'madrid', 'barcelona', 'málaga', 'malaga')):
+        return 'ES'
+    return 'XX'
 
 
 # ── Árbol de ubicaciones ──────────────────────────────────────────────────────
-
-def _cargar_memorias(ruta):
-    """
-    Lee el JSON existente y devuelve:
-      - memoria_locs:  uuid_loc  → {lat, lon, ...}  (campos geo manuales)
-      - memoria_zones: uuid_zone → zoneType          (la API dejó de devolverlo)
-    """
-    memoria_locs  = {}
-    memoria_zones = {}
-    if not os.path.exists(ruta):
-        return memoria_locs, memoria_zones
-    with open(ruta, encoding='utf-8') as f:
-        datos = json.load(f)
-    for org in datos:
-        for loc in org.get('locations', []):
-            geo = {k: loc[k] for k in _CAMPOS_GEO if k in loc}
-            if geo:
-                memoria_locs[loc['uuid']] = geo
-            for z in loc.get('zones', []):
-                if 'zoneType' in z:
-                    memoria_zones[z['uuid']] = z['zoneType']
-    return memoria_locs, memoria_zones
-
 
 def descargar_maestro_ubicaciones():
     api_key = os.getenv('AITANNA_API_KEY')
@@ -61,28 +77,90 @@ def descargar_maestro_ubicaciones():
         return
 
     datos_frescos = res.json()
-    memoria_locs, memoria_zones = _cargar_memorias(_RUTA_JSON)
 
-    n_orgs = n_locs = n_zones = 0
-    n_geo_rest = n_zt_rest = 0
+    from src.db.store import get_conn
+    conn = get_conn()
+
+    # Read existing geo memory from DB — preserve lat/lon and zone_type
+    mem_locs = {
+        r[0]: {'lat': r[1], 'lon': r[2], 'region_code': r[3], 'country_code': r[4], 'codigo_postal': r[5]}
+        for r in conn.execute(
+            "SELECT location_uuid, lat, lon, region_code, country_code, codigo_postal "
+            "FROM dim_ubicaciones"
+        ).fetchall()
+        if r[1] is not None and r[2] is not None
+    }
+    mem_zones = {
+        r[0]: r[1]
+        for r in conn.execute("SELECT zone_uuid, zone_type FROM dim_zonas WHERE zone_type IS NOT NULL AND zone_type != ''").fetchall()
+    }
+
+    n_orgs = n_locs = n_zones = n_geo_rest = n_zt_rest = 0
+
+    org_rows, loc_rows, zone_rows = [], [], []
 
     for org in datos_frescos:
+        org_uuid = org.get('uuid')
+        if not org_uuid:
+            continue
         n_orgs += 1
+        first_loc = org['locations'][0] if org.get('locations') else {}
+        pais = _pais(first_loc)
+        config = json.dumps(_PRESETS.get(pais, _PRESET_ES))
+        org_rows.append((org_uuid, org['name'], pais, config))
+
         for loc in org.get('locations', []):
             n_locs += 1
-            if loc['uuid'] in memoria_locs:
-                loc.update(memoria_locs[loc['uuid']])
+            mem = mem_locs.get(loc['uuid'], {})
+            lat = loc.get('lat') or mem.get('lat')
+            lon = loc.get('lon') or mem.get('lon')
+            if mem and lat:
                 n_geo_rest += 1
+            loc_pais = _pais(loc)
+            loc_rows.append((
+                loc['uuid'], org_uuid, loc['name'],
+                lat, lon,
+                loc.get('city'), loc.get('province'),
+                loc_pais,
+                loc.get('region_code') or mem.get('region_code'),
+                loc.get('country_code') or mem.get('country_code'),
+                loc.get('postCode') or loc.get('postal_code') or mem.get('codigo_postal'),
+                loc.get('address'),
+                True,
+            ))
+
             for z in loc.get('zones', []):
                 n_zones += 1
-                if z['uuid'] in memoria_zones:
-                    z['zoneType'] = memoria_zones[z['uuid']]
+                zone_type = mem_zones.get(z['uuid'], z.get('zoneType', ''))
+                if zone_type:
                     n_zt_rest += 1
+                zone_rows.append((z['uuid'], loc['uuid'], z['zoneName'], z.get('hidden', False), zone_type or ''))
 
-    with open(_RUTA_JSON, 'w', encoding='utf-8') as f:
-        json.dump(datos_frescos, f, ensure_ascii=False, indent=4)
+    conn.executemany(
+        "INSERT INTO dim_organizaciones (org_uuid, nombre, pais_codigo, config_calendario) "
+        "VALUES (?,?,?,?::jsonb) ON CONFLICT (org_uuid) DO UPDATE SET nombre = excluded.nombre, pais_codigo = excluded.pais_codigo",
+        org_rows,
+    )
+    conn.executemany(
+        "INSERT INTO dim_ubicaciones VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) "
+        "ON CONFLICT (location_uuid) DO UPDATE SET "
+        "nombre = excluded.nombre, lat = COALESCE(excluded.lat, dim_ubicaciones.lat), "
+        "lon = COALESCE(excluded.lon, dim_ubicaciones.lon), "
+        "ciudad = excluded.ciudad, provincia = excluded.provincia, "
+        "region_code = COALESCE(excluded.region_code, dim_ubicaciones.region_code), "
+        "country_code = COALESCE(excluded.country_code, dim_ubicaciones.country_code), "
+        "codigo_postal = COALESCE(excluded.codigo_postal, dim_ubicaciones.codigo_postal), "
+        "direccion = excluded.direccion, activa = excluded.activa",
+        loc_rows,
+    )
+    conn.executemany(
+        "INSERT INTO dim_zonas (zone_uuid, location_uuid, nombre, hidden, zone_type) VALUES (?,?,?,?,?) "
+        "ON CONFLICT (zone_uuid) DO UPDATE SET nombre = excluded.nombre, hidden = excluded.hidden, "
+        "zone_type = CASE WHEN excluded.zone_type != '' THEN excluded.zone_type ELSE dim_zonas.zone_type END",
+        zone_rows,
+    )
 
-    print(f'OK — {_RUTA_JSON} actualizado.')
+    print('OK — árbol de ubicaciones actualizado en PostgreSQL.')
     print(f'  Organizaciones : {n_orgs}')
     print(f'  Ubicaciones    : {n_locs}  ({n_geo_rest} con geo preservada)')
     print(f'  Zonas          : {n_zones}  ({n_zt_rest} con zoneType preservado)')
@@ -91,48 +169,32 @@ def descargar_maestro_ubicaciones():
 # ── Geocodificación ───────────────────────────────────────────────────────────
 
 def _limpiar(s):
-    """Elimina espacios de no separación y espacios extra."""
     return re.sub(r'\s+', ' ', str(s or '').replace('\xa0', ' ')).strip()
 
 
 def _candidatos_query(nombre, address, city, post_code, country):
-    """
-    Genera queries de geocodificación en orden de especificidad descendente.
-    Usa solo los campos no vacíos.
-    """
     def _join(*partes):
         return ', '.join(p for p in partes if p)
 
-    address  = _limpiar(address)
-    city     = _limpiar(city)
+    address   = _limpiar(address)
+    city      = _limpiar(city)
     post_code = _limpiar(post_code)
-    country  = _limpiar(country)
-    nombre   = _limpiar(nombre)
+    country   = _limpiar(country)
+    nombre    = _limpiar(nombre)
 
     candidatos = []
-
-    # 1. Dirección completa + ciudad + CP + país
     q = _join(address, city, post_code, country)
     if q:
         candidatos.append(q)
-
-    # 2. Solo dirección (muchas ya son completas con CP y ciudad incluidas)
     if address and address not in (q,):
         candidatos.append(address)
-
-    # 3. Nombre + ciudad + país (fallback sin dirección)
     q3 = _join(nombre, city, country)
     if q3 and q3 not in candidatos:
         candidatos.append(q3)
-
     return candidatos
 
 
 def _geocodificar_una(nombre, address, city, post_code, country, timeout=6):
-    """
-    Llama a Nominatim con queries progresivas.
-    Respeta el rate limit de 1 req/s entre intentos.
-    """
     for i, query in enumerate(_candidatos_query(nombre, address, city, post_code, country)):
         if i > 0:
             time.sleep(1)
@@ -152,22 +214,16 @@ def _geocodificar_una(nombre, address, city, post_code, country, timeout=6):
 
 
 def geocodificar_ubicaciones(solo_vacias=True):
-    """
-    Añade lat/lon a las ubicaciones que carecen de coordenadas.
-    Usa Nominatim (OpenStreetMap) — gratuito, límite 1 req/s.
+    """Geocodifica ubicaciones sin coordenadas usando Nominatim (1 req/s)."""
+    from src.db.store import get_conn
+    conn = get_conn()
 
-    solo_vacias=True  → salta las que ya tienen lat/lon
-    solo_vacias=False → regeocifica todas
-    """
-    with open(_RUTA_JSON, encoding='utf-8') as f:
-        data = json.load(f)
+    rows = conn.execute(
+        "SELECT location_uuid, nombre, direccion, ciudad, provincia, codigo_postal, country_code, lat, lon "
+        "FROM dim_ubicaciones WHERE activa = TRUE"
+    ).fetchall()
 
-    pendientes = [
-        loc
-        for org in data
-        for loc in org.get('locations', [])
-        if not solo_vacias or not (loc.get('lat') and loc.get('lon'))
-    ]
+    pendientes = [r for r in rows if not solo_vacias or not (r[7] and r[8])]
 
     if not pendientes:
         print('Todas las ubicaciones ya tienen coordenadas.')
@@ -176,26 +232,25 @@ def geocodificar_ubicaciones(solo_vacias=True):
     print(f'Geocodificando {len(pendientes)} ubicaciones (Nominatim, ~1 req/s)...')
     ok = fail = 0
 
-    for loc in pendientes:
+    for loc_uuid, nombre, address, city, province, post_code, country_code, *_ in pendientes:
         lat, lon, query_usada = _geocodificar_una(
-            nombre    = loc.get('name', ''),
-            address   = loc.get('address', ''),
-            city      = loc.get('city', ''),
-            post_code = loc.get('postCode', ''),
-            country   = loc.get('country', ''),
+            nombre    = nombre or '',
+            address   = address or '',
+            city      = city or province or '',
+            post_code = post_code or '',
+            country   = country_code or '',
         )
         if lat is not None:
-            loc['lat'] = round(lat, 6)
-            loc['lon'] = round(lon, 6)
-            print(f'  ✓  {loc["name"]:<40} {lat:.5f}, {lon:.5f}')
+            conn.execute(
+                "UPDATE dim_ubicaciones SET lat = ?, lon = ? WHERE location_uuid = ?",
+                [round(lat, 6), round(lon, 6), loc_uuid],
+            )
+            print(f'  ✓  {nombre:<40} {lat:.5f}, {lon:.5f}')
             ok += 1
         else:
-            print(f'  ✗  {loc["name"]:<40} sin resultado')
+            print(f'  ✗  {nombre:<40} sin resultado')
             fail += 1
-        time.sleep(1)  # rate limit Nominatim
-
-    with open(_RUTA_JSON, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+        time.sleep(1)
 
     print(f'\nGeocodificación completada: {ok} OK · {fail} sin resultado.')
 

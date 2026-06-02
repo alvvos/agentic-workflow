@@ -7,25 +7,34 @@ import json
 import pandas as pd
 from src.services.ml_predictivo import ejecutar_auditoria_predictiva
 from src.data_processing.constructor_master import cargar_csv_crudo, enriquecer_datos_ubicacion
+from src.db.queries import get_df_enriquecido
 
-RUTA_JSON = 'src/data/todas_las_ubicaciones.json'
+from src.core.data_master import mapa_tiendas
+from src.db.queries import get_zones_for_loc
+
 mapa_zonas_por_loc = {}
 mapa_tiendas_ml = {}
 mapa_zonas_ml = {}
 
-if os.path.exists(RUTA_JSON):
-    with open(RUTA_JSON, 'r', encoding='utf-8') as f:
-        datos_json = json.load(f)
-        for org in datos_json:
-            for loc in org.get('locations', []):
-                if loc.get('uuid'):
-                    zonas = [{'label': z.get('zoneName', 'Zona'), 'value': z['uuid']}
-                             for z in loc.get('zones', []) if z.get('uuid')]
-                    mapa_zonas_por_loc[loc['uuid']] = zonas
-                    mapa_tiendas_ml[loc['uuid']] = loc.get('name')
-                    for z in loc.get('zones', []):
-                        if z.get('uuid'):
-                            mapa_zonas_ml[z['uuid']] = z.get('zoneName', 'Zona')
+
+def _rebuild_ml_maps():
+    mapa_zonas_por_loc.clear()
+    mapa_tiendas_ml.clear()
+    mapa_zonas_ml.clear()
+    for loc_uuid, nombre in mapa_tiendas.items():
+        zonas = [{'label': z['nombre'], 'value': z['zone_uuid']}
+                 for z in get_zones_for_loc(loc_uuid) if not z['hidden']]
+        mapa_zonas_por_loc[loc_uuid] = zonas
+        mapa_tiendas_ml[loc_uuid] = nombre
+        for z in get_zones_for_loc(loc_uuid):
+            if not z['hidden']:
+                mapa_zonas_ml[z['zone_uuid']] = z['nombre']
+
+
+try:
+    _rebuild_ml_maps()
+except Exception:
+    pass
 
 def generar_panel_ml():
     return html.Div([
@@ -135,15 +144,17 @@ def ejecutar_auditoria(n, locs, zone, fecha, horiz, session_id):
     if not locs or not zone: return "-", "-", "-", "-", go.Figure(), "Aviso: Selecciona una ubicación en el filtro global (izquierda) y una zona."
     if not session_id: return "-", "-", "-", "-", go.Figure(), "Error de sesión: No se puede identificar el usuario."
 
-    archivo_usuario = os.path.join('src', 'data', f'dataset_{session_id}.csv')
-    if not os.path.exists(archivo_usuario):
-        return "-", "-", "-", "-", go.Figure(), "Error: Sincroniza los datos desde el panel principal antes de usar el Motor Predictivo."
+    loc_principal = locs[0]
 
     try:
-        df_crudo = cargar_csv_crudo(archivo_usuario)
-        loc_principal = locs[0]
-        
-        df_e = enriquecer_datos_ubicacion(df_crudo, loc_principal, RUTA_JSON)
+        # Prefer DuckDB; fall back to session CSV
+        df_e = get_df_enriquecido(loc_principal, session_id=session_id)
+        if df_e.empty:
+            archivo_usuario = os.path.join('src', 'data', f'dataset_{session_id}.csv')
+            if not os.path.exists(archivo_usuario):
+                return "-", "-", "-", "-", go.Figure(), "Error: Sincroniza los datos desde el panel principal antes de usar el Motor Predictivo."
+            df_crudo = cargar_csv_crudo(archivo_usuario)
+            df_e = enriquecer_datos_ubicacion(df_crudo, loc_principal)
         res = ejecutar_auditoria_predictiva(df_e, loc_principal, zone, fecha, horiz)
         
         if "error" in res: return "-", "-", "-", "-", go.Figure(), f"Error en el motor ML: {res['error']}"
@@ -205,7 +216,7 @@ def ejecutar_forecast_manana(n, locs, session_id):
 
         zona_cards = []
         for loc_uuid in locs:
-            df_e = enriquecer_datos_ubicacion(df_crudo, loc_uuid, RUTA_JSON)
+            df_e = enriquecer_datos_ubicacion(df_crudo, loc_uuid)
             if df_e.empty:
                 continue
             loc_nombre = mapa_tiendas_ml.get(loc_uuid, loc_uuid)

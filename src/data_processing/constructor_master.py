@@ -11,23 +11,20 @@ def cargar_csv_crudo(ruta_csv='dataset_global_raw.csv'):
     df['fecha'] = pd.to_datetime(df['fecha'])
     return df
 
-def enriquecer_datos_ubicacion(df_crudo, location_uuid, ruta_json='src/todas_las_ubicaciones.json'):
+def enriquecer_datos_ubicacion(df_crudo, location_uuid, ruta_json=None):
     df_loc = df_crudo[df_crudo['location_id'] == location_uuid].copy()
     if df_loc.empty:
         return df_loc
 
     lat, lon, region_code = 40.4168, -3.7038, 'MD'
     try:
-        with open(ruta_json, 'r', encoding='utf-8') as f:
-            datos_loc = json.load(f)
-            for org in datos_loc:
-                for loc in org.get('locations', []):
-                    if loc['uuid'] == location_uuid:
-                        lat = loc.get('latitude', lat)
-                        lon = loc.get('longitude', lon)
-                        region_code = loc.get('region_code', region_code)
-                        break
-    except:
+        from src.db.queries import get_location_by_uuid
+        info = get_location_by_uuid(location_uuid)
+        if info:
+            lat         = info.get('lat') or lat
+            lon         = info.get('lon') or lon
+            region_code = info.get('region_code') or region_code
+    except Exception:
         pass
 
     df_loc['region_code'] = region_code

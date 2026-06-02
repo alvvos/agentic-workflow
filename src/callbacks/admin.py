@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 import flask
 from dash import Output, Input, State, callback_context, html, no_update, ALL
@@ -7,9 +6,7 @@ import dash_bootstrap_components as dbc
 from werkzeug.security import generate_password_hash
 
 from src.core.config import app, MODO_DESARROLLO
-
-_USERS_FILE = Path(__file__).parent.parent.parent / "users.json"
-_UBIC_PATH  = Path(__file__).parent.parent / "data" / "todas_las_ubicaciones.json"
+from src.db.store import get_conn
 
 _ROLE_LABELS = {"admin": "Administrador", "user": "Usuario"}
 _ROLE_COLORS = {"admin": "danger", "user": "primary"}
@@ -18,15 +15,26 @@ _ROLE_COLORS = {"admin": "danger", "user": "primary"}
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _load_users() -> dict:
-    if not _USERS_FILE.exists():
-        return {}
-    with open(_USERS_FILE) as f:
-        return json.load(f)
+    rows = get_conn().execute(
+        "SELECT user_id, password_hash, role FROM dim_usuarios ORDER BY user_id"
+    ).fetchall()
+    return {r[0]: {"password": r[1], "role": r[2] or "user"} for r in rows}
 
 
-def _save_users(users: dict) -> None:
-    with open(_USERS_FILE, "w") as f:
-        json.dump(users, f, indent=2)
+def _upsert_user(username: str, password_hash: str, role: str) -> None:
+    get_conn().execute("""
+        INSERT INTO dim_usuarios (user_id, password_hash, role)
+        VALUES (?, ?, ?)
+        ON CONFLICT (user_id) DO UPDATE SET password_hash = excluded.password_hash, role = excluded.role
+    """, [username, password_hash, role])
+
+
+def _delete_user(username: str) -> None:
+    get_conn().execute("DELETE FROM dim_usuarios WHERE user_id = ?", [username])
+
+
+def _update_role(username: str, new_role: str) -> None:
+    get_conn().execute("UPDATE dim_usuarios SET role = ? WHERE user_id = ?", [new_role, username])
 
 
 def _normalize(entry) -> dict:
@@ -42,15 +50,35 @@ def _current_user() -> str:
 
 
 def _load_orgs() -> list:
-    if not _UBIC_PATH.exists():
-        return []
-    with open(_UBIC_PATH, encoding="utf-8") as f:
-        return json.load(f)
+    conn = get_conn()
+    orgs_rows = conn.execute(
+        "SELECT org_uuid, nombre FROM dim_organizaciones ORDER BY nombre"
+    ).fetchall()
+    locs_rows = conn.execute(
+        "SELECT location_uuid, org_uuid, nombre, lat, lon, ciudad, provincia "
+        "FROM dim_ubicaciones WHERE activa = TRUE ORDER BY nombre"
+    ).fetchall()
+    zones_rows = conn.execute(
+        "SELECT zone_uuid, location_uuid, nombre FROM dim_zonas ORDER BY nombre"
+    ).fetchall()
 
+    zones_by_loc: dict = {}
+    for z in zones_rows:
+        zones_by_loc.setdefault(z[1], []).append({"uuid": z[0], "zoneName": z[2]})
 
-def _save_orgs(orgs: list) -> None:
-    with open(_UBIC_PATH, "w", encoding="utf-8") as f:
-        json.dump(orgs, f, ensure_ascii=False, indent=2)
+    locs_by_org: dict = {}
+    for l in locs_rows:
+        locs_by_org.setdefault(l[1], []).append({
+            "uuid": l[0], "name": l[2],
+            "lat": l[3], "lon": l[4],
+            "city": l[5], "province": l[6],
+            "zones": zones_by_loc.get(l[0], []),
+        })
+
+    return [
+        {"uuid": o[0], "name": o[1], "locations": locs_by_org.get(o[0], [])}
+        for o in orgs_rows
+    ]
 
 
 # ── Render helpers ────────────────────────────────────────────────────────────
@@ -306,10 +334,9 @@ def add_user(_, username, password, role, signal):
     if len(username) < 3:
         return no_update, "El usuario debe tener al menos 3 caracteres.", True, "danger", no_update, no_update
 
-    users  = _load_users()
-    action = "actualizado" if username in users else "creado"
-    users[username] = {"password": generate_password_hash(password), "role": role or "user"}
-    _save_users(users)
+    exists = username in _load_users()
+    action = "actualizado" if exists else "creado"
+    _upsert_user(username, generate_password_hash(password), role or "user")
     return (signal or 0) + 1, f"Usuario '{username}' {action}.", True, "success", "", ""
 
 
@@ -413,36 +440,38 @@ def handle_delete_modal(_, __, pending, signal):
     kind, _, identifier = str(pending).partition(":")
 
     if kind == "user":
-        users = _load_users()
-        if identifier not in users:
+        if identifier not in _load_users():
             return no_update, f"Usuario '{identifier}' no encontrado.", True, "warning", *_l, False
-        del users[identifier]
-        _save_users(users)
+        _delete_user(identifier)
         return (signal or 0) + 1, f"Usuario '{identifier}' eliminado.", True, "success", *_l, False
 
     if kind == "loc":
-        orgs = _load_orgs()
-        nombre = None
-        for org in orgs:
-            locs = org.get("locations", [])
-            hit  = next((l for l in locs if l["uuid"] == identifier), None)
-            if hit:
-                nombre = hit.get("name", identifier[:8])
-                org["locations"] = [l for l in locs if l["uuid"] != identifier]
-                break
-        if not nombre:
-            return no_update, *_u, f"Ubicación no encontrada.", True, "warning", False
-        _save_orgs(orgs)
+        conn = get_conn()
+        row = conn.execute(
+            "SELECT nombre FROM dim_ubicaciones WHERE location_uuid = ?", [identifier]
+        ).fetchone()
+        if not row:
+            return no_update, *_u, "Ubicación no encontrada.", True, "warning", False
+        nombre = row[0]
+        conn.execute("DELETE FROM dim_zonas WHERE location_uuid = ?", [identifier])
+        conn.execute("DELETE FROM dim_ubicaciones WHERE location_uuid = ?", [identifier])
         return (signal or 0) + 1, *_u, f"Ubicación '{nombre}' eliminada.", True, "success", False
 
     if kind == "org":
-        orgs    = _load_orgs()
-        target  = next((o for o in orgs if o.get("uuid") == identifier), None)
-        if not target:
+        conn = get_conn()
+        row = conn.execute(
+            "SELECT nombre FROM dim_organizaciones WHERE org_uuid = ?", [identifier]
+        ).fetchone()
+        if not row:
             return no_update, *_u, "Organización no encontrada.", True, "warning", False
-        nombre  = target.get("name", identifier)
-        new_orgs = [o for o in orgs if o.get("uuid") != identifier]
-        _save_orgs(new_orgs)
+        nombre = row[0]
+        loc_uuids = [r[0] for r in conn.execute(
+            "SELECT location_uuid FROM dim_ubicaciones WHERE org_uuid = ?", [identifier]
+        ).fetchall()]
+        for loc_uuid in loc_uuids:
+            conn.execute("DELETE FROM dim_zonas WHERE location_uuid = ?", [loc_uuid])
+        conn.execute("DELETE FROM dim_ubicaciones WHERE org_uuid = ?", [identifier])
+        conn.execute("DELETE FROM dim_organizaciones WHERE org_uuid = ?", [identifier])
         return (signal or 0) + 1, *_u, f"Organización '{nombre}' eliminada.", True, "success", False
 
     return no_update, *_u, *_l, False
@@ -476,10 +505,8 @@ def toggle_role(n_clicks_list, signal):
     if username not in users:
         return no_update, f"Usuario '{username}' no encontrado.", True, "warning"
 
-    entry    = _normalize(users[username])
-    new_role = "admin" if entry.get("role", "user") == "user" else "user"
-    entry["role"]  = new_role
-    users[username] = entry
-    _save_users(users)
+    current_role = _normalize(users[username]).get("role", "user")
+    new_role     = "admin" if current_role == "user" else "user"
+    _update_role(username, new_role)
     label = _ROLE_LABELS.get(new_role, new_role)
     return (signal or 0) + 1, f"'{username}' ahora es {label}.", True, "success"
