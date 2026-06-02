@@ -53,13 +53,13 @@ def _zona_meta(zona):
     zl = str(zona).lower()
     if 'caja' in zl:
         return ("Cierre de venta", "fas fa-cash-register",
-                "Zona de caja — tráfico más directamente ligado a compras.")
+                "Zona de caja — tráfico vinculado directamente a la conversión en compra.")
     if 'tienda' in zl:
         return ("Conversión", "fas fa-store",
-                "Zona interior — mide cuántos del exterior entran y exploran.")
+                "Zona interior — indica qué proporción del tráfico exterior accede al establecimiento.")
     if 'calle' in zl or 'exterior' in zl:
         return ("Captación", "fas fa-walking",
-                "Zona exterior — tráfico de paso frente al establecimiento.")
+                "Zona exterior — tráfico peatonal registrado frente al establecimiento.")
     return ("Analítica", "fas fa-layer-group", "Zona de medición de tráfico.")
 
 
@@ -378,15 +378,13 @@ def _narrativa(zonas_data, fecha_max, clima, ventana="semana", geo_vals=None):
     # 1. Resumen global del período
     if dg >= 10:
         items.append(("success", "fas fa-arrow-trend-up",
-            f"Buen {periodo} de tráfico. El volumen total creció un {dg:.0f}% respecto a {periodo_ant} anterior."))
+            f"El volumen total de tráfico creció un {dg:.0f}% respecto al {periodo_ant} anterior."))
     elif dg <= -10:
         items.append(("danger", "fas fa-arrow-trend-down",
-            f"{periodo.capitalize()} complicad{'o' if periodo == 'mes' else 'a'}. "
-            f"El tráfico total bajó un {abs(dg):.0f}% respecto a {periodo_ant} anterior."))
+            f"El volumen total de tráfico descendió un {abs(dg):.0f}% respecto al {periodo_ant} anterior."))
     else:
         items.append(("secondary", "fas fa-equals",
-            f"{periodo.capitalize()} sin cambios relevantes. "
-            f"El tráfico se mantuvo prácticamente igual que {periodo_ant} anterior ({dg:+.0f}%)."))
+            f"El volumen total de tráfico se mantuvo estable respecto al {periodo_ant} anterior ({dg:+.0f}%)."))
 
     # 2. Día pico del período
     all_dias = pd.concat(
@@ -409,12 +407,13 @@ def _narrativa(zonas_data, fecha_max, clima, ventana="semana", geo_vals=None):
     if est_p > 0 and abs(d_est) >= 6:
         if d_est > 0:
             items.append(("success", "fas fa-clock",
-                f"Los clientes se quedaron más tiempo este {periodo}: {est_p:.1f} min de media frente a "
-                f"{est_p_a:.1f} min {periodo_ant} anterior. Buena señal de interés en el espacio."))
+                f"El tiempo medio de permanencia aumentó a {est_p:.1f} min, frente a "
+                f"{est_p_a:.1f} min del {periodo_ant} anterior."))
         else:
             items.append(("warning", "fas fa-clock",
-                f"Los clientes están pasando menos tiempo en tienda: {est_p:.1f} min frente a "
-                f"{est_p_a:.1f} min. Vale la pena revisar si algo los está alejando antes de tiempo."))
+                f"El tiempo medio de permanencia disminuyó a {est_p:.1f} min, frente a "
+                f"{est_p_a:.1f} min del {periodo_ant} anterior. Se recomienda analizar los factores "
+                f"que puedan estar reduciendo el tiempo de visita."))
 
     # 4. Alertas por zona
     for z in zonas_data:
@@ -425,8 +424,9 @@ def _narrativa(zonas_data, fecha_max, clima, ventana="semana", geo_vals=None):
         if 'exterior' in zl or 'calle' in zl:
             if dv <= -20:
                 items.append(("warning", "fas fa-walking",
-                    f"El tráfico de paso bajó un {abs(dv):.0f}% este {periodo}. "
-                    f"Antes de actuar, comprueba si hay algo externo que lo explique: obras, calle cortada o mal tiempo."))
+                    f"El tráfico exterior descendió un {abs(dv):.0f}% durante el {periodo}. "
+                    f"Se recomienda verificar si existen factores externos que justifiquen la variación: "
+                    f"obras, cortes de calle o condiciones meteorológicas adversas."))
         elif 'tienda' in zl:
             ext = next((z2 for z2 in zonas_data
                         if 'exterior' in z2['zona'].lower() or 'calle' in z2['zona'].lower()), None)
@@ -434,24 +434,25 @@ def _narrativa(zonas_data, fecha_max, clima, ventana="semana", geo_vals=None):
                 ext_dv = ext['d']['visitantes']
                 if dv <= -15 and ext_dv > -5:
                     items.append(("danger", "fas fa-store",
-                        f"El exterior aguantó, pero la tienda cayó un {abs(dv):.0f}%. "
-                        f"Algo dentro no está convirtiendo el paso en entrada. "
-                        f"Revisa el escaparate, la señalética o la disposición de la entrada."))
+                        f"El tráfico exterior se mantuvo estable mientras la zona interior registró "
+                        f"un descenso del {abs(dv):.0f}%. Se recomienda revisar los elementos de conversión: "
+                        f"escaparate, señalética y disposición del acceso."))
                 elif dv >= 15 and ext_dv < 5:
                     items.append(("success", "fas fa-store",
-                        f"Buena señal de conversión: la tienda creció un {dv:.0f}% con el exterior estable. "
-                        f"Estás atrayendo una mayor proporción del paso de calle."))
+                        f"La zona interior registró un incremento del {dv:.0f}% con el tráfico exterior estable, "
+                        f"lo que indica una mejora en la tasa de conversión del paso peatonal."))
             elif dv <= -15:
                 items.append(("danger", "fas fa-store",
-                    f"La zona interior bajó un {abs(dv):.0f}% este {periodo}. Merece una revisión."))
+                    f"La zona interior registró un descenso del {abs(dv):.0f}% durante el {periodo}."))
         elif 'caja' in zl:
             if dv <= -15:
                 items.append(("danger", "fas fa-cash-register",
-                    f"Menos gente llegó a caja este {periodo}: bajó un {abs(dv):.0f}%. "
-                    f"Compara con el tráfico interior para saber si es un problema de conversión o de afluencia general."))
+                    f"El tráfico en zona de caja descendió un {abs(dv):.0f}% durante el {periodo}. "
+                    f"Se recomienda contrastar con el tráfico interior para determinar si la variación "
+                    f"obedece a una menor conversión o a una caída general de afluencia."))
             elif dv >= 15:
                 items.append(("success", "fas fa-cash-register",
-                    f"La caja fue bien este {periodo}"))
+                    f"La zona de caja registró un incremento del {dv:.0f}% durante el {periodo}."))
 
     # 5. Contexto externo: clima
     if clima:
@@ -462,14 +463,14 @@ def _narrativa(zonas_data, fecha_max, clima, ventana="semana", geo_vals=None):
         umbral     = max(3, dias_v // 4)
         if n_lluvia >= umbral:
             items.append(("info", "fas fa-cloud-rain",
-                f"Hubo {n_lluvia} días de lluvia este {periodo}. Eso puede explicar parte de la bajada "
-                f"en tráfico exterior. Con mejor tiempo, los números probablemente serían más altos."))
+                f"Se registraron {n_lluvia} días de precipitaciones durante el {periodo}. "
+                f"Este factor meteorológico puede haber influido en el descenso del tráfico exterior."))
         elif dias_rec:
             tmaxes = [v.get('tmax') for v in dias_rec.values() if v.get('tmax')]
             if tmaxes and max(tmaxes) > 33:
                 items.append(("info", "fas fa-sun",
-                    f"Este {periodo} hizo mucho calor, con picos de hasta {max(tmaxes):.0f}°C. "
-                    f"El tráfico de calle suele resentirse en las horas centrales cuando aprieta el sol."))
+                    f"Durante el {periodo} se registraron temperaturas máximas de hasta {max(tmaxes):.0f}°C. "
+                    f"Las altas temperaturas tienden a reducir el tráfico peatonal en las franjas horarias centrales del día."))
 
     # 6. Festivos
     fmin_fest = fecha_max - timedelta(days=dias_v - 1)
@@ -479,8 +480,8 @@ def _narrativa(zonas_data, fecha_max, clima, ventana="semana", geo_vals=None):
         nombres = ", ".join(n for _, n in fest[:2])
         pl = "s" if len(fest) > 1 else ""
         items.append(("info", "fas fa-umbrella-beach",
-            f"Este {periodo} hubo festivo{pl} ({nombres}). "
-            f"Ten en cuenta que los datos de días festivos no son comparables con días laborables normales."))
+            f"Durante el {periodo} se registró{'ron' if len(fest) > 1 else ''} {len(fest)} festivo{pl} ({nombres}). "
+            f"Los datos de días festivos presentan patrones de tráfico diferenciados respecto a los días laborables."))
 
     # 7. Contexto geoespacial — insights AIS cuando disponibles
     if geo_vals:
@@ -495,37 +496,36 @@ def _narrativa(zonas_data, fecha_max, clima, ventana="semana", geo_vals=None):
             ratio_cap = total_p / pob5
             if ratio_cap < 0.015:
                 items.append(("warning", "fas fa-map-marker-alt",
-                    f"El catchment inmediato (5 min a pie) tiene {pob5:,.0f} personas "
-                    f"y la tienda registró {total_p:,.0f} visitas este {periodo}. "
-                    f"La tasa de captación del entorno próximo es baja — hay margen de crecimiento en visibilidad local."))
+                    f"El área de influencia inmediata (5 min a pie) concentra {pob5:,.0f} personas. "
+                    f"Con {total_p:,.0f} visitas registradas durante el {periodo}, la tasa de captación "
+                    f"del entorno próximo es reducida, lo que sugiere margen de mejora en captación local."))
             elif ratio_cap > 0.10:
                 items.append(("success", "fas fa-map-marker-alt",
-                    f"La ubicación extrae bien el potencial del entorno: "
-                    f"{total_p:,.0f} visitantes sobre {pob5:,.0f} personas en 5 min a pie. "
-                    f"Buena conversión de paso peatonal."))
+                    f"La ubicación muestra una tasa de captación elevada: {total_p:,.0f} visitas "
+                    f"registradas sobre un área de influencia de {pob5:,.0f} personas en 5 minutos a pie."))
 
         # Gasto en ropa vs benchmark
         if gasto_ropa is not None:
             _REF = 1_200
             if gasto_ropa > _REF * 1.2:
                 items.append(("success", "fas fa-shopping-bag",
-                    f"El entorno tiene un gasto en ropa y calzado de {gasto_ropa:,.0f} €/hogar/año "
-                    f"({(gasto_ropa / _REF - 1) * 100:.0f}% sobre la media nacional). "
+                    f"El gasto en ropa y calzado del entorno asciende a {gasto_ropa:,.0f} €/hogar/año, "
+                    f"un {(gasto_ropa / _REF - 1) * 100:.0f}% por encima de la media nacional. "
                     f"El perfil de gasto del área es favorable para el negocio."))
             elif gasto_ropa < _REF * 0.85:
                 items.append(("info", "fas fa-shopping-bag",
                     f"El gasto en ropa y calzado del entorno ({gasto_ropa:,.0f} €/hogar/año) "
-                    f"está por debajo de la media. Considera si el mix de producto o el precio "
-                    f"están adaptados al poder adquisitivo local."))
+                    f"se sitúa por debajo de la media nacional. Se recomienda evaluar la adecuación "
+                    f"del surtido de producto y la política de precios al perfil adquisitivo de la zona."))
 
         # Target demográfico Miniso
         if jovenes is not None and familias is not None:
             total_target = (jovenes or 0) + (familias or 0)
             if total_target > 600:
                 items.append(("primary", "fas fa-users",
-                    f"El catchment concentra {total_target:,.0f} hogares del segmento target "
-                    f"({jovenes:,.0f} jóvenes solos y {familias:,.0f} familias con hijos). "
-                    f"Alta densidad de clientes potenciales en radio 800 m."))
+                    f"El área de influencia concentra {total_target:,.0f} hogares del segmento objetivo "
+                    f"({jovenes:,.0f} residentes jóvenes y {familias:,.0f} familias con hijos), "
+                    f"lo que indica una alta densidad de clientes potenciales en un radio de 800 m."))
 
     return items
 
