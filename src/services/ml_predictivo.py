@@ -8,7 +8,7 @@ import holidays
 import gc
 from datetime import datetime, timedelta
 from src.data_processing.supercalendario import get_calendario_features, CALENDARIO_FEATURE_COLS
-from src.data_processing.eventos_client import get_eventos_features, EVENTOS_FEATURE_COLS
+from src.data_processing.eventos_client import get_eventos_features, EVENTOS_FEATURE_COLS, _prefetched, prefetch_eventos
 from src.db.queries import get_org_info
 
 # Holiday calendar cache keyed by (pais_codigo, year)
@@ -160,10 +160,16 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
         for col in CALENDARIO_FEATURE_COLS:
             train[col] = cal_rows[col].values
 
-        ev_rows = pd.DataFrame(
-            [get_eventos_features(fecha, location_uuid=location_uuid) for fecha in train['fecha']],
-            index=train.index
-        )
+        _ev_ready = location_uuid in _prefetched
+        if not _ev_ready:
+            import threading
+            threading.Thread(target=prefetch_eventos, args=(location_uuid,), daemon=True).start()
+            ev_rows = pd.DataFrame([{col: 0 for col in EVENTOS_FEATURE_COLS}] * len(train), index=train.index)
+        else:
+            ev_rows = pd.DataFrame(
+                [get_eventos_features(fecha, location_uuid=location_uuid) for fecha in train['fecha']],
+                index=train.index
+            )
         for col in EVENTOS_FEATURE_COLS:
             train[col] = ev_rows[col].values
 
@@ -231,7 +237,7 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
             std_7d = np.std(visits_array[-7:]) if len(visits_array) >= 7 else 0
 
             cal_feats = get_calendario_features(current_date, org_config=org_config)
-            ev_feats = get_eventos_features(current_date, location_uuid=location_uuid)
+            ev_feats = get_eventos_features(current_date, location_uuid=location_uuid) if _ev_ready else {col: 0 for col in EVENTOS_FEATURE_COLS}
             row = pd.DataFrame([{
                 'es_finde': es_finde, 'es_festivo': es_festivo, 'llueve': llueve,
                 'dia_semana': current_date.dayofweek, 'dia_mes': current_date.day,

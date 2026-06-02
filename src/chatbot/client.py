@@ -16,7 +16,7 @@ import anthropic
 from src.chatbot.tools import (
     get_pm_data, get_gis_data, get_weather_holidays,
     get_forecast, get_anomalies, get_hourly_breakdown, compare_locations,
-    _find_location, _load_ubicaciones,
+    _find_location,
 )
 from src.chatbot.cache import get_cached, set_cached
 

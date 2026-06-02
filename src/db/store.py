@@ -189,7 +189,8 @@ _DDL: list[str] = [
         country_code  TEXT,
         codigo_postal TEXT,
         direccion     TEXT,
-        activa        BOOLEAN          DEFAULT TRUE
+        activa        BOOLEAN          DEFAULT TRUE,
+        catchment_rings_json TEXT
     )
     """,
     """
@@ -382,6 +383,13 @@ def _apply_ddl(conn: PgConn) -> None:
         conn.execute(stmt.strip())
     _migrate_dim_zonas(conn)
     _migrate_fact_visitas(conn)
+    _migrate_dim_ubicaciones(conn)
+
+
+def _migrate_dim_ubicaciones(conn: PgConn) -> None:
+    conn.execute(
+        "ALTER TABLE dim_ubicaciones ADD COLUMN IF NOT EXISTS catchment_rings_json TEXT"
+    )
 
 
 def _migrate_dim_zonas(conn: PgConn) -> None:

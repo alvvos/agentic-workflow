@@ -37,8 +37,8 @@ def ingestar_snapshot_esri(
     if fecha_entrega is None:
         fecha_entrega = date.today().isoformat()
 
-    # catchment_rings no es una feature escalar — ignorar silenciosamente
-    valores.pop("_catchment_rings", None)
+    # catchment_rings no es una feature escalar — persistir aparte y eliminar del dict
+    catchment_rings = valores.pop("_catchment_rings", None)
 
     desconocidas = set(valores.keys()) - set(GEO_FEATURE_COLS)
     if desconocidas:
@@ -131,6 +131,10 @@ def ingestar_snapshot_esri(
         "features": features_con_dato,
     })
 
+    # Persistir isócronas si vinieron de la API
+    if catchment_rings:
+        actualizar_catchment_rings(location_uuid, catchment_rings)
+
     # Invalidar caché en memoria de geo_enrichment
     invalidate_geo_cache(location_uuid)
 
@@ -150,9 +154,19 @@ def ingestar_snapshot_esri(
     }
 
 
-def actualizar_catchment_rings(location_uuid: str, lat: float, lon: float) -> bool:
-    """Pendiente: almacenamiento de geometrías en DB. Devuelve False por ahora."""
-    return False
+def actualizar_catchment_rings(location_uuid: str, rings: list) -> bool:
+    """Guarda las isócronas peatonales en dim_ubicaciones.catchment_rings_json."""
+    import json
+    if not rings:
+        return False
+    try:
+        _conn().execute(
+            "UPDATE dim_ubicaciones SET catchment_rings_json = ? WHERE location_uuid = ?",
+            [json.dumps(rings), location_uuid],
+        )
+        return True
+    except Exception:
+        return False
 
 
 def listar_estado_geo() -> list[dict]:
