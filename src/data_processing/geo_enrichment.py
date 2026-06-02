@@ -66,10 +66,7 @@ GEO_FEATURE_COLS = [
     "tasa_desempleo_jovenes",           # UNERATE24 — desempleo <24 años
     "empleados_por_hogar",              # TOTOCCME  — empleados por hogar
     "tasa_riesgo_pobreza",              # RISPORA   — tasa riesgo pobreza
-    # Bloque 7 — Valor inmobiliario (radio 800 m)
-    "precio_medio_piso_compra",         # AVREAPRI  — €/m² compra (proxy riqueza zona)
-    "precio_medio_piso_alquiler",       # AVPRIRENP — €/m² alquiler (proxy presión comercial)
-    # Bloque 8 — Canal online (radio 800 m)
+    # Bloque 7 — Canal online (radio 800 m)
     "pct_compras_online",               # PUTHINT    — % población que compra online
     "online_ropa_deporte_pct",          # PROPURSPO  — % online en ropa/deporte
     "online_ultimo_mes_pct",            # WHELAIN    — compradores online activos (último mes)
@@ -142,10 +139,7 @@ ESRI_VAR_MAP: dict = {
     "tasa_desempleo_jovenes":          ("UNERATE24", 1),
     "empleados_por_hogar":             ("TOTOCCME",  1),
     "tasa_riesgo_pobreza":             ("RISPORA",   1),
-    # Bloque 7 — Inmobiliario
-    "precio_medio_piso_compra":        ("AVREAPRI",  1),
-    "precio_medio_piso_alquiler":      ("AVPRIRENP", 1),
-    # Bloque 8 — Canal online
+    # Bloque 7 — Canal online
     "pct_compras_online":              ("PUTHINT",   1),
     "online_ropa_deporte_pct":         ("PROPURSPO", 1),
     "online_ultimo_mes_pct":           ("WHELAIN",   1),
@@ -288,9 +282,6 @@ GEO_FEATURES_BACKDATABLE = [
     "tasa_desempleo_jovenes",
     "empleados_por_hogar",
     "tasa_riesgo_pobreza",
-    # Inmobiliario
-    "precio_medio_piso_compra",
-    "precio_medio_piso_alquiler",
     # Canal online
     "pct_compras_online",
     "online_ropa_deporte_pct",
@@ -420,7 +411,18 @@ def enriquecer_con_geo(df: pd.DataFrame, col_location_id: str = "location_id", c
 
 
 def get_catchment_rings(location_uuid: str):
-    """Retorna geometría de isócronas (pendiente migración a DB). Devuelve None por ahora."""
+    """Retorna geometría de isócronas peatonales almacenada en dim_ubicaciones."""
+    import json
+    from src.db.store import get_conn
+    row = get_conn().execute(
+        "SELECT catchment_rings_json FROM dim_ubicaciones WHERE location_uuid = ?",
+        [location_uuid],
+    ).fetchone()
+    if row and row[0]:
+        try:
+            return json.loads(row[0])
+        except Exception:
+            return None
     return None
 
 

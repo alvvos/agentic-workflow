@@ -111,8 +111,6 @@ _MOCK_RANGES: dict = {
     "tasa_desempleo_jovenes":          (50,      1_000),
     "empleados_por_hogar":             (100,     2_500),
     "tasa_riesgo_pobreza":             (0.05,     0.35),
-    "precio_medio_piso_compra":        (80_000, 500_000),
-    "precio_medio_piso_alquiler":      (400,     2_000),
     "pct_compras_online":              (100,     3_000),
     "online_ropa_deporte_pct":         (30,        800),
     "online_ultimo_mes_pct":           (50,      1_500),

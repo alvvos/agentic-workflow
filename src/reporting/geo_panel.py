@@ -254,23 +254,6 @@ def _auto_insight_online(vals):
     return txt
 
 
-def _auto_insight_inmobiliario(vals):
-    compra   = vals.get("precio_medio_piso_compra")
-    alquiler = vals.get("precio_medio_piso_alquiler")
-    if compra is None:
-        return None
-    if compra > 400_000:
-        perfil = "zona de alto poder adquisitivo, con demanda solvente y disposición a pagar por calidad"
-    elif compra > 200_000:
-        perfil = "zona de clase media-alta consolidada"
-    else:
-        perfil = "zona de renta media, sensible al precio"
-    txt = f"El precio medio de compra de piso es {compra/1000:.0f}k €."
-    if alquiler:
-        txt += f" El alquiler medio se sitúa en {alquiler:,.0f} €/mes."
-    txt += f" Señal de {perfil}."
-    return txt
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Layout helpers
@@ -461,23 +444,6 @@ def _build_metric_cards(vals):
             main_val=f"{pct_online:.0f}%", unit="hogares que compran online en 800 m",
             badge_txt=nivel, badge_col=badge_col,
             border_color=_C_RED, funnel=None, detail=" · ".join(detail_parts),
-        ))
-
-    # ── Mercado inmobiliario ──────────────────────────────────────────────────
-    compra   = vals.get("precio_medio_piso_compra")
-    alquiler = vals.get("precio_medio_piso_alquiler")
-    if compra is not None:
-        nivel     = "Zona premium"  if compra > 400_000 else ("Zona media"   if compra > 200_000 else "Zona popular")
-        badge_col = "success"       if compra > 400_000 else ("warning"      if compra > 200_000 else "secondary")
-        detail_parts = []
-        if alquiler:
-            detail_parts.append(f"Alquiler medio {alquiler:,.0f} €/mes")
-        cards.append(dict(
-            icon="fas fa-building", label="Mercado inmobiliario",
-            main_val=f"{compra/1000:.0f}k €", unit="precio medio de compra de piso",
-            badge_txt=nivel, badge_col=badge_col,
-            border_color=_C_PURPLE, funnel=None,
-            detail=" · ".join(detail_parts) if detail_parts else None,
         ))
 
     # ── Transporte público (Phase 2) ──────────────────────────────────────────
@@ -901,51 +867,6 @@ def _fig_salud_financiera(vals):
     return fig
 
 
-def _fig_inmobiliario(vals):
-    """Property prices — compra y alquiler as simple KPI bars."""
-    compra   = vals.get("precio_medio_piso_compra")
-    alquiler = vals.get("precio_medio_piso_alquiler")
-    if compra is None:
-        return None
-
-    labels, values, colors = [], [], []
-    if compra:
-        labels.append("Precio compra\n(€/piso)")
-        values.append(compra)
-        colors.append(_C_PURPLE)
-    if alquiler:
-        labels.append("Alquiler medio\n(€/mes)")
-        values.append(alquiler * 100)  # scale for visibility — annotated separately
-        colors.append("rgba(142,68,173,0.50)")
-
-    # Simple horizontal bars — compra only since scales differ
-    fig = go.Figure()
-    if compra:
-        fig.add_trace(go.Indicator(
-            mode="number+delta",
-            value=compra,
-            number={"prefix": "€", "valueformat": ",.0f",
-                    "font": {"size": 36, "color": _C_DARK, **_FONT}},
-            title={"text": "Precio medio piso compra",
-                   "font": {"size": 12, "color": _C_MUTED, **_FONT}},
-            domain={"x": [0, 0.5], "y": [0.45, 1.0]},
-        ))
-    if alquiler:
-        fig.add_trace(go.Indicator(
-            mode="number",
-            value=alquiler,
-            number={"prefix": "€", "suffix": "/mes", "valueformat": ",.0f",
-                    "font": {"size": 36, "color": _C_DARK, **_FONT}},
-            title={"text": "Alquiler medio",
-                   "font": {"size": 12, "color": _C_MUTED, **_FONT}},
-            domain={"x": [0.5, 1.0], "y": [0.45, 1.0]},
-        ))
-    fig.update_layout(
-        paper_bgcolor="white", plot_bgcolor="white",
-        margin=dict(t=16, b=16, l=16, r=16),
-    )
-    return fig
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Charts — Sección C: Comportamiento digital
@@ -1058,7 +979,6 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
     fig_hogar  = _fig_estructura_hogar(activos)
     fig_gasto  = _fig_gasto_comparativo(activos)
     fig_salud  = _fig_salud_financiera(activos)
-    fig_inmob  = _fig_inmobiliario(activos)
     fig_online = _fig_canal_online(activos)
 
     uid = location_uuid[:8]
@@ -1073,7 +993,6 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
     ins_salud     = _auto_insight_salud(activos)
     ins_gasto     = _auto_insight_gasto(activos)
     ins_online    = _auto_insight_online(activos)
-    ins_inmob     = _auto_insight_inmobiliario(activos)
 
     # ── SECCIÓN A: ALCANCE PEATONAL ───────────────────────────────────────────
     # El mapa lleva el insight de captación; las barras llevan el de edad+hogar
@@ -1133,13 +1052,6 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
             _chart_card(fig_salud, f"geo-salud-{uid}", _H_SM,
                         title="Salud financiera del hogar · radio 800 m",
                         insight=ins_salud),
-            xs=12, className="mb-3",
-        ))
-    if fig_inmob:
-        salud_inmob_col.append(dbc.Col(
-            _chart_card(fig_inmob, f"geo-inmob-{uid}", _H_SM,
-                        title="Precios inmobiliarios · indicador de nivel socioeconómico",
-                        insight=ins_inmob),
             xs=12, className="mb-3",
         ))
     if salud_inmob_col:
