@@ -6,12 +6,13 @@ import time
 
 # Los módulos externos importan estas variables directamente.
 # Se mutan en lugar de reasignarse para que los módulos ya importados vean los cambios.
-opciones_orgs:      list = []
-mapa_locs_por_org:  dict = {}
-mapa_tiendas:       dict = {}
-mapa_zonas:         dict = {}
-mapa_zonas_por_loc: dict = {}
-mapa_orgs:          dict = {}
+opciones_orgs:       list = []
+mapa_locs_por_org:   dict = {}
+mapa_tiendas:        dict = {}
+mapa_zonas:          dict = {}
+mapa_zonas_por_loc:  dict = {}
+mapa_orgs:           dict = {}
+mapa_hijos_por_zona: dict = {}  # {parent_zone_name: [child_zone_dicts]}
 
 _last_load: float = 0.0
 _TTL = 5.0  # segundos mínimos entre recargas
@@ -27,6 +28,7 @@ def _load_from_db() -> None:
     mapa_zonas.clear()
     mapa_zonas_por_loc.clear()
     mapa_orgs.clear()
+    mapa_hijos_por_zona.clear()
 
     for org_uuid, nombre in conn.execute(
         "SELECT org_uuid, nombre FROM dim_organizaciones ORDER BY nombre"
@@ -42,15 +44,27 @@ def _load_from_db() -> None:
         mapa_locs_por_org.setdefault(org_uuid, []).append({'label': nombre, 'value': loc_uuid})
         mapa_zonas_por_loc[loc_uuid] = []
 
-    for zone_uuid, loc_uuid, nombre, zone_type in conn.execute(
-        "SELECT zone_uuid, location_uuid, nombre, zone_type FROM dim_zonas WHERE hidden = FALSE ORDER BY nombre"
-    ).fetchall():
+    all_zones = conn.execute(
+        "SELECT zone_uuid, location_uuid, nombre, zone_type, parent_zone_uuid"
+        " FROM dim_zonas WHERE hidden = FALSE ORDER BY nombre"
+    ).fetchall()
+
+    # First pass: build uuid→name map so child zones can resolve parent name
+    for zone_uuid, _, nombre, _, _ in all_zones:
         mapa_zonas[zone_uuid] = nombre
-        mapa_zonas_por_loc.setdefault(loc_uuid, []).append({
-            'label': nombre,
-            'value': nombre,        # los dropdowns BI usan el nombre como valor
-            'tipo':  zone_type or '',
-        })
+
+    # Second pass: classify parent vs child
+    for zone_uuid, loc_uuid, nombre, zone_type, parent_uuid in all_zones:
+        z = {
+            'label':      nombre,
+            'value':      nombre,
+            'tipo':       zone_type or '',
+            'padre_uuid': parent_uuid,
+        }
+        mapa_zonas_por_loc.setdefault(loc_uuid, []).append(z)
+        if parent_uuid:
+            parent_name = mapa_zonas.get(parent_uuid, parent_uuid)
+            mapa_hijos_por_zona.setdefault(parent_name, []).append(z)
 
 
 def reload_if_changed() -> bool:

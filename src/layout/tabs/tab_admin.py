@@ -8,6 +8,34 @@ def build_tab_admin():
 
         dcc.Store(id='admin-crud-signal', data=0),
         dcc.Store(id='admin-pending-delete', data=None),
+        dcc.Store(id='admin-zone-edit-loc', data=None),
+
+        # Modal edición jerarquía de zonas
+        dbc.Modal([
+            dbc.ModalHeader(
+                dbc.ModalTitle([
+                    html.I(className="fas fa-sitemap me-2"),
+                    html.Span(id="admin-zone-modal-title"),
+                ], className="fw-bold text-primary"),
+                close_button=True,
+            ),
+            dbc.ModalBody(
+                html.Div(id="admin-zone-modal-body", style={"minHeight": "120px"}),
+            ),
+            dbc.ModalFooter([
+                dbc.Button(
+                    [html.I(className="fas fa-times me-2"), "Cancelar"],
+                    id="admin-zone-modal-cancel", color="secondary",
+                    outline=True, className="rounded-3 me-2",
+                ),
+                dbc.Button(
+                    [html.I(className="fas fa-save me-2"), "Publicar jerarquía"],
+                    id="admin-zone-modal-save", color="primary",
+                    className="rounded-3 fw-bold shadow-sm",
+                ),
+            ]),
+        ], id="admin-zone-modal", is_open=False, size="lg", centered=True,
+           contentClassName="border-0 rounded-4 shadow"),
 
         # Modal de confirmación unificado (usuarios / ubicaciones / orgs)
         dbc.Modal([
@@ -22,12 +50,12 @@ def build_tab_admin():
                 dbc.Button(
                     [html.I(className="fas fa-times me-2"), "Cancelar"],
                     id='admin-cancel-delete-btn', color="secondary",
-                    outline=True, className="rounded-pill me-2",
+                    outline=True, className="rounded-3 me-2",
                 ),
                 dbc.Button(
                     [html.I(className="fas fa-trash-alt me-2"), "Eliminar"],
                     id='admin-confirm-delete-btn', color="danger",
-                    className="rounded-pill fw-bold",
+                    className="rounded-3 fw-bold",
                 ),
             ]),
         ], id='admin-delete-modal', is_open=False, centered=True,
@@ -99,7 +127,7 @@ def build_tab_admin():
                                 dbc.Button(
                                     [html.I(className="fas fa-plus me-2"), "Añadir"],
                                     id='admin-add-user-btn', color="primary",
-                                    className="rounded-pill w-100 fw-bold shadow-sm",
+                                    className="rounded-3 w-100 fw-bold shadow-sm",
                                 ),
                             ], xs=12, md=2),
                         ], className="g-3"),

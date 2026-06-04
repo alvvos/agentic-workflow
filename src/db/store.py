@@ -195,11 +195,12 @@ _DDL: list[str] = [
     """,
     """
     CREATE TABLE IF NOT EXISTS dim_zonas (
-        zone_uuid     TEXT    PRIMARY KEY,
-        location_uuid TEXT    NOT NULL,
-        nombre        TEXT    NOT NULL,
-        hidden        BOOLEAN DEFAULT FALSE,
-        zone_type     TEXT    DEFAULT ''
+        zone_uuid        TEXT    PRIMARY KEY,
+        location_uuid    TEXT    NOT NULL,
+        nombre           TEXT    NOT NULL,
+        hidden           BOOLEAN DEFAULT FALSE,
+        zone_type        TEXT    DEFAULT '',
+        parent_zone_uuid TEXT    DEFAULT NULL
     )
     """,
     """
@@ -395,6 +396,9 @@ def _migrate_dim_ubicaciones(conn: PgConn) -> None:
 def _migrate_dim_zonas(conn: PgConn) -> None:
     conn.execute(
         "ALTER TABLE dim_zonas ADD COLUMN IF NOT EXISTS zone_type TEXT DEFAULT ''"
+    )
+    conn.execute(
+        "ALTER TABLE dim_zonas ADD COLUMN IF NOT EXISTS parent_zone_uuid TEXT DEFAULT NULL"
     )
 
 

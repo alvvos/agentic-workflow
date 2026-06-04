@@ -67,7 +67,7 @@ def generar_panel_ml():
                     ], xs=12, md=4)
                 ], className="align-items-center mb-4"),
                 
-                dbc.Button([html.I(className="fas fa-cogs me-2"), "ENTRENAR Y EVALUAR MODELO"], id="ml-btn-run", color="primary", className="w-100 fw-bold rounded-pill shadow-sm mb-2"),
+                dbc.Button([html.I(className="fas fa-cogs me-2"), "ENTRENAR Y EVALUAR MODELO"], id="ml-btn-run", color="primary", className="w-100 fw-bold rounded-3 shadow-sm mb-2"),
                 html.Div(id="ml-error-msg", className="text-danger fw-bold mt-2 text-center small"),
             ])
         ], className="border-0 shadow-sm rounded-4 bg-light mb-4"),
@@ -105,7 +105,7 @@ def generar_panel_ml():
             dbc.CardBody([
                 dbc.Button(
                     [html.I(className="fas fa-magic me-2"), "CALCULAR PROYECCIÓN DE MAÑANA"],
-                    id="ml-btn-manana", color="warning", className="w-100 fw-bold rounded-pill shadow-sm mb-2"
+                    id="ml-btn-manana", color="warning", className="w-100 fw-bold rounded-3 shadow-sm mb-2"
                 ),
                 html.Div(id="ml-manana-msg", className="text-danger fw-bold mt-2 text-center small"),
             ])

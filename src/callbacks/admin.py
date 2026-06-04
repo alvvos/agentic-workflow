@@ -1,7 +1,7 @@
 import json
 
 import flask
-from dash import Output, Input, State, callback_context, html, no_update, ALL
+from dash import Output, Input, State, callback_context, html, dcc, no_update, ALL
 import dash_bootstrap_components as dbc
 from werkzeug.security import generate_password_hash
 
@@ -81,6 +81,77 @@ def _load_orgs() -> list:
     ]
 
 
+# ── Zone hierarchy modal ──────────────────────────────────────────────────────
+
+def _zone_modal_body(loc_uuid: str):
+    conn = get_conn()
+    zones = conn.execute(
+        "SELECT zone_uuid, nombre, zone_type, parent_zone_uuid, hidden"
+        " FROM dim_zonas WHERE location_uuid = ? ORDER BY nombre",
+        [loc_uuid],
+    ).fetchall()
+
+    if not zones:
+        return dbc.Alert(
+            [html.I(className="fas fa-info-circle me-2"), "Esta ubicación no tiene zonas registradas."],
+            color="info", className="rounded-3 border-0",
+        )
+
+    all_opts = [{"label": z[1], "value": z[0]} for z in zones]
+
+    rows = []
+    for zone_uuid, nombre, zone_type, parent_uuid, hidden in zones:
+        visible = not bool(hidden)
+        opts = [{"label": "Sin padre", "value": ""}] + [
+            o for o in all_opts if o["value"] != zone_uuid
+        ]
+        type_badge = (
+            dbc.Badge(zone_type, color="info", pill=True, className="fw-normal")
+            if zone_type else html.Span("—", className="text-muted small")
+        )
+        rows.append(html.Tr([
+            html.Td(
+                [html.I(className="fas fa-layer-group me-2 text-primary"),
+                 html.Span(nombre, className="fw-semibold")],
+                className="align-middle py-2 px-3",
+            ),
+            html.Td(type_badge, className="align-middle"),
+            html.Td(
+                dcc.Dropdown(
+                    id={"type": "zone-parent-select", "index": zone_uuid},
+                    options=opts,
+                    value=parent_uuid or "",
+                    clearable=False,
+                    className="shadow-sm",
+                    style={"minWidth": "200px"},
+                ),
+                className="align-middle",
+            ),
+            html.Td(
+                dbc.Switch(
+                    id={"type": "zone-visible-toggle", "index": zone_uuid},
+                    value=visible,
+                    label="Visible" if visible else "Oculta",
+                    className="mb-0",
+                ),
+                className="align-middle text-center",
+            ),
+        ]))
+
+    return dbc.Table(
+        [
+            html.Thead(html.Tr([
+                html.Th("Zona",       className="px-3 py-2 text-muted small text-uppercase fw-bold"),
+                html.Th("Tipo",       className="py-2 text-muted small text-uppercase fw-bold"),
+                html.Th("Zona padre", className="py-2 text-muted small text-uppercase fw-bold"),
+                html.Th("Display",    className="py-2 text-center text-muted small text-uppercase fw-bold"),
+            ]), className="bg-light"),
+            html.Tbody(rows),
+        ],
+        bordered=False, hover=True, responsive=True, className="mb-0",
+    )
+
+
 # ── Render helpers ────────────────────────────────────────────────────────────
 
 def _render_users_table(users: dict) -> html.Div:
@@ -106,7 +177,7 @@ def _render_users_table(users: dict) -> html.Div:
                                "alignItems": "center", "justifyContent": "center"},
                     ),
                     html.Span(username, className="fw-bold"),
-                    html.Span(" (tú)", className="text-muted small ms-1 fst-italic") if me else None,
+                    *([html.Span(" (tú)", className="text-muted small ms-1 fst-italic")] if me else []),
                 ], className="align-middle py-3 px-4"),
                 html.Td(
                     dbc.Badge(
@@ -126,7 +197,7 @@ def _render_users_table(users: dict) -> html.Div:
                             size="sm",
                             color="warning" if role == "user" else "secondary",
                             outline=True,
-                            className="rounded-start-pill fw-bold",
+                            className="rounded-start-3 fw-bold",
                             disabled=me,
                         ),
                         dbc.Button(
@@ -135,7 +206,7 @@ def _render_users_table(users: dict) -> html.Div:
                             size="sm",
                             color="danger",
                             outline=True,
-                            className="rounded-end-pill",
+                            className="rounded-end-3",
                             disabled=me,
                         ),
                     ]),
@@ -186,11 +257,19 @@ def _loc_row(loc: dict) -> html.Tr:
             className="align-middle",
         ),
         html.Td(
-            dbc.Button(
-                html.I(className="fas fa-trash-alt"),
-                id={"type": "admin-del-btn", "index": f"loc:{loc['uuid']}"},
-                size="sm", color="danger", outline=True, className="rounded-pill",
-            ),
+            dbc.ButtonGroup([
+                dbc.Button(
+                    [html.I(className="fas fa-sitemap me-1"), "Zonas"],
+                    id={"type": "admin-edit-zones-btn", "index": loc["uuid"]},
+                    size="sm", color="primary", outline=True,
+                    className="rounded-start-3 fw-bold",
+                ),
+                dbc.Button(
+                    html.I(className="fas fa-trash-alt"),
+                    id={"type": "admin-del-btn", "index": f"loc:{loc['uuid']}"},
+                    size="sm", color="danger", outline=True, className="rounded-end-3",
+                ),
+            ]),
             className="align-middle text-end pe-4",
         ),
     ], className="border-bottom")
@@ -225,7 +304,7 @@ def _render_locs_tree(orgs: list) -> html.Div:
                         html.Th("Ciudad",    className="py-2 text-muted small text-uppercase fw-bold"),
                         html.Th("UUID",      className="py-2 text-muted small text-uppercase fw-bold d-none d-md-table-cell"),
                         html.Th("Zonas",     className="py-2 text-muted small text-uppercase fw-bold"),
-                        html.Th("",          className="pe-4"),
+                        html.Th("Acciones",  className="py-2 pe-4 text-end text-muted small text-uppercase fw-bold"),
                     ]),
                     className="bg-light",
                 ),
@@ -259,7 +338,7 @@ def _render_locs_tree(orgs: list) -> html.Div:
                                 [html.I(className="fas fa-trash-alt me-1"), "Eliminar org"],
                                 id={"type": "admin-del-btn", "index": f"org:{org_uuid}"},
                                 size="sm", color="danger", outline=True,
-                                className="rounded-pill fw-bold",
+                                className="rounded-3 fw-bold",
                             ),
                             className="text-end",
                         ),
@@ -510,3 +589,68 @@ def toggle_role(n_clicks_list, signal):
     _update_role(username, new_role)
     label = _ROLE_LABELS.get(new_role, new_role)
     return (signal or 0) + 1, f"'{username}' ahora es {label}.", True, "success"
+
+
+# ── Modal jerarquía de zonas ──────────────────────────────────────────────────
+
+@app.callback(
+    Output("admin-zone-modal", "is_open"),
+    Output("admin-zone-modal-title", "children"),
+    Output("admin-zone-modal-body", "children"),
+    Output("admin-zone-edit-loc", "data"),
+    Input({"type": "admin-edit-zones-btn", "index": ALL}, "n_clicks"),
+    Input("admin-zone-modal-cancel", "n_clicks"),
+    prevent_initial_call=True,
+)
+def open_zone_modal(edit_clicks, _cancel):
+    ctx = callback_context
+    trigger = (ctx.triggered or [{}])[0].get("prop_id", "")
+
+    if "admin-zone-modal-cancel" in trigger:
+        return False, no_update, no_update, no_update
+
+    if all((n or 0) == 0 for n in edit_clicks):
+        return no_update, no_update, no_update, no_update
+
+    try:
+        loc_uuid = json.loads(trigger.split(".")[0])["index"]
+    except Exception:
+        return no_update, no_update, no_update, no_update
+
+    row = get_conn().execute(
+        "SELECT nombre FROM dim_ubicaciones WHERE location_uuid = ?", [loc_uuid]
+    ).fetchone()
+    nombre_loc = row[0] if row else loc_uuid[:8] + "…"
+
+    return True, f"Jerarquía de zonas — {nombre_loc}", _zone_modal_body(loc_uuid), loc_uuid
+
+
+@app.callback(
+    Output("admin-zone-modal", "is_open", allow_duplicate=True),
+    Output("admin-locs-feedback", "children", allow_duplicate=True),
+    Output("admin-locs-feedback", "is_open", allow_duplicate=True),
+    Output("admin-locs-feedback", "color", allow_duplicate=True),
+    Output("admin-crud-signal", "data", allow_duplicate=True),
+    Input("admin-zone-modal-save", "n_clicks"),
+    State({"type": "zone-parent-select", "index": ALL}, "value"),
+    State({"type": "zone-parent-select", "index": ALL}, "id"),
+    State({"type": "zone-visible-toggle", "index": ALL}, "value"),
+    State("admin-crud-signal", "data"),
+    prevent_initial_call=True,
+)
+def save_zone_hierarchy(n_clicks, parent_values, zone_ids, visible_values, signal):
+    if not n_clicks or not zone_ids:
+        return no_update, no_update, no_update, no_update, no_update
+
+    conn = get_conn()
+    for id_dict, parent_val, visible in zip(zone_ids, parent_values, visible_values):
+        zone_uuid   = id_dict["index"]
+        parent_uuid = parent_val if parent_val else None
+        hidden      = not bool(visible)
+        conn.execute(
+            "UPDATE dim_zonas SET parent_zone_uuid = ?, hidden = ? WHERE zone_uuid = ?",
+            [parent_uuid, hidden, zone_uuid],
+        )
+
+    n = len(zone_ids)
+    return False, f"Jerarquía publicada — {n} zona{'s' if n != 1 else ''} actualizadas.", True, "success", (signal or 0) + 1

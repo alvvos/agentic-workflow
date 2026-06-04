@@ -91,7 +91,7 @@ _LOGIN_HTML = """<!DOCTYPE html>
             </button>
           </div>
         </div>
-        <button type="submit" class="btn btn-primary w-100 fw-bold rounded-pill">Entrar</button>
+        <button type="submit" class="btn btn-primary w-100 fw-bold rounded-3">Entrar</button>
       </form>
     </div>
   </div>

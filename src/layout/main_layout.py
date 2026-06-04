@@ -27,9 +27,9 @@ def serve_layout():
                 ], className="d-flex align-items-center justify-content-center justify-content-md-start")
             ], xs=12, md=7, className="mb-4 mb-md-0"),
             dbc.Col([
-                dbc.Button([html.I(className="fas fa-sync-alt me-2"), "Sincronizar"], id="btn-sync", color="primary", outline=True, className="fw-bold rounded-pill shadow-sm me-2"),
-                dbc.Button([html.I(className="fas fa-trash-alt me-2"), "Flush"], id="btn-flush", color="danger", outline=True, className="fw-bold rounded-pill shadow-sm me-2"),
-                html.A([html.I(className="fas fa-sign-out-alt me-1"), session_id], href="/logout", className="btn btn-outline-secondary btn-sm fw-bold rounded-pill shadow-sm") if not MODO_DESARROLLO else html.Span()
+                dbc.Button([html.I(className="fas fa-sync-alt me-2"), "Sincronizar"], id="btn-sync", color="primary", outline=True, className="fw-bold rounded-3 shadow-sm me-2"),
+                dbc.Button([html.I(className="fas fa-trash-alt me-2"), "Flush"], id="btn-flush", color="danger", outline=True, className="fw-bold rounded-3 shadow-sm me-2"),
+                html.A([html.I(className="fas fa-sign-out-alt me-1"), session_id], href="/logout", className="btn btn-outline-secondary btn-sm fw-bold rounded-3 shadow-sm") if not MODO_DESARROLLO else html.Span()
             ], xs=12, md=5, className="text-center text-md-end")
         ], id="cabecera-app", className="mb-4 align-items-center d-print-none"),
 
@@ -78,7 +78,7 @@ def serve_layout():
                     dbc.Button([
                         html.I(className="fas fa-times me-1"), "Cancelar"
                     ], id="btn-cancel-sync", color="danger", outline=True, size="sm",
-                       className="rounded-pill"),
+                       className="rounded-3"),
                 ], className="p-4"),
                 className="p-0",
             ),

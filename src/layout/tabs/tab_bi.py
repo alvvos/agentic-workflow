@@ -6,6 +6,8 @@ def build_tab_bi():
     return dcc.Tab(label='Panel BI', value='tab-auditoria', className="fw-bold", children=[
         html.Br(),
 
+        dcc.Store(id="zonas-activas-combined"),
+
         html.Div(id="bi-status-visor", className="mb-4 p-3 bg-light rounded-4 border-start border-primary border-4 shadow-sm"),
 
         dbc.Row([
@@ -13,14 +15,15 @@ def build_tab_bi():
                 html.Label([html.I(className="fas fa-filter me-2 text-primary"), "Zonas activas:"], className="fw-bold mb-3 text-secondary"),
                 dbc.Checklist(
                     id="radar-drop-zonas", options=[], value=[], inline=True,
-                    input_class_name="btn-check", label_class_name="btn btn-outline-primary mb-2 me-2 fw-bold shadow-sm rounded-pill"
-                )
+                    input_class_name="btn-check", label_class_name="btn btn-outline-primary mb-2 me-2 fw-bold shadow-sm rounded-3"
+                ),
+                html.Div(id="radar-child-zones-wrapper"),
             ], width=12)
         ], className="mb-4"),
 
         dbc.Row([
             dbc.Col([
-                dbc.Button([html.I(className="fas fa-file-archive me-2"), "Descargar todos (.png)"], id="btn-download-all-bi", color="secondary", outline=True, className="mt-2 w-100 rounded-pill fw-bold shadow-sm"),
+                dbc.Button([html.I(className="fas fa-file-archive me-2"), "Descargar todos (.png)"], id="btn-download-all-bi", color="secondary", outline=True, className="mt-2 w-100 rounded-3 fw-bold shadow-sm"),
                 dcc.Download(id="download-bi-zip"),
             ], xs=12, className="text-end mb-4")
         ]),
@@ -41,7 +44,7 @@ def build_tab_bi():
         html.Hr(className="text-muted my-5"),
         dbc.Row([
             dbc.Col(
-                dbc.Button([html.I(className="fas fa-file-excel me-2"), "Descargar Excel"], id="btn-dl-auditoria", color="success", outline=True, className="rounded-pill fw-bold shadow-sm"),
+                dbc.Button([html.I(className="fas fa-file-excel me-2"), "Descargar Excel"], id="btn-dl-auditoria", color="success", outline=True, className="rounded-3 fw-bold shadow-sm"),
                 xs=12, className="text-end mb-3"
             )
         ]),

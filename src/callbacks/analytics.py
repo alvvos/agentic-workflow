@@ -17,12 +17,12 @@ from src.db.queries import get_df_visitas
     [Output("bi-dynamic-content", "children"), Output("bi-status-visor", "children"),
      Output("audit-results", "children"), Output("panel-ejecutivo-content", "children")],
     [Input("drop-locs", "value"), Input("tipo-fecha", "value"), Input("date-rango", "start_date"),
-     Input("date-rango", "end_date"), Input("date-dia", "date"), Input("radar-drop-zonas", "value"),
-     Input("bi-comparativa", "value"), Input("ejecutivo-drop-zonas", "value"),
+     Input("date-rango", "end_date"), Input("date-dia", "date"), Input("zonas-activas-combined", "data"),
+     Input("bi-comparativa", "value"),
      Input("pm-ventana", "value"), Input("data-version", "data")],
     [State("session-id", "data")], prevent_initial_call=False
 )
-def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, zones_exe, pm_ventana, _data_v, s_id):
+def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, pm_ventana, _data_v, s_id):
     if not locs:
         return html.Div(), "Esperando selección de ubicación...", html.Div(), html.Div()
 
@@ -33,8 +33,7 @@ def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, zones_exe,
     df['Ubicación'] = df['location_id'].map(mapa_tiendas).fillna('Desconocida')
     df['Zona'] = df['zone_uuid'].map(mapa_zonas).fillna('SinNombre') if 'zone_uuid' in df.columns else 'SinNombre'
 
-    lista_zonas_exe = zones_exe if zones_exe else []
-    informe_ejecutivo = generar_panel_pm(df, locs, lista_zonas_exe, ventana=pm_ventana or "semana")
+    informe_ejecutivo = generar_panel_pm(df, locs, [], ventana=pm_ventana or "semana")
 
     hoy = datetime.today().date()
     start = end = pd.to_datetime(hoy - timedelta(days=1))
@@ -67,11 +66,13 @@ def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, zones_exe,
         df_bi_hist['dwell_time'] /= 60.0
 
     comparativa_txt = {'wow': 'vs. Semana Anterior', 'mom': 'vs. Mes Anterior', 'yoy': 'vs. Año Anterior', 'none': ''}[comp]
-    visor = html.Div([
+    visor_children = [
         html.Span([html.I(className="fas fa-calendar-day me-2"), f"{start.strftime('%d %b')} - {end.strftime('%d %b')}"], className="badge bg-white text-primary me-2 shadow-sm fs-6"),
         html.Span([html.I(className="fas fa-layer-group me-2"), f"{len(zones_bi) if zones_bi else 'Todas las'} Zonas"], className="badge bg-white text-secondary me-2 shadow-sm fs-6"),
-        html.Span(comparativa_txt, className="badge bg-primary text-white shadow-sm fs-6") if comparativa_txt else None,
-    ])
+    ]
+    if comparativa_txt:
+        visor_children.append(html.Span(comparativa_txt, className="badge bg-primary text-white shadow-sm fs-6"))
+    visor = html.Div(visor_children)
 
     bi_content = generar_panel_bi_completo(df_bi, df_bi_hist, comp)
     audit_content = generar_tabla_auditoria(df_actual) if not df_actual.empty else dbc.Alert("No hay datos para el radar en estas fechas.", color="info", className="rounded-4")

@@ -10,8 +10,8 @@ def _seccion_informe(num, titulo, desc, color_num, nota=None):
             html.Span(titulo, className="fw-bold text-dark small"),
         ], className="d-flex align-items-center mb-1"),
         html.P(desc, className="small text-muted mb-0 ms-4"),
-        html.P([html.I(className="fas fa-info-circle me-1"), nota],
-               className="small text-warning ms-4 mb-0") if nota else None,
+        *([html.P([html.I(className="fas fa-info-circle me-1"), nota],
+               className="small text-warning ms-4 mb-0")] if nota else []),
     ], className="mb-3")
 
 
@@ -74,13 +74,13 @@ def build_tab_reportes():
                             html.I(className="fas fa-code me-2"),
                             "Descargar HTML"
                         ], id="btn-generar-html", color="primary", outline=True,
-                           className="w-100 fw-bold rounded-pill shadow-sm mb-2",
+                           className="w-100 fw-bold rounded-3 shadow-sm mb-2",
                            size="lg"),
                         dbc.Button([
                             html.I(className="fas fa-file-pdf me-2"),
                             "Descargar PDF"
                         ], id="btn-generar-pdf", color="primary",
-                           className="w-100 fw-bold rounded-pill shadow-sm mb-2",
+                           className="w-100 fw-bold rounded-3 shadow-sm mb-2",
                            size="lg"),
                         html.Div(id="error-msg-html",
                                  className="text-danger fw-bold text-center small"),
