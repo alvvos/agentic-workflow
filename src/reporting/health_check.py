@@ -122,6 +122,19 @@ def _slug(text):
     return re.sub(r'[^a-z0-9]', '-', str(text).lower())[:20]
 
 
+def _pct_activos(df_zona, fmin, fmax):
+    """Fracción de días en [fmin, fmax] con unique_visitors > 0."""
+    n_dias = max((fmax - fmin).days + 1, 1)
+    if df_zona.empty or 'unique_visitors' not in df_zona.columns:
+        return 0.0
+    activos = df_zona[
+        (df_zona['fecha_dt'] >= fmin) &
+        (df_zona['fecha_dt'] <= fmax) &
+        (df_zona['unique_visitors'] > 0)
+    ]['fecha_dt'].nunique()
+    return activos / n_dias
+
+
 # ── Chart builders ────────────────────────────────────────────────────────────
 
 def _fig_sparkline(dias_28, color):
@@ -129,24 +142,27 @@ def _fig_sparkline(dias_28, color):
     if dias_28 is None or dias_28.empty:
         return None
     df = dias_28.sort_values('fecha_dt')
-    y  = df['unique_visitors'].fillna(0).values
-    if len(y) < 3:
+    # NaN-aware: zeros are sensor outage days, treat as missing data
+    y_raw = df['unique_visitors'].values.astype(float)
+    valid = ~np.isnan(y_raw)
+    if valid.sum() < 3:
         return None
 
-    # Línea de tendencia (regresión lineal)
-    x_num = np.arange(len(y))
-    coef  = np.polyfit(x_num, y, 1)
+    x_num = np.arange(len(y_raw))
+    # Trend calculated only on valid (non-gap) points
+    coef  = np.polyfit(x_num[valid], y_raw[valid], 1)
     trend = np.polyval(coef, x_num)
     trend_color = _C_SUCCESS if coef[0] >= 0 else _C_DANGER
 
     fig = go.Figure()
-    # Área rellena debajo de la línea real
+    # Área rellena debajo de la línea real — connectgaps=False shows sensor gaps
     fig.add_trace(go.Scatter(
-        x=list(x_num), y=y.tolist(),
+        x=list(x_num), y=y_raw.tolist(),
         mode='lines',
+        connectgaps=False,
         line=dict(color=color, width=1.5, shape='spline'),
         fill='tozeroy',
-        fillcolor=color.replace('#', 'rgba(').replace(')', ',0.08)') if False else f"rgba(0,0,0,0.04)",
+        fillcolor=f"rgba(0,0,0,0.04)",
         hoverinfo='skip',
     ))
     # Línea de tendencia punteada
@@ -462,6 +478,20 @@ def _narrativa(zonas_data, fecha_max, clima, ventana="semana", geo_vals=None):
                 items.append(("success", "fas fa-cash-register",
                     f"La zona de caja registró un incremento del {dv:.0f}% durante el {periodo}."))
 
+    # 4b. Integridad de datos — alertas de nodo caído
+    for z in zonas_data:
+        zn = z['zona']
+        if z.get('gap_actual'):
+            items.append(("warning", "fas fa-wifi",
+                f"La zona {zn} presenta días sin datos en el {periodo} actual. "
+                f"Es posible que el nodo de captura haya estado temporalmente inactivo. "
+                f"Los datos disponibles son parciales."))
+        elif z.get('gap_anterior'):
+            items.append(("info", "fas fa-circle-exclamation",
+                f"El período de comparación de la zona {zn} incluye días sin datos registrados "
+                f"(incidencia previa en el nodo). La variación mostrada "
+                f"({z['d']['visitantes']:+.0f}%) puede estar sobreestimada."))
+
     # 5. Contexto externo: clima
     if clima:
         fmin_clima = fecha_max - timedelta(days=dias_v - 1)
@@ -582,28 +612,61 @@ def _render_narrativa(items):
 
 
 def _render_zona_card(zona, r, a, d, dias_28, uid, periodo_label="semana",
-                      child_names=None, has_children=False):
+                      child_names=None, has_children=False,
+                      gap_actual=False, gap_anterior=False):
     """Tarjeta de zona: % delta en grande (hero) + visitantes absolutos + sparkline."""
     color         = _color_zona(zona)
     badge_lbl, _, tooltip_role = _zona_meta(zona)
     zone_slug     = _slug(zona)
     badge_id      = f"pm-z-{zone_slug}-{uid}"
     spark_info_id = f"pm-spark-info-{zone_slug}-{uid}"
+    gap_badge_id  = f"pm-gap-{zone_slug}-{uid}"
 
     dv = d['visitantes']
-    if dv >= 5:
+    if gap_actual:
+        sem_color, arrow = _C_MUTED,  "fas fa-wifi"
+        pct_str = "—"
+    elif gap_anterior:
+        sem_color, arrow = _C_AMBER, "fas fa-triangle-exclamation"
+        pct_str = f"~{dv:+.0f}%"
+    elif dv >= 5:
         sem_color, arrow = _C_SUCCESS, "fas fa-arrow-up"
+        pct_str = f"{dv:+.0f}%"
     elif dv <= -5:
         sem_color, arrow = _C_DANGER,  "fas fa-arrow-down"
+        pct_str = f"{dv:+.0f}%"
     else:
         sem_color, arrow = _C_AMBER,   "fas fa-minus"
+        pct_str = f"{dv:+.0f}%"
 
-    pct_str  = f"{dv:+.0f}%"
     abs_str  = f"{r['visitantes']:,.0f} visitantes únicos"
     ant_str  = f" · ant. {a['visitantes']:,.0f}" if a['visitantes'] else ""
     dwell_str = f" · {r['estancia']:.1f} min estancia" if r['estancia'] > 0 else ""
 
     sparkline = _fig_sparkline(dias_28, color)
+
+    # Badge de alerta de calidad de datos
+    if gap_actual:
+        gap_ui = html.Div(
+            dbc.Badge([html.I(className="fas fa-wifi me-1"), "Sin datos suficientes"],
+                      color="warning", text_color="dark", pill=True,
+                      style={"fontSize": "0.62rem"}),
+            className="mb-2",
+        )
+    elif gap_anterior:
+        gap_ui = html.Div([
+            dbc.Badge([html.I(className="fas fa-triangle-exclamation me-1"),
+                       "Período anterior incompleto"],
+                      id=gap_badge_id, color="warning", text_color="dark", pill=True,
+                      style={"fontSize": "0.62rem", "cursor": "help"}),
+            dbc.Tooltip(
+                "El período de comparación incluye días sin datos registrados "
+                "(posible incidencia en el nodo). La variación puede estar sobreestimada.",
+                target=gap_badge_id, placement="top",
+            ),
+        ], className="mb-2")
+    else:
+        gap_ui = None
 
     return dbc.Card(
         dbc.CardBody([
@@ -616,6 +679,8 @@ def _render_zona_card(zona, r, a, d, dias_28, uid, periodo_label="semana",
                           style={"fontSize": "0.70rem", "cursor": "help"}),
                 dbc.Tooltip(tooltip_role, target=badge_id, placement="top"),
             ]),
+            # Badge de calidad de datos (solo cuando hay incidencia)
+            *([gap_ui] if gap_ui else []),
             # % como métrica principal
             html.Div(className="d-flex align-items-baseline gap-1 mb-1", children=[
                 html.Span(pct_str,
@@ -993,11 +1058,27 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
         dias_p = dias28 if ventana == "mes" else dias7
 
         # Sparkline always 28d for visual context
-        dias_28 = (
+        dias_28_raw = (
             dz[dz['fecha_dt'] >= fecha_max - timedelta(days=27)]
             .groupby('fecha_dt')['unique_visitors'].sum().reset_index()
             if 'unique_visitors' in dz.columns else pd.DataFrame()
         )
+        # Zeros → NaN: sensor outage days must not pull the trend line down
+        if not dias_28_raw.empty:
+            dias_28 = dias_28_raw.copy()
+            dias_28['unique_visitors'] = dias_28['unique_visitors'].replace(0, np.nan)
+        else:
+            dias_28 = dias_28_raw
+
+        # Gap detection — compares active days in current vs previous period
+        fmin_p = fecha_max - timedelta(days=dias_v - 1)
+        fmin_a = fmin_p - timedelta(days=dias_v)
+        fmax_a = fmin_p - timedelta(days=1)
+        pct_p  = _pct_activos(dz, fmin_p, fecha_max)
+        pct_a  = _pct_activos(dz, fmin_a, fmax_a)
+        # >50% of days in a period without data → that period is unreliable
+        gap_actual   = pct_p < 0.5
+        gap_anterior = pct_a < 0.5
 
         if   d_p['visitantes'] >=  5: puntos += 1
         elif d_p['visitantes'] <= -5: puntos -= 1
@@ -1008,6 +1089,8 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
             r7=r7, a7=a7, d7=d7, fmin7=fmin7, fmax7=fmax7, dias7=dias7,
             r28=r28, a28=a28, d28=d28,
             dias_28=dias_28,
+            gap_actual=gap_actual,
+            gap_anterior=gap_anterior,
         ))
 
     # Subset used for narrative and zone-segmented charts (parent zones only)
@@ -1098,11 +1181,13 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
                 z['zona'], z['r'], z['a'], z['d'], z['dias_28'], uid, periodo_label,
                 child_names=zona_children_map.get(z['zona'], []),
                 has_children=z['zona'] in zona_children_map,
+                gap_actual=z.get('gap_actual', False),
+                gap_anterior=z.get('gap_anterior', False),
             ),
             xs=12, sm=6, xl=3, className="mb-3",
         )
         for z in sorted(zonas_data, key=_orden)
-    ]
+    ]  # noqa: E501
 
     _ventana_zona_lbl = "últimos 28 días" if ventana == "mes" else "últimos 7 días"
     zonas_section = html.Div([
