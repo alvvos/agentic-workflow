@@ -989,6 +989,152 @@ def _render_pm_questions(df, zonas_data, fecha_max, uid, ventana="semana", child
     ], className="mb-4")
 
 
+# ── Eventos externos ─────────────────────────────────────────────────────────
+
+_UNIVERSAL_KEYS = frozenset({
+    'ev_festivo_regional', 'ev_rank_concierto', 'ev_rank_deportivo',
+    'ev_rank_festival', 'ev_rank_municipal', 'ev_rank_total',
+    'ev_vacaciones_escolares', 'llueve', 'temp_max', 'temp_min',
+})
+
+_FEATURE_META = {
+    'n_pasajeros_crucero_dia': ('Pasajeros de crucero', 'pax totales', 'sum', '#1abc9c'),
+    'n_turistas_isocrona':     ('Turistas en isocrona',  'pers. estimadas', 'sum', '#3498db'),
+    'n_eventos_gran_via':      ('Eventos Gran Vía',       'eventos en rango', 'sum', '#9b59b6'),
+    'afluencia_metro_gran_via':('Metro Gran Vía',         'viajeros validados', 'sum', '#e67e22'),
+}
+_DEFAULT_COLOR = '#0052CC'
+
+
+def _render_eventos_externos(location_uuid: str, fecha_max) -> html.Div | None:
+    """
+    Sección 'Contexto externo': agrega por semana y mes las features de
+    store_features_ext exclusivas de la ubicación (excluye features universales).
+    Devuelve None si no hay datos.
+    """
+    try:
+        from src.db.store import get_conn
+        conn = get_conn()
+
+        desde = fecha_max - timedelta(days=119)  # ~4 meses para cubrir 4 semanas + 3 meses
+        rows = conn.execute(
+            """SELECT feature_key, fecha::text, value
+               FROM   store_features_ext
+               WHERE  location_uuid = ?
+                 AND  value IS NOT NULL
+                 AND  fecha >= ?
+               ORDER  BY feature_key, fecha""",
+            [location_uuid, str(desde.date() if hasattr(desde, 'date') else desde)],
+        ).fetchall()
+    except Exception:
+        return None
+
+    if not rows:
+        return None
+
+    df_ext = pd.DataFrame(rows, columns=['feature_key', 'fecha', 'value'])
+    df_ext['fecha'] = pd.to_datetime(df_ext['fecha'])
+
+    keys_loc = [k for k in df_ext['feature_key'].unique() if k not in _UNIVERSAL_KEYS]
+    if not keys_loc:
+        return None
+
+    df_ext = df_ext[df_ext['feature_key'].isin(keys_loc)].copy()
+    df_ext['semana_iso'] = df_ext['fecha'].dt.to_period('W').dt.start_time
+    df_ext['mes']        = df_ext['fecha'].dt.to_period('M').dt.to_timestamp()
+
+    _MESES_ES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+                 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+    feature_cards = []
+    for fk in sorted(keys_loc):
+        meta   = _FEATURE_META.get(fk, (fk.replace('_', ' ').title(), '', 'sum', _DEFAULT_COLOR))
+        label, unidad, agg_fn, color = meta
+
+        df_k = df_ext[df_ext['feature_key'] == fk]
+
+        # ── Semanas (últimas 4 completas) ──────────────────────────────
+        sem_agg = (df_k.groupby('semana_iso')['value']
+                   .agg(agg_fn).reset_index()
+                   .sort_values('semana_iso').tail(5))
+        sem_labels = [f"S{r.isocalendar()[1]}" for r in sem_agg['semana_iso'].dt.date]
+        sem_vals   = sem_agg['value'].tolist()
+
+        # ── Meses (últimos 3) ──────────────────────────────────────────
+        mes_agg = (df_k.groupby('mes')['value']
+                   .agg(agg_fn).reset_index()
+                   .sort_values('mes').tail(4))
+        mes_labels = [f"{_MESES_ES[r.month - 1]} {r.year}" for r in mes_agg['mes'].dt.date]
+        mes_vals   = mes_agg['value'].tolist()
+
+        def _bar_fig(x_vals, y_vals, title):
+            fig = go.Figure(go.Bar(
+                x=x_vals, y=y_vals,
+                marker_color=color, opacity=0.85,
+                text=[f"<b>{int(v):,}</b>" if v >= 1 else f"<b>{v:.1f}</b>" for v in y_vals],
+                textposition='outside',
+                textfont=dict(size=10, color='#2c3e50'),
+            ))
+            fig.update_layout(
+                title=dict(text=title, font=dict(size=11, color='#7f8c8d'), x=0),
+                plot_bgcolor='white', paper_bgcolor='white',
+                margin=dict(t=30, b=10, l=10, r=10),
+                xaxis=dict(showgrid=False, tickfont=dict(size=10)),
+                yaxis=dict(showgrid=True, gridcolor='#f0f0f0', visible=False),
+                height=150,
+            )
+            return fig
+
+        gid_sem = f"ext-{location_uuid[:8]}-{fk}-sem"
+        gid_mes = f"ext-{location_uuid[:8]}-{fk}-mes"
+
+        fig_sem = _bar_fig(sem_labels, sem_vals, 'Por semana') if sem_vals else None
+        fig_mes = _bar_fig(mes_labels, mes_vals, 'Por mes')   if mes_vals else None
+
+        # KPI rápido: última semana vs anterior
+        delta_badge = html.Span()
+        if len(sem_vals) >= 2 and sem_vals[-2] > 0:
+            pct = (sem_vals[-1] - sem_vals[-2]) / sem_vals[-2] * 100
+            color_b = '#27ae60' if pct > 0 else '#e74c3c'
+            flecha  = '▲' if pct > 0 else '▼'
+            delta_badge = html.Span(
+                f"{flecha} {pct:+.1f}% vs semana ant.",
+                style={'color': color_b, 'fontSize': '0.75rem', 'fontWeight': '600'},
+            )
+
+        val_ult = f"{int(sem_vals[-1]):,}" if sem_vals and sem_vals[-1] >= 1 else (f"{sem_vals[-1]:.2f}" if sem_vals else '—')
+        unidad_txt = f" {unidad}" if unidad else ''
+
+        header_row = html.Div([
+            html.I(className="fas fa-satellite-dish me-2", style={'color': color}),
+            html.Span(label, className="fw-bold me-2", style={'fontSize': '0.9rem', 'color': '#2c3e50'}),
+            html.Span([val_ult, unidad_txt, ' esta semana'], className="text-muted me-2",
+                      style={'fontSize': '0.78rem'}),
+            delta_badge,
+        ], className="d-flex align-items-center flex-wrap gap-1 mb-2")
+
+        graficos = dbc.Row([
+            dbc.Col(dcc.Graph(id=gid_sem, figure=fig_sem, config={'displayModeBar': False},
+                              style={'height': '150px'}) if fig_sem else html.Div(), xs=12, md=6),
+            dbc.Col(dcc.Graph(id=gid_mes, figure=fig_mes, config={'displayModeBar': False},
+                              style={'height': '150px'}) if fig_mes else html.Div(), xs=12, md=6),
+        ], className="g-2")
+
+        feature_cards.append(html.Div([header_row, graficos], className="mb-3"))
+
+    if not feature_cards:
+        return None
+
+    return html.Div([
+        html.Div([
+            html.I(className="fas fa-broadcast-tower me-2 text-primary"),
+            html.Span("Contexto externo", className="fw-bold text-dark",
+                      style={'fontSize': '1rem'}),
+        ], className="d-flex align-items-center border-bottom pb-2 mb-3"),
+        html.Div(feature_cards),
+    ], className="mb-4 p-3 bg-white rounded-4 shadow-sm border")
+
+
 # ── Main assembly ─────────────────────────────────────────────────────────────
 
 def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None, ventana="semana"):
@@ -1198,6 +1344,12 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
         ventana=ventana, child_zones=child_zone_names,
     )
 
+    # ── 4b. Eventos externos (features location-specific) ─────────────
+    eventos_ext = (
+        _render_eventos_externos(location_uuid, fecha_max)
+        if location_uuid else None
+    ) or html.Div()
+
     # ── 5. Geo panel ─────────────────────────────────────────────────────
     geo = (
         generar_panel_geo_visual(location_uuid, geo_vals_loc, clima,
@@ -1231,6 +1383,7 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
         narrativa,
         zonas_section,
         dias_section,
+        eventos_ext,
         geo,
     ])
 
