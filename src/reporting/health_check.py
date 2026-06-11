@@ -542,20 +542,6 @@ def _narrativa(zonas_data, fecha_max, clima, ventana="semana", geo_vals=None):
                     f"La ubicación muestra una tasa de captación elevada: {total_p:,.0f} visitas "
                     f"registradas sobre un área de influencia de {pob5:,.0f} personas en 5 minutos a pie."))
 
-        # Gasto en ropa vs benchmark
-        if gasto_ropa is not None:
-            _REF = 1_200
-            if gasto_ropa > _REF * 1.2:
-                items.append(("success", "fas fa-shopping-bag",
-                    f"El gasto en ropa y calzado del entorno asciende a {gasto_ropa:,.0f} €/hogar/año, "
-                    f"un {(gasto_ropa / _REF - 1) * 100:.0f}% por encima de la media nacional. "
-                    f"El perfil de gasto del área es favorable para el negocio."))
-            elif gasto_ropa < _REF * 0.85:
-                items.append(("info", "fas fa-shopping-bag",
-                    f"El gasto en ropa y calzado del entorno ({gasto_ropa:,.0f} €/hogar/año) "
-                    f"se sitúa por debajo de la media nacional. Se recomienda evaluar la adecuación "
-                    f"del surtido de producto y la política de precios al perfil adquisitivo de la zona."))
-
         # Target demográfico Miniso
         if jovenes is not None and familias is not None:
             total_target = (jovenes or 0) + (familias or 0)
