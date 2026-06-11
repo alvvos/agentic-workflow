@@ -8,8 +8,25 @@ from dotenv import load_dotenv
 load_dotenv()
 
 _URL_AITANNA   = 'https://platform.aitanna.ai/api/v1/get-all-locations-and-zones'
-_NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search'
-_NOMINATIM_UA  = 'agentic-workflow/1.0 (alvaro.salis@69summer.com)'
+_NOMINATIM_URL      = 'https://nominatim.openstreetmap.org/search'
+_NOMINATIM_REVERSE  = 'https://nominatim.openstreetmap.org/reverse'
+_NOMINATIM_UA       = 'agentic-workflow/1.0 (alvaro.salis@69summer.com)'
+
+_CCAA_A_CODE = {
+    'Andalucía': 'AN', 'Aragón': 'AR',
+    'Principado de Asturias': 'AS', 'Asturias': 'AS',
+    'Illes Balears': 'IB', 'Islas Baleares': 'IB',
+    'Canarias': 'CN', 'Cantabria': 'CB',
+    'Castilla y León': 'CL', 'Castilla-La Mancha': 'CM',
+    'Cataluña': 'CT', 'Catalunya': 'CT',
+    'Comunitat Valenciana': 'VC', 'Comunidad Valenciana': 'VC',
+    'Extremadura': 'EX', 'Galicia': 'GA', 'La Rioja': 'RI',
+    'Comunidad de Madrid': 'MD',
+    'Región de Murcia': 'MU',
+    'Comunidad Foral de Navarra': 'NC', 'Navarra': 'NC',
+    'País Vasco': 'PV', 'Euskadi': 'PV',
+    'Ceuta': 'CE', 'Melilla': 'ML',
+}
 
 _COUNTRY_MAP = {
     'España': 'ES', 'Spain': 'ES',
@@ -283,6 +300,55 @@ def geocodificar_ubicaciones(solo_vacias=True):
     print(f'\nGeocodificación completada: {ok} OK · {fail} sin resultado.')
 
 
+def poblar_region_code(solo_vacias=True):
+    """Rellena region_code para ubicaciones ES con lat/lon via Nominatim reverse geocoding."""
+    from src.db.store import get_conn
+    conn = get_conn()
+
+    rows = conn.execute(
+        "SELECT location_uuid, nombre, lat, lon, region_code "
+        "FROM dim_ubicaciones "
+        "WHERE activa = TRUE AND pais_codigo = 'ES' AND lat IS NOT NULL AND lon IS NOT NULL"
+    ).fetchall()
+
+    pendientes = [r for r in rows if not solo_vacias or not r[4]]
+
+    if not pendientes:
+        print('Todas las ubicaciones ES con coordenadas ya tienen region_code.')
+        return
+
+    print(f'Reverse geocoding region_code para {len(pendientes)} ubicaciones (~1 req/s)...\n')
+    ok = fail = 0
+
+    for loc_uuid, nombre, lat, lon, _ in pendientes:
+        try:
+            r = requests.get(
+                _NOMINATIM_REVERSE,
+                params={'lat': lat, 'lon': lon, 'format': 'json'},
+                headers={'User-Agent': _NOMINATIM_UA},
+                timeout=6,
+            )
+            state = r.json().get('address', {}).get('state', '')
+            code = _CCAA_A_CODE.get(state)
+            if code:
+                conn.execute(
+                    "UPDATE dim_ubicaciones SET region_code = ? WHERE location_uuid = ?",
+                    [code, loc_uuid],
+                )
+                print(f'  ✓  {nombre:<40} {state} → {code}')
+                ok += 1
+            else:
+                print(f'  ?  {nombre:<40} state={state!r!s} (sin mapeo — edita manualmente)')
+                fail += 1
+        except Exception as e:
+            print(f'  ✗  {nombre:<40} {e}')
+            fail += 1
+        time.sleep(1)
+
+    conn.commit()
+    print(f'\nCompletado: {ok} actualizados · {fail} sin mapeo.')
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
@@ -295,6 +361,10 @@ if __name__ == '__main__':
         geocodificar_ubicaciones()
     elif cmd == 'geo-todo':
         geocodificar_ubicaciones(solo_vacias=False)
+    elif cmd == 'region':
+        poblar_region_code()
+    elif cmd == 'region-todo':
+        poblar_region_code(solo_vacias=False)
     else:
         descargar_maestro_ubicaciones()
         print()
