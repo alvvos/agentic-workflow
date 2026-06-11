@@ -8,7 +8,26 @@ import uuid
 import json
 from datetime import timedelta
 
-festivos_espana = holidays.ES(years=[2024, 2025, 2026])
+def _get_festivos_loc(ubi: str, years: list) -> object:
+    """
+    Devuelve un objeto holidays para la ubicación — con subdivisión autonómica
+    si region_code está poblado en dim_ubicaciones, o nacional si no lo está.
+    """
+    try:
+        from src.db.store import get_conn
+        row = get_conn().execute(
+            "SELECT region_code, pais_codigo FROM dim_ubicaciones WHERE lower(nombre) = lower(?) LIMIT 1",
+            [ubi],
+        ).fetchone()
+        region_code = row[0] if row else None
+        pais_codigo  = (row[1] if row else None) or 'ES'
+        if pais_codigo == 'MX':
+            return holidays.Mexico(years=years)
+        if region_code:
+            return holidays.Spain(subdiv=region_code, years=years)
+        return holidays.Spain(years=years)
+    except Exception:
+        return holidays.Spain(years=years)
 
 _GRAPH_CONFIG = {
     'displayModeBar': True,
@@ -81,7 +100,7 @@ def preparar_df_ratio(df, z_out, z_in):
     return m
 
 
-def construir_figura_bi(df, df_hist, metrica, titulo, zonas_ordenadas, color_map, tipo='bar', offset_dias=0):
+def construir_figura_bi(df, df_hist, metrica, titulo, zonas_ordenadas, color_map, tipo='bar', offset_dias=0, festivos=None):
     fig = go.Figure()
     if df.empty: 
         return fig.update_layout(title="Sin datos", xaxis=dict(visible=False), yaxis=dict(visible=False))
@@ -171,11 +190,29 @@ def construir_figura_bi(df, df_hist, metrica, titulo, zonas_ordenadas, color_map
     fig.update_layout(title=dict(text=titulo, font=dict(size=15, color='#2c3e50', family='Arial, sans-serif')), plot_bgcolor='white', hovermode='x unified', margin=dict(t=45, b=45, l=40, r=20), legend=dict(orientation="h", y=1.1, x=1, xanchor='right'), barmode='group' if tipo == 'bar' else None, clickmode='event+select', dragmode=False)
     fig.update_xaxes(tickvals=tickvals, ticktext=ticktext, showgrid=True, gridcolor='#f2f2f2', tickangle=angulo_x)
     fig.update_yaxes(showgrid=True, gridcolor='#f2f2f2', rangemode='tozero')
+
+    if festivos and not usar_meses and fechas_unicas:
+        f_min = pd.to_datetime(min(fechas_unicas))
+        f_max = pd.to_datetime(max(fechas_unicas))
+        for f_date, f_name in festivos.items():
+            f_ts = pd.Timestamp(f_date)
+            if f_min <= f_ts <= f_max:
+                fig.add_vline(
+                    x=f_ts.strftime('%Y-%m-%d'),
+                    line=dict(color='#f39c12', width=1.5, dash='dash'),
+                    opacity=0.55,
+                    annotation_text=(f_name[:18] if f_name else ''),
+                    annotation_position="top right",
+                    annotation_font=dict(size=8, color='#e67e22'),
+                    annotation_bgcolor='rgba(255,255,255,0.75)',
+                    annotation_bordercolor='#f39c12',
+                )
+
     return fig
 
-def crear_tarjeta_metrica(df, df_hist, col_y, titulo, offset, ubi, id_sufijo, tipo='bar'):
+def crear_tarjeta_metrica(df, df_hist, col_y, titulo, offset, ubi, id_sufijo, tipo='bar', festivos=None):
     zonas = ordenar_zonas(df['Zona'].unique())
-    fig = construir_figura_bi(df, df_hist, col_y, titulo, zonas, obtener_mapa_colores(zonas), tipo, offset)
+    fig = construir_figura_bi(df, df_hist, col_y, titulo, zonas, obtener_mapa_colores(zonas), tipo, offset, festivos)
     gid = f"{ubi}-{col_y}-{id_sufijo}"
     cfg = {**_GRAPH_CONFIG, 'toImageButtonOptions': {**_GRAPH_CONFIG['toImageButtonOptions'], 'filename': gid}}
     return dbc.Card([
@@ -384,6 +421,9 @@ def generar_panel_bi_completo(df_actual, df_hist, comparativa, fechas_filtro=Non
         df_u = df_actual[df_actual['Ubicación'] == ubi].copy()
         df_h = df_hist[df_hist['Ubicación'] == ubi].copy() if not df_hist.empty else pd.DataFrame()
 
+        years = list(df_u['fecha_dia'].dt.year.unique())
+        festivos_ubi = _get_festivos_loc(ubi, years)
+
         zonas_presentes = ordenar_zonas(df_u['Zona'].unique())
         # KPI cards, funnel y heatmaps: solo zonas raíz (sin padre).
         # Si no hay jerarquía (todas planas) se usan todas.
@@ -442,7 +482,7 @@ def generar_panel_bi_completo(df_actual, df_hist, comparativa, fechas_filtro=Non
                     titulo_f = f"Atracción: {z_out} → {z_in}"
                     kpis_funnel.append(dbc.Col(crear_tarjeta_kpi_global(titulo_f, v_ratio, h_ratio, es_ratio=True), xs=12, md=6, className="mb-3"))
                     
-                    card_g = crear_tarjeta_metrica(df_r_act, df_r_hist, 'ratio_atraccion', f"Evolución {titulo_f}", offset, ubi, f"funnel-{i}", 'line')
+                    card_g = crear_tarjeta_metrica(df_r_act, df_r_hist, 'ratio_atraccion', f"Evolución {titulo_f}", offset, ubi, f"funnel-{i}", 'line', festivos=festivos_ubi)
                     graficos_funnel.append(dbc.Col(card_g, xs=12, xl=6, className="mb-4"))
 
             if kpis_funnel:
@@ -479,14 +519,14 @@ def generar_panel_bi_completo(df_actual, df_hist, comparativa, fechas_filtro=Non
         for c in metricas_bar:
             if c in df_u.columns:
                 t = obtener_titulo_intuitivo(c)
-                if not df_int.empty: cards.append(crear_tarjeta_metrica(df_int, df_hi, c, f"{t} (Int)", offset, ubi, 'int', 'bar'))
-                if not df_ext.empty: cards.append(crear_tarjeta_metrica(df_ext, df_he, c, f"{t} (Ext)", offset, ubi, 'ext', 'bar'))
+                if not df_int.empty: cards.append(crear_tarjeta_metrica(df_int, df_hi, c, f"{t} (Int)", offset, ubi, 'int', 'bar', festivos=festivos_ubi))
+                if not df_ext.empty: cards.append(crear_tarjeta_metrica(df_ext, df_he, c, f"{t} (Ext)", offset, ubi, 'ext', 'bar', festivos=festivos_ubi))
 
         metricas_line = [c for c in agg.keys() if c in df_u.columns and c not in metricas_bar]
         for c in metricas_line:
             t = obtener_titulo_intuitivo(c)
-            if not df_int.empty: cards.append(crear_tarjeta_metrica(df_int, df_hi, c, f"{t} (Int)", offset, ubi, 'int', 'line'))
-            if not df_ext.empty: cards.append(crear_tarjeta_metrica(df_ext, df_he, c, f"{t} (Ext)", offset, ubi, 'ext', 'line'))
+            if not df_int.empty: cards.append(crear_tarjeta_metrica(df_int, df_hi, c, f"{t} (Int)", offset, ubi, 'int', 'line', festivos=festivos_ubi))
+            if not df_ext.empty: cards.append(crear_tarjeta_metrica(df_ext, df_he, c, f"{t} (Ext)", offset, ubi, 'ext', 'line', festivos=festivos_ubi))
 
         rows = []
         for i in range(0, len(cards), 2):
