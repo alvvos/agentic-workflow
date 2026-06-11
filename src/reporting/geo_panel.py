@@ -65,104 +65,219 @@ _SPATIAL_LABELS = {
     "event_venue": "Sala de eventos",
 }
 
-# ── Contexto externo temporal ─────────────────────────────────────────────────
+# ── Señales externas de área ──────────────────────────────────────────────────
 _UNIVERSAL_EXT_KEYS = frozenset({
     'ev_festivo_regional', 'ev_rank_concierto', 'ev_rank_deportivo',
     'ev_rank_festival', 'ev_rank_municipal', 'ev_rank_total',
     'ev_vacaciones_escolares', 'llueve', 'temp_max', 'temp_min',
 })
-_EXT_FEATURE_META = {
-    'n_pasajeros_crucero_dia': ('Pasajeros crucero', 'pax',      'sum', '#1abc9c'),
-    'afluencia_metro_gran_via': ('Metro Gran Vía',   'val./día', 'mean', '#1abc9c'),
-    'n_turistas_isocrona':     ('Turistas isocrona','pers./día','mean', '#f39c12'),
-    'n_eventos_gran_via':      ('Eventos Gran Vía', 'eventos',  'sum',  '#9b59b6'),
+_EXT_SERIES_META = {
+    'afluencia_metro_gran_via': ('Metro Gran Vía',  'mean', '#1abc9c'),
+    'n_turistas_isocrona':      ('Turistas área',   'mean', '#f39c12'),
+    'n_pasajeros_crucero_dia':  ('Pasajeros crucero','sum', '#1abc9c'),
 }
+_EV_KEYS = {'estreno_callao', 'manifestacion_gran_via', 'concierto_wizink', 'festival_madrid', 'escala_crucero'}
+_EV_ICONS  = {'estreno_callao': '🎬', 'manifestacion_gran_via': '📢',
+              'concierto_wizink': '🎵', 'festival_madrid': '🏙️', 'escala_crucero': '🚢'}
+_EV_LABELS = {'estreno_callao': 'Estreno', 'manifestacion_gran_via': 'Marcha',
+              'concierto_wizink': 'Concierto', 'festival_madrid': 'Evento ciudad', 'escala_crucero': 'Crucero'}
+_EV_COLOR  = {'estreno_callao': '#f39c12', 'manifestacion_gran_via': '#e74c3c',
+              'concierto_wizink': '#9b59b6', 'festival_madrid': '#3498db', 'escala_crucero': '#1abc9c'}
+_IMP_COLOR = {'alto': '#e74c3c', 'medio': '#f39c12', 'bajo': '#27ae60'}
 _MESES_ES_GEO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
 
-def _ext_context_charts(location_uuid: str) -> list:
+def _render_area_signals(location_uuid: str) -> html.Div | None:
     """
-    Devuelve una lista de columnas dbc.Col con charts de contexto externo.
-    Vacía si la ubicación no tiene features location-specific en store_features_ext.
+    Sección 'Señales del área': gráfico mensual de series externas +
+    feed de eventos recientes y próximos estilo noticia.
+    Devuelve None si no hay datos.
     """
     from datetime import date, timedelta
+    hoy = date.today()
+
     try:
         from src.db.store import get_conn
-        rows = get_conn().execute(
+        conn = get_conn()
+
+        # Series temporales location-specific (últimos 6 meses)
+        ts_rows = conn.execute(
             """SELECT feature_key, fecha::text, value
                FROM   store_features_ext
-               WHERE  location_uuid = ? AND value IS NOT NULL
-                 AND  fecha >= ?
+               WHERE  location_uuid = ? AND value IS NOT NULL AND fecha >= ?
                ORDER  BY feature_key, fecha""",
-            [location_uuid, str(date.today() - timedelta(days=112))],
+            [location_uuid, str(hoy - timedelta(days=182))],
+        ).fetchall()
+
+        # Eventos (ventana: 90 días atrás hasta 90 días adelante)
+        ev_rows = conn.execute(
+            """SELECT evento_key, fecha_inicio::text, fecha_fin::text, metadata
+               FROM   store_calendario_org
+               WHERE  location_uuid = ?
+                 AND  fecha_inicio >= ? AND fecha_inicio <= ?
+               ORDER  BY fecha_inicio""",
+            [location_uuid,
+             str(hoy - timedelta(days=90)),
+             str(hoy + timedelta(days=90))],
         ).fetchall()
     except Exception:
-        return []
+        return None
 
-    if not rows:
-        return []
+    # Filtrar keys universales
+    ts_rows = [r for r in ts_rows if r[0] not in _UNIVERSAL_EXT_KEYS]
+    ev_rows = [r for r in ev_rows if r[0] in _EV_KEYS]
 
-    df = pd.DataFrame(rows, columns=['feature_key', 'fecha', 'value'])
-    df['fecha'] = pd.to_datetime(df['fecha'])
-    keys = [k for k in df['feature_key'].unique() if k not in _UNIVERSAL_EXT_KEYS]
-    if not keys:
-        return []
+    if not ts_rows and not ev_rows:
+        return None
 
-    df = df[df['feature_key'].isin(keys)].copy()
-    df['semana'] = df['fecha'].dt.to_period('W').dt.start_time
+    # ── Gráfico mensual ───────────────────────────────────────────────────────
+    fig = go.Figure()
+    chart_built = False
 
-    cols = []
-    for fk in sorted(keys):
-        label, unidad, agg_fn, color = _EXT_FEATURE_META.get(
-            fk, (fk.replace('_', ' ').title(), '', 'sum', _C_PRIMARY))
+    if ts_rows:
+        df_ts = pd.DataFrame(ts_rows, columns=['fk', 'fecha', 'value'])
+        df_ts['fecha'] = pd.to_datetime(df_ts['fecha'])
+        df_ts['mes']   = df_ts['fecha'].dt.to_period('M').dt.to_timestamp()
+        keys_loc = [k for k in df_ts['fk'].unique() if k in _EXT_SERIES_META]
 
-        df_k   = df[df['feature_key'] == fk]
-        sem    = df_k.groupby('semana')['value'].agg(agg_fn).reset_index().sort_values('semana').tail(8)
-        s_lbls = [f"S{r.isocalendar()[1]}" for r in sem['semana'].dt.date]
-        s_vals = sem['value'].tolist()
+        for fk in keys_loc:
+            label, agg_fn, color = _EXT_SERIES_META[fk]
+            mes = df_ts[df_ts['fk'] == fk].groupby('mes')['value'].agg(agg_fn).reset_index().sort_values('mes')
+            if mes.empty:
+                continue
+            m_lbls = [f"{_MESES_ES_GEO[r.month-1]} {r.year}" for r in mes['mes'].dt.date]
+            m_vals = mes['value'].tolist()
+            is_first = not chart_built
+            fig.add_trace(go.Bar(
+                x=m_lbls, y=m_vals, name=label,
+                marker_color=color, opacity=0.82,
+                text=[f"<b>{int(v/1000):.0f}k</b>" if v >= 1000 else f"<b>{int(v)}</b>" for v in m_vals],
+                textposition='inside', insidetextanchor='middle',
+                textfont=dict(size=9, color='white', family='Arial Black, Arial'),
+            ))
+            chart_built = True
 
-        # KPI: última semana y delta
-        kpi_html = html.Span()
-        if len(s_vals) >= 2 and s_vals[-2] > 0:
-            pct = (s_vals[-1] - s_vals[-2]) / s_vals[-2] * 100
-            arrow = '▲' if pct > 0 else '▼'
-            c_kpi = '#27ae60' if pct > 0 else '#e74c3c'
-            kpi_html = html.Span(f"{arrow} {pct:+.1f}% vs sem. ant.",
-                                 style={'color': c_kpi, 'fontSize': '0.72rem', 'fontWeight': '700'})
+    # Marcadores de eventos sobre el gráfico
+    if ev_rows and chart_built:
+        for ekey, fi, ff, meta_raw in ev_rows:
+            try:
+                meta = json.loads(meta_raw) if isinstance(meta_raw, str) else (meta_raw or {})
+            except Exception:
+                meta = {}
+            fi_dt = pd.to_datetime(fi)
+            mes_lbl = f"{_MESES_ES_GEO[fi_dt.month-1]} {fi_dt.year}"
+            icono   = _EV_ICONS.get(ekey, '📍')
+            titulo  = meta.get('titulo', ekey)[:40]
+            color_e = _EV_COLOR.get(ekey, '#95a5a6')
+            imp     = meta.get('impacto', '')
+            fig.add_annotation(
+                x=mes_lbl, y=1.0, yref='paper',
+                text=f"<b>{icono}</b>",
+                showarrow=False,
+                font=dict(size=14),
+                hovertext=f"<b>{titulo}</b><br>{fi_dt.strftime('%d %b %Y')}"
+                          + (f"<br>{meta.get('asistentes','')} personas" if meta.get('asistentes') else ''),
+                hoverlabel=dict(bgcolor='white', bordercolor=color_e, font=dict(size=11)),
+                xanchor='center', yanchor='bottom', yshift=2,
+            )
 
-        last_val = s_vals[-1] if s_vals else 0
-        val_fmt  = f"{int(last_val):,}" if last_val >= 1 else f"{last_val:.2f}"
-
-        fig = go.Figure(go.Bar(
-            x=s_lbls, y=s_vals,
-            marker_color=color, opacity=0.82,
-            text=[f"<b>{int(v):,}</b>" if v >= 100 else '' for v in s_vals],
-            textposition='outside',
-            textfont=dict(size=9, color='#2c3e50'),
-        ))
+    if chart_built:
         fig.update_layout(
-            plot_bgcolor='white', paper_bgcolor='white',
-            margin=dict(t=8, b=8, l=8, r=8),
-            xaxis=dict(showgrid=False, tickfont=dict(size=9, color='#7f8c8d')),
+            plot_bgcolor='white', paper_bgcolor='white', barmode='group',
+            margin=dict(t=32, b=8, l=8, r=8), height=240,
+            legend=dict(orientation='h', x=1, xanchor='right', y=1.08,
+                        font=dict(size=10, color=_C_DARK)),
+            xaxis=dict(showgrid=False, tickfont=dict(size=10, color='#7f8c8d')),
             yaxis=dict(showgrid=True, gridcolor='#f0f0f0', visible=False),
-            height=160,
         )
+        chart_col = dbc.Col(
+            dcc.Graph(id=f"ext-area-{location_uuid[:8]}", figure=fig,
+                      config=_CFG, style={'height': '240px'}),
+            xs=12,
+        )
+    else:
+        chart_col = None
 
-        gid = f"ext-geo-{location_uuid[:8]}-{fk}"
-        card = dbc.Card(dbc.CardBody([
+    # ── Feed de eventos ───────────────────────────────────────────────────────
+    pasados   = [(ek, fi, ff, meta_raw) for ek, fi, ff, meta_raw in ev_rows if fi <= str(hoy)]
+    proximos  = [(ek, fi, ff, meta_raw) for ek, fi, ff, meta_raw in ev_rows if fi >  str(hoy)]
+
+    def _ev_item(ekey, fi, meta_raw):
+        try:
+            meta = json.loads(meta_raw) if isinstance(meta_raw, str) else (meta_raw or {})
+        except Exception:
+            meta = {}
+        fi_dt   = pd.to_datetime(fi)
+        icono   = _EV_ICONS.get(ekey, '📍')
+        titulo  = meta.get('titulo', ekey)
+        desc    = meta.get('descripcion', '')
+        imp     = meta.get('impacto', '')
+        asist   = meta.get('asistentes', '')
+        cat_lbl = _EV_LABELS.get(ekey, ekey)
+        c_brd   = _EV_COLOR.get(ekey, '#adb5bd')
+        c_imp   = _IMP_COLOR.get(imp, '#adb5bd')
+        imp_lbl = imp.upper() if imp else ''
+
+        return html.Div([
             html.Div([
-                html.Span(label, className="fw-bold me-2",
-                          style={'fontSize': '0.82rem', 'color': _C_DARK}),
-                html.Span(f"{val_fmt} {unidad} esta semana",
-                          className="text-muted me-2", style={'fontSize': '0.72rem'}),
-                kpi_html,
+                html.Span(f"{icono} ", style={'fontSize': '1rem'}),
+                html.Span(titulo, className="fw-bold",
+                          style={'fontSize': '0.82rem', 'color': _C_DARK, 'lineHeight': '1.3'}),
+            ], className="mb-1"),
+            html.Div([
+                dbc.Badge(cat_lbl, color="light",
+                          style={'color': c_brd, 'border': f'1px solid {c_brd}',
+                                 'fontSize': '0.65rem', 'fontWeight': '600'},
+                          className="me-1 px-2 py-1"),
+                html.Span(fi_dt.strftime('%d %b %Y'), className="text-muted me-2",
+                          style={'fontSize': '0.72rem'}),
+                (html.Span(f"{asist} pers.", className="text-muted",
+                           style={'fontSize': '0.72rem'}) if asist else html.Span()),
             ], className="d-flex align-items-center flex-wrap gap-1 mb-1"),
-            dcc.Graph(id=gid, figure=fig, config=_CFG, style={'height': '160px'}),
-        ], className="px-3 py-2"),
-        className="border-0 shadow-sm rounded-4 h-100 bg-white")
-        cols.append(dbc.Col(card, xs=12, md=6, className="mb-3"))
+            html.P(desc, className="text-muted mb-0",
+                   style={'fontSize': '0.73rem', 'lineHeight': '1.4'}) if desc else html.Div(),
+            (dbc.Badge(f"IMPACTO {imp_lbl}", pill=True,
+                       style={'backgroundColor': c_imp, 'fontSize': '0.6rem'},
+                       className="mt-1") if imp_lbl else html.Div()),
+        ], className="pb-2 mb-2",
+           style={'borderBottom': '1px solid #f0f0f0',
+                  'borderLeft': f'3px solid {c_brd}',
+                  'paddingLeft': '10px'})
 
-    return cols
+    def _feed_col(title, icon_cls, items, limit=5):
+        if not items:
+            return None
+        cards = [_ev_item(ek, fi, meta) for ek, fi, ff, meta in reversed(items[-limit:])
+                 if True]
+        return dbc.Col([
+            html.P([html.I(className=f"{icon_cls} me-1"), title],
+                   className="fw-bold mb-2 text-uppercase",
+                   style={'fontSize': '0.68rem', 'color': _C_MUTED, 'letterSpacing': '0.6px'}),
+            html.Div(cards),
+        ], xs=12, md=6)
+
+    feed_past = _feed_col("Recientes", "fas fa-history", pasados, limit=4)
+    feed_next = _feed_col("Próximos",  "fas fa-calendar-alt", proximos, limit=4)
+    feed_cols = [c for c in [feed_past, feed_next] if c is not None]
+
+    # ── Ensamblar ─────────────────────────────────────────────────────────────
+    children = []
+    if chart_col:
+        children.append(dbc.Row([chart_col], className="mb-3"))
+    if feed_cols:
+        children.append(dbc.Row(feed_cols, className="g-3"))
+
+    if not children:
+        return None
+
+    return html.Div([
+        html.Div([
+            html.I(className="fas fa-broadcast-tower me-2", style={'color': _C_TEAL}),
+            html.Span("Señales del área", className="fw-bold text-dark",
+                      style={'fontSize': '0.88rem'}),
+        ], className="d-flex align-items-center border-bottom pb-2 mb-3 mt-1"),
+        html.Div(children),
+    ], className="mb-3")
 _C_GREEN   = "#28A745"
 _C_AMBER   = "#f39c12"
 _C_RED     = "#DC3545"
@@ -1171,8 +1286,6 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
             xs=12, lg=7, className="mb-3",
         ))
 
-    ext_cols = _ext_context_charts(location_uuid)
-
     sec_a_charts2 = []
     if fig_edad:
         sec_a_charts2.append(dbc.Col(
@@ -1189,14 +1302,7 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
             xs=12, lg=6, className="mb-3",
         ))
 
-    ext_section = html.Div([
-        html.Div([
-            html.I(className="fas fa-broadcast-tower me-2", style={'color': _C_TEAL}),
-            html.Span("Señales externas en el área", className="fw-bold text-dark",
-                      style={'fontSize': '0.88rem'}),
-        ], className="d-flex align-items-center border-bottom pb-2 mb-3 mt-1"),
-        dbc.Row(ext_cols, className="g-2"),
-    ], className="mb-3") if ext_cols else html.Div()
+    ext_section = _render_area_signals(location_uuid) or html.Div()
 
     seccion_a = html.Div([
         _section_header("fas fa-walking", "Alcance peatonal",
