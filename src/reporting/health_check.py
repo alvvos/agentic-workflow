@@ -24,6 +24,7 @@ import holidays
 from src.data_processing.data_radar import obtener_info_ubicacion, obtener_clima_historico
 from src.data_processing.geo_enrichment import get_geo_vals, get_geo_snapshot_date
 from src.reporting.geo_panel import generar_panel_geo_visual
+from src.core import data_master as _dm
 
 festivos_espana = holidays.ES(years=[2024, 2025, 2026])
 dias_semana_es  = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
@@ -40,12 +41,18 @@ _CFG_GRAPH = {"displayModeBar": False, "responsive": True}
 
 # ── Zone helpers ──────────────────────────────────────────────────────────────
 
+_PALETA_PM = [
+    '#0052CC', '#E67E22', '#27AE60', '#8E44AD', '#E74C3C',
+    '#17A2B8', '#F39C12', '#2ECC71', '#9B59B6', '#C0392B',
+    '#1ABC9C', '#D35400', '#2980B9', '#16A085', '#7D3C98',
+]
+
 def _color_zona(zona):
     zl = str(zona).lower()
-    if 'caja'    in zl:                       return "#8e44ad"
-    if 'tienda'  in zl:                       return "#e67e22"
-    if 'calle'   in zl or 'exterior' in zl:   return "#2980b9"
-    return "#7f8c8d"
+    if 'caja'    in zl:                     return "#8e44ad"
+    if 'tienda'  in zl:                     return "#e67e22"
+    if 'calle'   in zl or 'exterior' in zl: return "#2980b9"
+    return _PALETA_PM[hash(zona) % len(_PALETA_PM)]
 
 
 def _zona_meta(zona):
@@ -268,11 +275,12 @@ def _fig_finde_vs_laborable(df_todas_zonas, fecha_max, dias=28):
     return fig
 
 
-def _fig_dwell_zonas(zonas_data):
-    """Tiempo medio de permanencia por zona."""
+def _fig_dwell_zonas(zonas_data, child_zones=None):
+    """Tiempo medio de permanencia por zona — solo zonas padre."""
+    _cz = child_zones or set()
     data = [
         (z['zona'], z['r']['estancia'], _color_zona(z['zona']))
-        for z in zonas_data if z['r']['estancia'] > 0
+        for z in zonas_data if z['r']['estancia'] > 0 and z['zona'] not in _cz
     ]
     if not data:
         return None
@@ -573,7 +581,8 @@ def _render_narrativa(items):
     )
 
 
-def _render_zona_card(zona, r, a, d, dias_28, uid, periodo_label="semana"):
+def _render_zona_card(zona, r, a, d, dias_28, uid, periodo_label="semana",
+                      child_names=None, has_children=False):
     """Tarjeta de zona: % delta en grande (hero) + visitantes absolutos + sparkline."""
     color         = _color_zona(zona)
     badge_lbl, _, tooltip_role = _zona_meta(zona)
@@ -650,10 +659,119 @@ def _render_zona_card(zona, r, a, d, dias_28, uid, periodo_label="semana"):
                 "Sin datos de tendencia",
                 className="text-muted small text-center mb-0 py-2",
             ),
+            # Child zone chips — shown only on parent zone cards
+            *([html.Div([
+                html.Span(
+                    [html.I(className="fas fa-sitemap me-1"), "Subzonas: "],
+                    style={"fontSize": "0.63rem", "color": _C_MUTED},
+                ),
+                *[dbc.Badge(
+                    cn, color="light", text_color="secondary",
+                    className="me-1 border",
+                    style={"fontSize": "0.59rem"},
+                ) for cn in child_names],
+            ], className="mt-2 pt-2 border-top")] if child_names else []),
         ], className="p-3"),
         className="border-0 shadow-sm rounded-4 h-100",
-        style={"borderTop": f"3px solid {color}", "overflow": "visible"},
+        style={
+            "borderTop": f"3px solid {color}",
+            "overflow": "visible",
+            **({"background": "rgba(0,82,204,0.04)"} if has_children else {}),
+        },
     )
+
+
+def _parse_hourly_pm(val):
+    if val is None or (isinstance(val, float) and np.isnan(val)):
+        return None
+    try:
+        parsed = json.loads(str(val))
+        if isinstance(parsed, list) and len(parsed) == 24:
+            return [float(v) for v in parsed]
+    except Exception:
+        pass
+    return None
+
+
+def _fig_hora_pico(df_todas_zonas):
+    """Distribución horaria promedio — todas las zonas y días disponibles."""
+    if 'hourly_visits' not in df_todas_zonas.columns:
+        return None
+    acum = [0.0] * 24
+    n = 0
+    for val in df_todas_zonas['hourly_visits']:
+        parsed = _parse_hourly_pm(val)
+        if parsed:
+            for h, v in enumerate(parsed):
+                acum[h] += v
+            n += 1
+    if n == 0 or sum(acum) == 0:
+        return None
+    avg = [v / n for v in acum]
+    max_v = max(avg) or 1
+    peak_h = int(np.argmax(avg))
+    colors = [f"rgba(0,82,204,{0.18 + 0.72 * v / max_v:.2f})" for v in avg]
+    texts  = [f"<b>{int(v)}</b>" if i == peak_h else "" for i, v in enumerate(avg)]
+    fig = go.Figure(go.Bar(
+        x=[f"{h:02d}h" for h in range(24)],
+        y=avg,
+        marker=dict(color=colors, line=dict(width=0)),
+        text=texts, textposition='outside',
+        textfont=dict(size=10, color=_C_DARK),
+        hovertemplate='%{x}: <b>%{y:.0f}</b> visitas/hora (media)<extra></extra>',
+    ))
+    fig.update_layout(
+        height=180, margin=dict(t=20, b=8, l=8, r=8),
+        xaxis=dict(showgrid=False, tickfont=dict(size=9, color=_C_DARK),
+                   fixedrange=True, tickangle=0),
+        yaxis=dict(visible=False, fixedrange=True, range=[0, max_v * 1.35]),
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+        showlegend=False, bargap=0.12,
+    )
+    return fig
+
+
+def _fig_nuevos_ratio(df_todas_zonas, fecha_max, dias=7):
+    """% de visitantes nuevos sobre el total — evolución diaria."""
+    if 'new_visitors' not in df_todas_zonas.columns or 'unique_visitors' not in df_todas_zonas.columns:
+        return None
+    fmin = fecha_max - timedelta(days=dias - 1)
+    df = df_todas_zonas[
+        (df_todas_zonas['fecha_dt'] >= fmin) &
+        (df_todas_zonas['fecha_dt'] <= fecha_max)
+    ].copy()
+    if df.empty:
+        return None
+    por_dia = df.groupby('fecha_dt').agg(
+        nuevos=('new_visitors',    'sum'),
+        total =('unique_visitors', 'sum'),
+    ).reset_index()
+    por_dia = por_dia[por_dia['total'] > 0]
+    if por_dia.empty:
+        return None
+    por_dia['pct'] = (por_dia['nuevos'] / por_dia['total'] * 100).clip(0, 100)
+    media = por_dia['pct'].mean()
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=por_dia['fecha_dt'], y=por_dia['pct'],
+        mode='lines+markers',
+        fill='tozeroy', fillcolor='rgba(0,82,204,0.07)',
+        line=dict(color=_C_PRIMARY, width=2),
+        marker=dict(size=5),
+        hovertemplate='%{x}: <b>%{y:.0f}%</b> nuevos<extra></extra>',
+    ))
+    fig.add_hline(y=media, line_dash='dot', line_color=_C_MUTED,
+                  annotation_text=f"Media {media:.0f}%",
+                  annotation_position="top right",
+                  annotation_font=dict(size=10, color=_C_MUTED))
+    fig.update_layout(
+        height=180, margin=dict(t=20, b=8, l=8, r=8),
+        xaxis=dict(showgrid=False, tickfont=dict(size=10, color=_C_DARK), fixedrange=True),
+        yaxis=dict(visible=False, fixedrange=True, range=[0, 115]),
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+        showlegend=False,
+    )
+    return fig
 
 
 def _fig_semanas_mes(df, fecha_max):
@@ -702,10 +820,11 @@ def _fig_semanas_mes(df, fecha_max):
     return fig
 
 
-def _render_pm_questions(df, zonas_data, fecha_max, uid, ventana="semana"):
+def _render_pm_questions(df, zonas_data, fecha_max, uid, ventana="semana", child_zones=None):
     """
     Responde gráficamente las preguntas habituales de un PM sobre el tráfico.
     Cada carta tiene una pregunta en lenguaje natural + gráfico directo.
+    Los gráficos segmentados por zona usan solo zonas padre.
     """
     def _q_card(pregunta, subtitulo, fig, gid, height):
         if fig is None:
@@ -726,6 +845,10 @@ def _render_pm_questions(df, zonas_data, fecha_max, uid, ventana="semana"):
             ], className="px-4 py-3"),
             className="border-0 shadow-sm rounded-4 h-100 bg-white",
         )
+
+    _cz = child_zones or set()
+    zonas_top = [z for z in zonas_data if z['zona'] not in _cz] or zonas_data
+    df_top = df[~df['Zona'].isin(_cz)].copy() if _cz else df
 
     dias_v = 28 if ventana == "mes" else 7
     _periodo       = "último mes (28 días)"    if ventana == "mes" else "última semana (7 días)"
@@ -753,6 +876,13 @@ def _render_pm_questions(df, zonas_data, fecha_max, uid, ventana="semana"):
             "160px",
         ),
         (
+            _fig_hora_pico(df_top),
+            f"q-hora-{uid}",
+            "¿A qué hora llegan?",
+            f"Distribución horaria promedio · zonas principales · tono más oscuro = hora pico",
+            "180px",
+        ),
+        (
             _fig_finde_vs_laborable(df, fecha_max, dias=dias_v),
             f"q-finde-{uid}",
             "¿Rinde mejor el fin de semana o entre semana?",
@@ -760,14 +890,21 @@ def _render_pm_questions(df, zonas_data, fecha_max, uid, ventana="semana"):
             "180px",
         ),
         (
-            _fig_dwell_zonas(zonas_data),
-            f"q-dwell-{uid}",
-            "¿Cuánto tiempo se quedan?",
-            f"Tiempo medio de permanencia por zona · {_periodo_corto}",
+            _fig_nuevos_ratio(df_top, fecha_max, dias=dias_v),
+            f"q-nuevos-{uid}",
+            "¿Cuántos visitantes son nuevos?",
+            f"% de visitantes nuevos sobre el total · {_periodo} · línea punteada = media del período",
             "180px",
         ),
         (
-            _fig_embudo_conversion(zonas_data),
+            _fig_dwell_zonas(zonas_top, child_zones=_cz),
+            f"q-dwell-{uid}",
+            "¿Cuánto tiempo se quedan?",
+            f"Tiempo medio de permanencia por zona principal · {_periodo_corto}",
+            "180px",
+        ),
+        (
+            _fig_embudo_conversion(zonas_top),
             f"q-embudo-{uid}",
             "¿Cuántos visitantes convierten?",
             f"Visitantes únicos por etapa · {_periodo_corto} · % respecto al paso anterior",
@@ -832,6 +969,15 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
     dias_v       = 28 if ventana == "mes" else 7
     periodo_label = "mes" if ventana == "mes" else "semana"
 
+    # ── Jerarquía de zonas ───────────────────────────────────────────────
+    zona_children_map: dict[str, list[str]] = {}
+    child_zone_names: set[str] = set()
+    for parent_name, child_dicts in _dm.mapa_hijos_por_zona.items():
+        names = [z['value'] for z in child_dicts]
+        if names:
+            zona_children_map[parent_name] = names
+            child_zone_names.update(names)
+
     # ── Datos por zona ───────────────────────────────────────────────────
     puntos  = 0
     zonas_data = []
@@ -863,6 +1009,9 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
             r28=r28, a28=a28, d28=d28,
             dias_28=dias_28,
         ))
+
+    # Subset used for narrative and zone-segmented charts (parent zones only)
+    zonas_data_top = [z for z in zonas_data if z['zona'] not in child_zone_names] or zonas_data
 
     # ── Health status ────────────────────────────────────────────────────
     if   puntos >= 1:  health_label, badge_color = "Tendencia positiva", "success"
@@ -913,7 +1062,7 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
     fecha_captura = get_geo_snapshot_date(location_uuid) if location_uuid else None
 
     # ── 2. Narrativa ─────────────────────────────────────────────────────
-    items_narrativa = _narrativa(zonas_data, fecha_max, clima, ventana=ventana,
+    items_narrativa = _narrativa(zonas_data_top, fecha_max, clima, ventana=ventana,
                                  geo_vals=geo_vals_loc)
 
     _ventana_label = "este mes" if ventana == "mes" else "esta semana"
@@ -945,8 +1094,11 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
 
     zona_cols = [
         dbc.Col(
-            _render_zona_card(z['zona'], z['r'], z['a'], z['d'],
-                              z['dias_28'], uid, periodo_label),
+            _render_zona_card(
+                z['zona'], z['r'], z['a'], z['d'], z['dias_28'], uid, periodo_label,
+                child_names=zona_children_map.get(z['zona'], []),
+                has_children=z['zona'] in zona_children_map,
+            ),
             xs=12, sm=6, xl=3, className="mb-3",
         )
         for z in sorted(zonas_data, key=_orden)
@@ -970,7 +1122,10 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
     ], className="mb-4")
 
     # ── 4. Preguntas PM ──────────────────────────────────────────────────
-    dias_section = _render_pm_questions(df, zonas_data, fecha_max, uid, ventana=ventana)
+    dias_section = _render_pm_questions(
+        df, zonas_data, fecha_max, uid,
+        ventana=ventana, child_zones=child_zone_names,
+    )
 
     # ── 5. Geo panel ─────────────────────────────────────────────────────
     geo = (

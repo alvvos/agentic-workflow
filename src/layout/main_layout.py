@@ -41,9 +41,9 @@ def serve_layout():
                 dcc.Tabs(id="tabs-panel", value='tab-ejecutivo', className="custom-tabs", children=[
                     build_tab_pm(),
                     build_tab_bi(),
-                    build_tab_reportes(),
                     *([] if role != "admin" else [build_tab_ml()]),
                     *([] if role != "admin" else [build_tab_admin()]),
+                    *([] if role != "admin" else [build_tab_reportes()]),
                 ])
             ])
         ], className="border-0 shadow-sm rounded-4")
