@@ -6,6 +6,7 @@ import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 
 from src.core.config import app
+from src.core import data_master
 from src.core.data_master import mapa_tiendas, mapa_zonas
 from src.reporting.health_check import generar_panel_pm
 from src.data_processing.data_radar import generar_tabla_auditoria
@@ -74,7 +75,12 @@ def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, pm_ventana
         visor_children.append(html.Span(comparativa_txt, className="badge bg-primary text-white shadow-sm fs-6"))
     visor = html.Div(visor_children)
 
-    bi_content = generar_panel_bi_completo(df_bi, df_bi_hist, comp)
+    child_zone_names = {
+        z['label']
+        for children in data_master.mapa_hijos_por_zona.values()
+        for z in children
+    }
+    bi_content = generar_panel_bi_completo(df_bi, df_bi_hist, comp, child_zones=child_zone_names)
     audit_content = generar_tabla_auditoria(df_actual) if not df_actual.empty else dbc.Alert("No hay datos para el radar en estas fechas.", color="info", className="rounded-4")
 
     return bi_content, visor, audit_content, informe_ejecutivo

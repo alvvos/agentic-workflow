@@ -58,12 +58,14 @@ def obtener_titulo_intuitivo(col):
 def preparar_df_ratio(df, z_out, z_in):
     if df.empty: return pd.DataFrame()
     df_out = df[df['Zona'] == z_out].groupby('fecha_dia')['unique_visitors'].sum().reset_index()
-    df_in = df[df['Zona'] == z_in].groupby('fecha_dia')['unique_visitors'].sum().reset_index()
+    df_in  = df[df['Zona'] == z_in].groupby('fecha_dia')['unique_visitors'].sum().reset_index()
     if df_out.empty or df_in.empty: return pd.DataFrame()
-    
+
     m = pd.merge(df_out, df_in, on='fecha_dia', suffixes=('_out', '_in'))
-    m['ratio_atraccion'] = (m['unique_visitors_in'] / m['unique_visitors_out'] * 100).fillna(0)
-    m['Zona'] = z_in 
+    # inf cuando el denominador es 0; clip a [0,100] porque es una tasa de conversión
+    ratio = (m['unique_visitors_in'] / m['unique_visitors_out'] * 100)
+    m['ratio_atraccion'] = ratio.replace([np.inf, -np.inf], np.nan).fillna(0).clip(0, 100)
+    m['Zona'] = z_in
     return m
 
 
@@ -348,7 +350,7 @@ def crear_tarjeta_kpi_global(titulo, val_actual, val_hist, es_tiempo=False, es_r
         html.Div(delta_html, className="mt-1", style={"fontSize": "0.75rem"})
     ]), className="border-0 shadow-sm rounded-4 text-center h-100")
 
-def generar_panel_bi_completo(df_actual, df_hist, comparativa, fechas_filtro=None):
+def generar_panel_bi_completo(df_actual, df_hist, comparativa, fechas_filtro=None, child_zones: set | None = None):
     if df_actual.empty: return dbc.Alert("No hay datos disponibles en el rango seleccionado.", color="warning", className="rounded-4")
 
     offset = {'wow': 7, 'mom': 28, 'yoy': 365}.get(comparativa, 0)
@@ -363,16 +365,21 @@ def generar_panel_bi_completo(df_actual, df_hist, comparativa, fechas_filtro=Non
     if not df_hist.empty: df_hist['fecha_dia'] = df_hist['fecha'].dt.normalize()
     multi_mes = df_actual['fecha_dia'].dt.to_period('M').nunique() > 1
 
+    _child_zones = child_zones or set()
+
     paneles = []
     for ubi in df_actual['Ubicación'].unique():
         df_u = df_actual[df_actual['Ubicación'] == ubi].copy()
         df_h = df_hist[df_hist['Ubicación'] == ubi].copy() if not df_hist.empty else pd.DataFrame()
-        
+
         zonas_presentes = ordenar_zonas(df_u['Zona'].unique())
+        # KPI cards, funnel y heatmaps: solo zonas raíz (sin padre).
+        # Si no hay jerarquía (todas planas) se usan todas.
+        zonas_top = [z for z in zonas_presentes if z not in _child_zones] or zonas_presentes
         mapa_colores = obtener_mapa_colores(zonas_presentes)
         cintas_kpis_zonas = []
-        
-        for zona in zonas_presentes:
+
+        for zona in zonas_top:
             df_z = df_u[df_u['Zona'] == zona]
             df_zh = df_h[df_h['Zona'] == zona] if not df_h.empty else pd.DataFrame()
 
@@ -408,11 +415,11 @@ def generar_panel_bi_completo(df_actual, df_hist, comparativa, fechas_filtro=Non
             
         # --- SECCIÓN REACTIVA DE FUNNEL (Ratio de Atracción) ---
         seccion_funnel = []
-        if len(zonas_presentes) > 1:
+        if len(zonas_top) > 1:
             kpis_funnel = []
             graficos_funnel = []
-            for i in range(len(zonas_presentes) - 1):
-                z_out, z_in = zonas_presentes[i], zonas_presentes[i+1]
+            for i in range(len(zonas_top) - 1):
+                z_out, z_in = zonas_top[i], zonas_top[i+1]
                 df_r_act = preparar_df_ratio(df_u, z_out, z_in)
                 df_r_hist = preparar_df_ratio(df_h, z_out, z_in) if not df_h.empty else pd.DataFrame()
                 
@@ -476,7 +483,7 @@ def generar_panel_bi_completo(df_actual, df_hist, comparativa, fechas_filtro=Non
             rows.append(dbc.Row([col1, col2]))
 
         heatmap_cols = []
-        for zona_hm in zonas_presentes:
+        for zona_hm in zonas_top:
             df_zona_hm = df_u[df_u['Zona'] == zona_hm]
             fig_hm = crear_mapa_calor_horario(df_zona_hm, zona_hm)
             if fig_hm is not None:
