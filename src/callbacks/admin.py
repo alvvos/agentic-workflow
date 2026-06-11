@@ -435,8 +435,9 @@ def refresh_users_table(_, active_tab):
     Output("admin-locs-container", "children"),
     Input("admin-sub-tabs", "active_tab"),
     Input("admin-crud-signal", "data"),
+    Input("data-version", "data"),
 )
-def refresh_locs_tree(active_tab, _):
+def refresh_locs_tree(active_tab, _signal, _version):
     if active_tab != "admin-tab-locs":
         return no_update
     orgs = _load_orgs()
