@@ -254,13 +254,19 @@ def _candidatos_query(nombre, address, city, post_code, country):
 
 
 def _geocodificar_una(nombre, address, city, post_code, country, timeout=6):
-    for i, query in enumerate(_candidatos_query(nombre, address, city, post_code, country)):
+    # country debe ser código ISO-2 ("ES", "MX"…); se pasa como countrycodes
+    # para que Nominatim lo use como filtro duro, no como texto libre.
+    cc = country.upper() if country and len(country) == 2 else None
+    for i, query in enumerate(_candidatos_query(nombre, address, city, post_code, '')):
         if i > 0:
             time.sleep(1)
         try:
+            params = {'q': query, 'format': 'json', 'limit': 1}
+            if cc:
+                params['countrycodes'] = cc
             r = requests.get(
                 _NOMINATIM_URL,
-                params={'q': query, 'format': 'json', 'limit': 1},
+                params=params,
                 headers={'User-Agent': _NOMINATIM_UA},
                 timeout=timeout,
             )
