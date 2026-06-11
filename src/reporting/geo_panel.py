@@ -23,6 +23,47 @@ _C_PRIMARY = "#0052CC"
 _C_DARK    = "#2c3e50"
 _C_MUTED   = "#6c757d"
 _C_GRID    = "#f2f2f2"
+
+# ── Contexto espacial mock por ubicación ──────────────────────────────────────
+# Cada entrada: {lat, lon, label, categoria, valor_relativo (0-1 para tamaño)}
+# categoria: "metro" | "tourist_poi" | "event_venue"
+_SPATIAL_CONTEXT: dict[str, list[dict]] = {
+    # Showroom — Gran Vía 48, Madrid
+    "faf7d203-342e-44c6-96e3-1ed64d8252c3": [
+        # Estaciones de metro (footfall relativo estimado CRTM)
+        {"lat": 40.4193, "lon": -3.7014, "label": "Metro Gran Vía (L1/L5)",
+         "categoria": "metro", "valor": 1.0,   "detalle": "~12 400 val./día"},
+        {"lat": 40.4207, "lon": -3.7077, "label": "Metro Callao (L3/L5)",
+         "categoria": "metro", "valor": 0.80,  "detalle": "~9 900 val./día"},
+        {"lat": 40.4168, "lon": -3.7026, "label": "Metro Sol (L1/L2/L3)",
+         "categoria": "metro", "valor": 0.95,  "detalle": "~11 800 val./día (nodo)"},
+        {"lat": 40.4194, "lon": -3.7110, "label": "Metro Santo Domingo (L2)",
+         "categoria": "metro", "valor": 0.40,  "detalle": "~5 000 val./día"},
+        # POIs turísticos que generan afluencia en isocrona
+        {"lat": 40.4155, "lon": -3.7074, "label": "Plaza Mayor",
+         "categoria": "tourist_poi", "valor": 0.9, "detalle": "~18 000 visitas/día"},
+        {"lat": 40.4168, "lon": -3.7026, "label": "Puerta del Sol",
+         "categoria": "tourist_poi", "valor": 1.0, "detalle": "~25 000 turistas/día"},
+        {"lat": 40.4152, "lon": -3.7088, "label": "Mercado San Miguel",
+         "categoria": "tourist_poi", "valor": 0.6, "detalle": "~7 000 visitas/día"},
+        # Espacios de eventos que impulsan picos de tráfico
+        {"lat": 40.4231, "lon": -3.7086, "label": "Teatro Real",
+         "categoria": "event_venue", "valor": 0.8, "detalle": "Ópera · hasta 1 700 asientos"},
+        {"lat": 40.4220, "lon": -3.7059, "label": "Cine Callao",
+         "categoria": "event_venue", "valor": 0.5, "detalle": "Estrenos · events"},
+    ],
+}
+
+_SPATIAL_COLORS = {
+    "metro":       ("#1abc9c", 16),
+    "tourist_poi": ("#f39c12", 14),
+    "event_venue": ("#9b59b6", 13),
+}
+_SPATIAL_LABELS = {
+    "metro":       "Metro",
+    "tourist_poi": "Polo turístico",
+    "event_venue": "Sala de eventos",
+}
 _C_GREEN   = "#28A745"
 _C_AMBER   = "#f39c12"
 _C_RED     = "#DC3545"
@@ -739,6 +780,25 @@ def _fig_mapa(vals, lat, lon, uuid):
             customdata=[c[2] for c in comps],
             hovertemplate="<b>Competidor</b><br>a ~%{customdata:,.0f} m<extra></extra>",
         ))
+
+    # Contexto espacial externo (mock o real) — agrupado por categoría
+    spatial_pois = _SPATIAL_CONTEXT.get(uuid, [])
+    if spatial_pois:
+        from itertools import groupby
+        from operator import itemgetter
+        for cat, items in groupby(sorted(spatial_pois, key=itemgetter("categoria")), key=itemgetter("categoria")):
+            items = list(items)
+            color, base_size = _SPATIAL_COLORS.get(cat, ("#95a5a6", 12))
+            lats   = [p["lat"] for p in items]
+            lons   = [p["lon"] for p in items]
+            sizes  = [max(8, int(base_size * p.get("valor", 0.5))) for p in items]
+            tips   = [f"<b>{p['label']}</b><br>{p.get('detalle','')}<extra></extra>" for p in items]
+            fig.add_trace(go.Scattermapbox(
+                lat=lats, lon=lons, mode="markers",
+                marker=dict(size=sizes, color=color, opacity=0.88),
+                name=_SPATIAL_LABELS.get(cat, cat),
+                hovertemplate=tips,
+            ))
 
     store_tip = "<b>Tu ubicación</b>"
     if pob5:
