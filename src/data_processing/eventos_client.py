@@ -14,8 +14,15 @@ from typing import Optional
 
 import pandas as pd
 
-# EVENTOS_FEATURE_COLS se define en _common para evitar dependencia circular.
-from src.data_ingestion.prefetch._common import EVENTOS_FEATURE_COLS  # noqa: F401
+EVENTOS_FEATURE_COLS: list[str] = [
+    'ev_vacaciones_escolares',
+    'ev_festivo_regional',
+    'ev_rank_deportivo',
+    'ev_rank_concierto',
+    'ev_rank_festival',
+    'ev_rank_municipal',
+    'ev_rank_total',
+]
 
 _ZERO_ROW: dict = {col: 0 for col in EVENTOS_FEATURE_COLS}
 
