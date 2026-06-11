@@ -338,7 +338,7 @@ def poblar_region_code(solo_vacias=True):
                 print(f'  ✓  {nombre:<40} {state} → {code}')
                 ok += 1
             else:
-                print(f'  ?  {nombre:<40} state={state!r!s} (sin mapeo — edita manualmente)')
+                print(f'  ?  {nombre:<40} state={state!r} (sin mapeo — edita manualmente)')
                 fail += 1
         except Exception as e:
             print(f'  ✗  {nombre:<40} {e}')
