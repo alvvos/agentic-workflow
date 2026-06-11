@@ -8,6 +8,7 @@ Secciones (todas auto-generadas desde geo_features.json):
   C. Comportamiento digital — canal online, presión omnicanal
   D. Entorno competitivo — transporte, competidores, movilidad (Phase 2)
 """
+import base64
 import json
 import math
 import random
@@ -24,33 +25,64 @@ _C_DARK    = "#2c3e50"
 _C_MUTED   = "#6c757d"
 _C_GRID    = "#f2f2f2"
 
+# Metro de Madrid — logo simplificado (rombo rojo con M blanca)
+_METRO_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+    b'<polygon points="50,2 98,50 50,98 2,50" fill="#DA0000"/>'
+    b'<text x="50" y="72" text-anchor="middle" fill="white" '
+    b'font-size="52" font-weight="900" font-family="Arial Black,Arial">M</text>'
+    b'</svg>'
+)
+_METRO_LOGO_SRC = "data:image/svg+xml;base64," + base64.b64encode(_METRO_SVG).decode()
+
 # ── Contexto espacial mock por ubicación ──────────────────────────────────────
 # Cada entrada: {lat, lon, label, categoria, valor_relativo (0-1 para tamaño)}
 # categoria: "metro" | "tourist_poi" | "event_venue"
 _SPATIAL_CONTEXT: dict[str, list[dict]] = {
     # Showroom — Gran Vía 48, Madrid
+    # Footfall CRTM 2025: Sol ~60 k/día (1er puesto), Gran Vía ~32 k, Callao ~24 k
     "faf7d203-342e-44c6-96e3-1ed64d8252c3": [
-        # Estaciones de metro (footfall relativo estimado CRTM)
-        {"lat": 40.4193, "lon": -3.7014, "label": "Metro Gran Vía (L1/L5)",
-         "categoria": "metro", "valor": 1.0,   "detalle": "~12 400 val./día"},
-        {"lat": 40.4207, "lon": -3.7077, "label": "Metro Callao (L3/L5)",
-         "categoria": "metro", "valor": 0.80,  "detalle": "~9 900 val./día"},
-        {"lat": 40.4168, "lon": -3.7026, "label": "Metro Sol (L1/L2/L3)",
-         "categoria": "metro", "valor": 0.95,  "detalle": "~11 800 val./día (nodo)"},
-        {"lat": 40.4194, "lon": -3.7110, "label": "Metro Santo Domingo (L2)",
-         "categoria": "metro", "valor": 0.40,  "detalle": "~5 000 val./día"},
-        # POIs turísticos que generan afluencia en isocrona
-        {"lat": 40.4155, "lon": -3.7074, "label": "Plaza Mayor",
-         "categoria": "tourist_poi", "valor": 0.9, "detalle": "~18 000 visitas/día"},
-        {"lat": 40.4168, "lon": -3.7026, "label": "Puerta del Sol",
-         "categoria": "tourist_poi", "valor": 1.0, "detalle": "~25 000 turistas/día"},
-        {"lat": 40.4152, "lon": -3.7088, "label": "Mercado San Miguel",
-         "categoria": "tourist_poi", "valor": 0.6, "detalle": "~7 000 visitas/día"},
-        # Espacios de eventos que impulsan picos de tráfico
-        {"lat": 40.4231, "lon": -3.7086, "label": "Teatro Real",
-         "categoria": "event_venue", "valor": 0.8, "detalle": "Ópera · hasta 1 700 asientos"},
-        {"lat": 40.4220, "lon": -3.7059, "label": "Cine Callao",
-         "categoria": "event_venue", "valor": 0.5, "detalle": "Estrenos · events"},
+        # Estaciones de metro en la isócrona
+        {"lat": 40.4193, "lon": -3.7014,
+         "label": "Gran Vía · Línea 1 (azul) + Línea 5 (verde)",
+         "categoria": "metro", "valor": 1.0,
+         "detalle": "~32 000 validaciones/día · 3 min a pie"},
+        {"lat": 40.4207, "lon": -3.7077,
+         "label": "Callao · Línea 3 (amarilla) + Línea 5 (verde)",
+         "categoria": "metro", "valor": 0.75,
+         "detalle": "~24 000 validaciones/día · 5 min a pie"},
+        {"lat": 40.4168, "lon": -3.7026,
+         "label": "Sol · Línea 1 + Línea 2 + Línea 3 (nodo central)",
+         "categoria": "metro", "valor": 0.95,
+         "detalle": "~60 000 validaciones/día · 1er puesto red · 8 min a pie"},
+        {"lat": 40.4194, "lon": -3.7110,
+         "label": "Santo Domingo · Línea 2 (roja)",
+         "categoria": "metro", "valor": 0.35,
+         "detalle": "~8 000 validaciones/día · 7 min a pie"},
+        # Polos turísticos generadores de afluencia (efecto sonar)
+        {"lat": 40.4155, "lon": -3.7074,
+         "label": "Plaza Mayor",
+         "categoria": "tourist_poi", "valor": 0.9,
+         "detalle": "~18 000 visitas/día · epicentro turístico",
+         "sonar": True},
+        {"lat": 40.4168, "lon": -3.7038,
+         "label": "Puerta del Sol",
+         "categoria": "tourist_poi", "valor": 1.0,
+         "detalle": "~25 000 turistas/día · km 0 de España",
+         "sonar": True},
+        {"lat": 40.4152, "lon": -3.7088,
+         "label": "Mercado de San Miguel",
+         "categoria": "tourist_poi", "valor": 0.55,
+         "detalle": "~7 000 visitas/día · mercado gastronómico"},
+        # Espacios de eventos que generan picos de tráfico
+        {"lat": 40.4231, "lon": -3.7086,
+         "label": "Teatro Real",
+         "categoria": "event_venue", "valor": 0.8,
+         "detalle": "Ópera y conciertos · hasta 1 746 asientos"},
+        {"lat": 40.4217, "lon": -3.7059,
+         "label": "Cines Callao (100 años · 1926–2026)",
+         "categoria": "event_venue", "valor": 0.6,
+         "detalle": "Estrenos y premieres · Plaza de Callao"},
     ],
 }
 
@@ -71,26 +103,44 @@ _UNIVERSAL_EXT_KEYS = frozenset({
     'ev_rank_festival', 'ev_rank_municipal', 'ev_rank_total',
     'ev_vacaciones_escolares', 'llueve', 'temp_max', 'temp_min',
 })
+# Colores oficiales líneas Metro de Madrid usados en los gráficos:
+#   L1 azul (#00539B) · L3 amarillo (#F0C832) · L5 verde (#3DAA53)
 _EXT_SERIES_META = {
-    'afluencia_metro_gran_via': ('Metro Gran Vía',  'mean', '#1abc9c'),
-    'n_turistas_isocrona':      ('Turistas área',   'mean', '#f39c12'),
-    'n_pasajeros_crucero_dia':  ('Pasajeros crucero','sum', '#1abc9c'),
+    'afluencia_metro_gran_via': ('Gran Vía · L1/L5',   'mean', '#00539B'),
+    'afluencia_metro_callao':   ('Callao · L3/L5',     'mean', '#c8a400'),
+    'n_turistas_isocrona':      ('Turistas isócrona',  'mean', '#e67e22'),
+    'n_pasajeros_crucero_dia':  ('Pasajeros crucero',  'sum',  '#1abc9c'),
 }
-_EV_KEYS = {'estreno_callao', 'manifestacion_gran_via', 'concierto_wizink', 'festival_madrid', 'escala_crucero'}
-_EV_ICONS  = {'estreno_callao': '🎬', 'manifestacion_gran_via': '📢',
-              'concierto_wizink': '🎵', 'festival_madrid': '🏙️', 'escala_crucero': '🚢'}
-_EV_LABELS = {'estreno_callao': 'Estreno', 'manifestacion_gran_via': 'Marcha',
-              'concierto_wizink': 'Concierto', 'festival_madrid': 'Evento ciudad', 'escala_crucero': 'Crucero'}
-_EV_COLOR  = {'estreno_callao': '#f39c12', 'manifestacion_gran_via': '#e74c3c',
-              'concierto_wizink': '#9b59b6', 'festival_madrid': '#3498db', 'escala_crucero': '#1abc9c'}
-_IMP_COLOR = {'alto': '#e74c3c', 'medio': '#f39c12', 'bajo': '#27ae60'}
+_EV_KEYS   = {'estreno_callao', 'manifestacion_gran_via', 'concierto_wizink', 'festival_madrid', 'escala_crucero'}
+_EV_ICONS  = {
+    'estreno_callao':         'fas fa-film',
+    'manifestacion_gran_via': 'fas fa-bullhorn',
+    'concierto_wizink':       'fas fa-music',
+    'festival_madrid':        'fas fa-city',
+    'escala_crucero':         'fas fa-ship',
+}
+_EV_LABELS = {
+    'estreno_callao':         'Estreno',
+    'manifestacion_gran_via': 'Marcha',
+    'concierto_wizink':       'Concierto',
+    'festival_madrid':        'Evento ciudad',
+    'escala_crucero':         'Crucero',
+}
+_EV_COLOR  = {
+    'estreno_callao':         '#e67e22',
+    'manifestacion_gran_via': '#c0392b',
+    'concierto_wizink':       '#8e44ad',
+    'festival_madrid':        '#2980b9',
+    'escala_crucero':         '#16a085',
+}
+_IMP_COLOR = {'alto': '#c0392b', 'medio': '#d68910', 'bajo': '#27ae60'}
 _MESES_ES_GEO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
 
-def _render_area_signals(location_uuid: str) -> html.Div | None:
+def _render_area_signals(location_uuid: str):
     """
-    Sección 'Señales del área': gráfico mensual de series externas +
-    feed de eventos recientes y próximos estilo noticia.
+    Sección 'Señales del área': gráfico metro por estación + gráfico turistas +
+    feed de eventos recientes y próximos (sin emojis, iconos FA).
     Devuelve None si no hay datos.
     """
     from datetime import date, timedelta
@@ -99,8 +149,6 @@ def _render_area_signals(location_uuid: str) -> html.Div | None:
     try:
         from src.db.store import get_conn
         conn = get_conn()
-
-        # Series temporales location-specific (últimos 6 meses)
         ts_rows = conn.execute(
             """SELECT feature_key, fecha::text, value
                FROM   store_features_ext
@@ -108,8 +156,6 @@ def _render_area_signals(location_uuid: str) -> html.Div | None:
                ORDER  BY feature_key, fecha""",
             [location_uuid, str(hoy - timedelta(days=182))],
         ).fetchall()
-
-        # Eventos (ventana: 90 días atrás hasta 90 días adelante)
         ev_rows = conn.execute(
             """SELECT evento_key, fecha_inicio::text, fecha_fin::text, metadata
                FROM   store_calendario_org
@@ -123,84 +169,138 @@ def _render_area_signals(location_uuid: str) -> html.Div | None:
     except Exception:
         return None
 
-    # Filtrar keys universales
     ts_rows = [r for r in ts_rows if r[0] not in _UNIVERSAL_EXT_KEYS]
     ev_rows = [r for r in ev_rows if r[0] in _EV_KEYS]
 
     if not ts_rows and not ev_rows:
         return None
 
-    # ── Gráfico mensual ───────────────────────────────────────────────────────
-    fig = go.Figure()
-    chart_built = False
+    _METRO_KEYS   = ['afluencia_metro_gran_via', 'afluencia_metro_callao']
+    _TOURIST_KEYS = ['n_turistas_isocrona', 'n_pasajeros_crucero_dia']
 
-    if ts_rows:
-        df_ts = pd.DataFrame(ts_rows, columns=['fk', 'fecha', 'value'])
-        df_ts['fecha'] = pd.to_datetime(df_ts['fecha'])
-        df_ts['mes']   = df_ts['fecha'].dt.to_period('M').dt.to_timestamp()
-        keys_loc = [k for k in df_ts['fk'].unique() if k in _EXT_SERIES_META]
+    # ── Gráfico metro (agrupado por estación) ─────────────────────────────────
+    metro_chart_col = None
+    metro_keys_present = [k for k in _METRO_KEYS if any(r[0] == k for r in ts_rows)]
+    if metro_keys_present:
+        df_m = pd.DataFrame(ts_rows, columns=['fk', 'fecha', 'value'])
+        df_m['fecha'] = pd.to_datetime(df_m['fecha'])
+        df_m['mes']   = df_m['fecha'].dt.to_period('M').dt.to_timestamp()
 
-        for fk in keys_loc:
-            label, agg_fn, color = _EXT_SERIES_META[fk]
-            mes = df_ts[df_ts['fk'] == fk].groupby('mes')['value'].agg(agg_fn).reset_index().sort_values('mes')
-            if mes.empty:
-                continue
-            m_lbls = [f"{_MESES_ES_GEO[r.month-1]} {r.year}" for r in mes['mes'].dt.date]
-            m_vals = mes['value'].tolist()
-            is_first = not chart_built
-            fig.add_trace(go.Bar(
+        fig_m = go.Figure()
+        for fk in metro_keys_present:
+            label, _, color = _EXT_SERIES_META[fk]
+            sub = (df_m[df_m['fk'] == fk]
+                   .groupby('mes')['value'].mean()
+                   .reset_index().sort_values('mes'))
+            m_lbls = [f"{_MESES_ES_GEO[r.month-1]}" for r in sub['mes'].dt.date]
+            m_vals = sub['value'].tolist()
+            # Texto interior blanco para barra azul, oscuro para barra amarilla
+            txt_color = 'white' if color.startswith('#0') else '#333'
+            fig_m.add_trace(go.Bar(
                 x=m_lbls, y=m_vals, name=label,
-                marker_color=color, opacity=0.82,
-                text=[f"<b>{int(v/1000):.0f}k</b>" if v >= 1000 else f"<b>{int(v)}</b>" for v in m_vals],
+                marker_color=color, opacity=0.90,
+                text=[f"{int(v/1000):.0f}k" for v in m_vals],
                 textposition='inside', insidetextanchor='middle',
-                textfont=dict(size=9, color='white', family='Arial Black, Arial'),
+                textfont=dict(size=8, color=txt_color, family='Arial, sans-serif'),
             ))
-            chart_built = True
 
-    # Marcadores de eventos sobre el gráfico
-    if ev_rows and chart_built:
+        # Marcas verticales de eventos de alto impacto
         for ekey, fi, ff, meta_raw in ev_rows:
             try:
-                meta = json.loads(meta_raw) if isinstance(meta_raw, str) else (meta_raw or {})
+                meta = json.loads(meta_raw) if isinstance(meta_raw, str) else {}
             except Exception:
                 meta = {}
+            if meta.get('impacto') != 'alto':
+                continue
             fi_dt = pd.to_datetime(fi)
-            mes_lbl = f"{_MESES_ES_GEO[fi_dt.month-1]} {fi_dt.year}"
-            icono   = _EV_ICONS.get(ekey, '📍')
-            titulo  = meta.get('titulo', ekey)[:40]
-            color_e = _EV_COLOR.get(ekey, '#95a5a6')
-            imp     = meta.get('impacto', '')
-            fig.add_annotation(
+            mes_lbl = _MESES_ES_GEO[fi_dt.month - 1]
+            titulo = meta.get('titulo', ekey)[:30]
+            fig_m.add_annotation(
                 x=mes_lbl, y=1.0, yref='paper',
-                text=f"<b>{icono}</b>",
+                text="▲",
                 showarrow=False,
-                font=dict(size=14),
-                hovertext=f"<b>{titulo}</b><br>{fi_dt.strftime('%d %b %Y')}"
-                          + (f"<br>{meta.get('asistentes','')} personas" if meta.get('asistentes') else ''),
-                hoverlabel=dict(bgcolor='white', bordercolor=color_e, font=dict(size=11)),
-                xanchor='center', yanchor='bottom', yshift=2,
+                font=dict(size=9, color=_EV_COLOR.get(ekey, '#888')),
+                hovertext=f"<b>{titulo}</b><br>{fi_dt.strftime('%-d %b %Y')}"
+                          + (f"<br>{meta.get('asistentes','')} asistentes"
+                             if meta.get('asistentes') else ''),
+                hoverlabel=dict(bgcolor='white', bordercolor=_EV_COLOR.get(ekey, '#888'),
+                                font=dict(size=10)),
+                xanchor='center', yanchor='bottom', yshift=3,
             )
 
-    if chart_built:
-        fig.update_layout(
-            plot_bgcolor='white', paper_bgcolor='white', barmode='group',
-            margin=dict(t=32, b=8, l=8, r=8), height=240,
-            legend=dict(orientation='h', x=1, xanchor='right', y=1.08,
-                        font=dict(size=10, color=_C_DARK)),
-            xaxis=dict(showgrid=False, tickfont=dict(size=10, color='#7f8c8d')),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', visible=False),
+        fig_m.update_layout(
+            barmode='group', plot_bgcolor='white', paper_bgcolor='white',
+            margin=dict(t=28, b=4, l=4, r=4), height=200,
+            legend=dict(orientation='h', x=1, xanchor='right', y=1.10,
+                        font=dict(size=10, color=_C_DARK), bgcolor='rgba(0,0,0,0)'),
+            xaxis=dict(showgrid=False, tickfont=dict(size=9, color='#8c9199')),
+            yaxis=dict(visible=False, showgrid=True, gridcolor='#f0f0f0'),
         )
-        chart_col = dbc.Col(
-            dcc.Graph(id=f"ext-area-{location_uuid[:8]}", figure=fig,
-                      config=_CFG, style={'height': '240px'}),
-            xs=12,
+
+        metro_chart_col = dbc.Col([
+            html.Div([
+                html.Img(src=_METRO_LOGO_SRC, height=16,
+                         style={'verticalAlign': 'middle', 'marginRight': '6px'}),
+                html.Span("Validaciones diarias por estación · media mensual",
+                          style={'fontSize': '0.66rem', 'color': _C_MUTED,
+                                 'textTransform': 'uppercase', 'letterSpacing': '0.45px',
+                                 'fontWeight': '600'}),
+            ], className='d-flex align-items-center mb-2'),
+            dcc.Graph(id=f"ext-metro-{location_uuid[:8]}", figure=fig_m,
+                      config=_CFG, style={'height': '200px'}),
+        ], xs=12, lg=7)
+
+    # ── Gráfico turistas ──────────────────────────────────────────────────────
+    tourist_chart_col = None
+    tourist_keys_present = [k for k in _TOURIST_KEYS if any(r[0] == k for r in ts_rows)]
+    if tourist_keys_present:
+        df_t = pd.DataFrame(ts_rows, columns=['fk', 'fecha', 'value'])
+        df_t['fecha'] = pd.to_datetime(df_t['fecha'])
+        df_t['mes']   = df_t['fecha'].dt.to_period('M').dt.to_timestamp()
+
+        fig_t = go.Figure()
+        for fk in tourist_keys_present:
+            label, agg_fn, color = _EXT_SERIES_META[fk]
+            sub = (df_t[df_t['fk'] == fk]
+                   .groupby('mes')['value'].agg(agg_fn)
+                   .reset_index().sort_values('mes'))
+            if sub.empty:
+                continue
+            m_lbls = [f"{_MESES_ES_GEO[r.month-1]}" for r in sub['mes'].dt.date]
+            m_vals = sub['value'].tolist()
+            fig_t.add_trace(go.Bar(
+                x=m_lbls, y=m_vals, name=label,
+                marker_color=color, opacity=0.88,
+                text=[f"{int(v/1000):.1f}k" if v >= 1000 else str(int(v)) for v in m_vals],
+                textposition='inside', insidetextanchor='middle',
+                textfont=dict(size=8, color='white', family='Arial, sans-serif'),
+            ))
+
+        fig_t.update_layout(
+            plot_bgcolor='white', paper_bgcolor='white', showlegend=False,
+            margin=dict(t=28, b=4, l=4, r=4), height=200,
+            xaxis=dict(showgrid=False, tickfont=dict(size=9, color='#8c9199')),
+            yaxis=dict(visible=False, showgrid=True, gridcolor='#f0f0f0'),
         )
-    else:
-        chart_col = None
+        tourist_chart_col = dbc.Col([
+            html.Div([
+                html.I(className='fas fa-user-friends me-2',
+                       style={'color': '#e67e22', 'fontSize': '0.75rem'}),
+                html.Span("Turistas estimados · isócrona 10 min · media mensual",
+                          style={'fontSize': '0.66rem', 'color': _C_MUTED,
+                                 'textTransform': 'uppercase', 'letterSpacing': '0.45px',
+                                 'fontWeight': '600'}),
+            ], className='d-flex align-items-center mb-2'),
+            dcc.Graph(id=f"ext-tour-{location_uuid[:8]}", figure=fig_t,
+                      config=_CFG, style={'height': '200px'}),
+        ], xs=12, lg=5)
+
+    chart_cols = [c for c in [metro_chart_col, tourist_chart_col] if c is not None]
+    chart_row  = dbc.Row(chart_cols, className="g-3 mb-4") if chart_cols else None
 
     # ── Feed de eventos ───────────────────────────────────────────────────────
-    pasados   = [(ek, fi, ff, meta_raw) for ek, fi, ff, meta_raw in ev_rows if fi <= str(hoy)]
-    proximos  = [(ek, fi, ff, meta_raw) for ek, fi, ff, meta_raw in ev_rows if fi >  str(hoy)]
+    pasados  = [(ek, fi, ff, m) for ek, fi, ff, m in ev_rows if fi <= str(hoy)]
+    proximos = [(ek, fi, ff, m) for ek, fi, ff, m in ev_rows if fi >  str(hoy)]
 
     def _ev_item(ekey, fi, meta_raw):
         try:
@@ -208,7 +308,7 @@ def _render_area_signals(location_uuid: str) -> html.Div | None:
         except Exception:
             meta = {}
         fi_dt   = pd.to_datetime(fi)
-        icono   = _EV_ICONS.get(ekey, '📍')
+        icon_fa = meta.get('icono_fa') or _EV_ICONS.get(ekey, 'fas fa-calendar')
         titulo  = meta.get('titulo', ekey)
         desc    = meta.get('descripcion', '')
         imp     = meta.get('impacto', '')
@@ -216,68 +316,74 @@ def _render_area_signals(location_uuid: str) -> html.Div | None:
         cat_lbl = _EV_LABELS.get(ekey, ekey)
         c_brd   = _EV_COLOR.get(ekey, '#adb5bd')
         c_imp   = _IMP_COLOR.get(imp, '#adb5bd')
-        imp_lbl = imp.upper() if imp else ''
 
         return html.Div([
             html.Div([
-                html.Span(f"{icono} ", style={'fontSize': '1rem'}),
-                html.Span(titulo, className="fw-bold",
+                html.I(className=f"{icon_fa} me-2 flex-shrink-0",
+                       style={'color': c_brd, 'fontSize': '0.78rem', 'marginTop': '2px',
+                              'width': '14px', 'textAlign': 'center'}),
+                html.Span(titulo, className='fw-semibold',
                           style={'fontSize': '0.82rem', 'color': _C_DARK, 'lineHeight': '1.3'}),
-            ], className="mb-1"),
+            ], className='d-flex align-items-start mb-1'),
             html.Div([
-                dbc.Badge(cat_lbl, color="light",
+                dbc.Badge(cat_lbl, color='light',
                           style={'color': c_brd, 'border': f'1px solid {c_brd}',
-                                 'fontSize': '0.65rem', 'fontWeight': '600'},
-                          className="me-1 px-2 py-1"),
-                html.Span(fi_dt.strftime('%d %b %Y'), className="text-muted me-2",
-                          style={'fontSize': '0.72rem'}),
-                (html.Span(f"{asist} pers.", className="text-muted",
-                           style={'fontSize': '0.72rem'}) if asist else html.Span()),
-            ], className="d-flex align-items-center flex-wrap gap-1 mb-1"),
-            html.P(desc, className="text-muted mb-0",
-                   style={'fontSize': '0.73rem', 'lineHeight': '1.4'}) if desc else html.Div(),
-            (dbc.Badge(f"IMPACTO {imp_lbl}", pill=True,
-                       style={'backgroundColor': c_imp, 'fontSize': '0.6rem'},
-                       className="mt-1") if imp_lbl else html.Div()),
-        ], className="pb-2 mb-2",
-           style={'borderBottom': '1px solid #f0f0f0',
+                                 'fontSize': '0.61rem', 'fontWeight': '600'},
+                          className='me-1 px-2 py-0'),
+                html.Span(fi_dt.strftime('%-d %b %Y'), className='text-muted me-2',
+                          style={'fontSize': '0.70rem'}),
+                (html.Span(f"{asist} asistentes", className='text-muted',
+                           style={'fontSize': '0.68rem'}) if asist else html.Span()),
+            ], className='d-flex align-items-center flex-wrap gap-1 mb-1'),
+            (html.P(desc[:170] + ('…' if len(desc) > 170 else ''),
+                    className='text-muted mb-1',
+                    style={'fontSize': '0.71rem', 'lineHeight': '1.4'}) if desc else html.Div()),
+            (dbc.Badge(f"Impacto {imp}", pill=True,
+                       style={'backgroundColor': c_imp, 'fontSize': '0.58rem'},
+                       className='mt-0') if imp else html.Div()),
+        ], className='pb-3 mb-2',
+           style={'borderBottom': '1px solid #ebebeb',
                   'borderLeft': f'3px solid {c_brd}',
                   'paddingLeft': '10px'})
 
-    def _feed_col(title, icon_cls, items, limit=5):
-        if not items:
-            return None
-        cards = [_ev_item(ek, fi, meta) for ek, fi, ff, meta in reversed(items[-limit:])
-                 if True]
+    def _feed_col(title, icon_cls, items, limit=4, newest_first=False):
+        items_shown = list(reversed(items[-limit:])) if newest_first else items[:limit]
+        empty = html.P("Sin eventos en este período.",
+                       className='text-muted', style={'fontSize': '0.76rem'})
         return dbc.Col([
-            html.P([html.I(className=f"{icon_cls} me-1"), title],
-                   className="fw-bold mb-2 text-uppercase",
-                   style={'fontSize': '0.68rem', 'color': _C_MUTED, 'letterSpacing': '0.6px'}),
-            html.Div(cards),
+            html.Div([
+                html.I(className=f"{icon_cls} me-1",
+                       style={'color': _C_MUTED, 'fontSize': '0.68rem'}),
+                html.Span(title, style={
+                    'fontSize': '0.65rem', 'color': _C_MUTED,
+                    'textTransform': 'uppercase', 'letterSpacing': '0.6px',
+                    'fontWeight': '700',
+                }),
+            ], className='d-flex align-items-center border-bottom pb-2 mb-3'),
+            (html.Div([_ev_item(ek, fi, m) for ek, fi, ff, m in items_shown])
+             if items_shown else empty),
         ], xs=12, md=6)
 
-    feed_past = _feed_col("Recientes", "fas fa-history", pasados, limit=4)
-    feed_next = _feed_col("Próximos",  "fas fa-calendar-alt", proximos, limit=4)
-    feed_cols = [c for c in [feed_past, feed_next] if c is not None]
+    feed_row = dbc.Row([
+        _feed_col("Eventos recientes", "fas fa-history",        pasados,  newest_first=True),
+        _feed_col("Próximos eventos",  "fas fa-calendar-check", proximos, newest_first=False),
+    ], className='g-4')
 
     # ── Ensamblar ─────────────────────────────────────────────────────────────
     children = []
-    if chart_col:
-        children.append(dbc.Row([chart_col], className="mb-3"))
-    if feed_cols:
-        children.append(dbc.Row(feed_cols, className="g-3"))
-
-    if not children:
-        return None
+    if chart_row:
+        children.append(chart_row)
+    children.append(feed_row)
 
     return html.Div([
         html.Div([
-            html.I(className="fas fa-broadcast-tower me-2", style={'color': _C_TEAL}),
-            html.Span("Señales del área", className="fw-bold text-dark",
-                      style={'fontSize': '0.88rem'}),
-        ], className="d-flex align-items-center border-bottom pb-2 mb-3 mt-1"),
+            html.I(className='fas fa-broadcast-tower me-2',
+                   style={'color': '#17a2b8', 'fontSize': '0.88rem'}),
+            html.Span("Señales del área", className='fw-bold text-dark',
+                      style={'fontSize': '0.92rem'}),
+        ], className='d-flex align-items-center border-bottom pb-2 mb-4 mt-1'),
         html.Div(children),
-    ], className="mb-3")
+    ], className='mb-3')
 _C_GREEN   = "#28A745"
 _C_AMBER   = "#f39c12"
 _C_RED     = "#DC3545"
@@ -995,21 +1101,37 @@ def _fig_mapa(vals, lat, lon, uuid):
             hovertemplate="<b>Competidor</b><br>a ~%{customdata:,.0f} m<extra></extra>",
         ))
 
-    # Contexto espacial externo (mock o real) — agrupado por categoría
+    # Contexto espacial externo — POIs agrupados por categoría con efecto sonar
     spatial_pois = _SPATIAL_CONTEXT.get(uuid, [])
     if spatial_pois:
         from itertools import groupby
         from operator import itemgetter
-        for cat, items in groupby(sorted(spatial_pois, key=itemgetter("categoria")), key=itemgetter("categoria")):
+
+        # Efecto sonar: anillos concéntricos para polos de alta afluencia
+        sonar_items = [p for p in spatial_pois if p.get("sonar")]
+        for p in sonar_items:
+            color_s = _SPATIAL_COLORS.get(p["categoria"], ("#f39c12", 14))[0]
+            for ring_size, ring_alpha in [(44, 0.04), (32, 0.09), (20, 0.18)]:
+                fig.add_trace(go.Scattermapbox(
+                    lat=[p["lat"]], lon=[p["lon"]], mode="markers",
+                    marker=dict(size=ring_size, color=color_s, opacity=ring_alpha),
+                    hoverinfo="skip", showlegend=False,
+                ))
+
+        # Marcadores principales agrupados por categoría
+        for cat, items in groupby(
+            sorted(spatial_pois, key=itemgetter("categoria")), key=itemgetter("categoria")
+        ):
             items = list(items)
             color, base_size = _SPATIAL_COLORS.get(cat, ("#95a5a6", 12))
-            lats   = [p["lat"] for p in items]
-            lons   = [p["lon"] for p in items]
-            sizes  = [max(8, int(base_size * p.get("valor", 0.5))) for p in items]
-            tips   = [f"<b>{p['label']}</b><br>{p.get('detalle','')}<extra></extra>" for p in items]
+            lats  = [p["lat"] for p in items]
+            lons  = [p["lon"] for p in items]
+            sizes = [max(9, int(base_size * p.get("valor", 0.5))) for p in items]
+            tips  = [f"<b>{p['label']}</b><br>{p.get('detalle', '')}<extra></extra>"
+                     for p in items]
             fig.add_trace(go.Scattermapbox(
                 lat=lats, lon=lons, mode="markers",
-                marker=dict(size=sizes, color=color, opacity=0.88),
+                marker=dict(size=sizes, color=color, opacity=0.90),
                 name=_SPATIAL_LABELS.get(cat, cat),
                 hovertemplate=tips,
             ))

@@ -2,14 +2,21 @@
 """
 Genera y persiste datos mock para Showroom (Gran Vía 48, Madrid).
 
+Fuentes de referencia:
+  - CRTM 2025: Sol ~60 k val./día (1er puesto). Gran Vía y Callao estimados
+    entre 25-35 k/día (intersección de dos líneas, zona comercial central).
+  - Fechas de eventos: fuentes oficiales (Ayto. Madrid, madridorgullo.com,
+    eldiario.es, songkick.com, cinescallao.es).
+
 Series temporales (store_features_ext):
-  afluencia_metro_gran_via   — validaciones diarias estimadas Gran Vía L1/L5
-  n_turistas_isocrona        — turistas estimados en isocrona 10 min
+  afluencia_metro_gran_via  — validaciones diarias estación Gran Vía (L1/L5)
+  afluencia_metro_callao    — validaciones diarias estación Callao (L3/L5)
+  n_turistas_isocrona       — turistas estimados en isócrona 10 min (no metro)
 
 Eventos (store_calendario_org):
-  estreno_callao             — estrenos en Cine Callao
+  estreno_callao             — estrenos / premieres en Cines Callao (100 años en 2026)
   manifestacion_gran_via     — marchas y manifestaciones por Gran Vía
-  concierto_wizink           — conciertos en WiZink Center
+  concierto_wizink           — conciertos en WiZink Center (cap. ~17 500)
   festival_madrid            — eventos de ciudad (San Isidro, Orgullo, Noche en Blanco…)
 
 Uso:
@@ -29,10 +36,15 @@ load_dotenv()
 _SHOWROOM_UUID = "faf7d203-342e-44c6-96e3-1ed64d8252c3"
 
 # ── Series temporales ─────────────────────────────────────────────────────────
-
+# Estimaciones CRTM 2025:
+#   Sol (L1/L2/L3):        ~60 000 val./día — 1er puesto red metro
+#   Gran Vía (L1/L5):      ~32 000 val./día — nodo comercial central
+#   Callao (L3/L5):        ~24 000 val./día — plaza y acceso peatonal GV
+#   Turistas isócrona 10': ~5 500 entre semana · ~8 200 fin de semana
 _SERIES = {
-    "afluencia_metro_gran_via": {"base_l": 12_400, "base_w": 7_800,  "amp": 0.10, "noise": 0.07},
-    "n_turistas_isocrona":      {"base_l":  6_800, "base_w": 10_200, "amp": 0.30, "noise": 0.14},
+    "afluencia_metro_gran_via": {"base_l": 32_000, "base_w": 26_000, "amp": 0.10, "noise": 0.07},
+    "afluencia_metro_callao":   {"base_l": 24_000, "base_w": 20_000, "amp": 0.09, "noise": 0.07},
+    "n_turistas_isocrona":      {"base_l":  5_500, "base_w":  8_200, "amp": 0.28, "noise": 0.12},
 }
 
 
@@ -54,132 +66,173 @@ def _ev(key, fi, ff, titulo, desc, impacto, asistentes, fuente="mock"):
                 impacto=impacto, asistentes=asistentes, fuente=fuente)
 
 
+_KEY_FA_ICONS = {
+    "estreno_callao":         "fas fa-film",
+    "manifestacion_gran_via": "fas fa-bullhorn",
+    "concierto_wizink":       "fas fa-music",
+    "festival_madrid":        "fas fa-city",
+    "escala_crucero":         "fas fa-ship",
+}
+
 _EVENTS = [
     # ── Manifestaciones ───────────────────────────────────────────────────────
     _ev("manifestacion_gran_via", date(2026, 3, 8), date(2026, 3, 8),
         "8M · Marcha Internacional por los Derechos de la Mujer",
-        "La marcha recorrió Gran Vía y Paseo del Prado. Afluencia masiva en toda la isocrona.",
-        "alto", "800.000"),
+        "Dos bloques: Atocha-Sevilla y Cibeles-Plaza de España vía Gran Vía. "
+        "Inicio a las 12:00 h con corte total de la calle. "
+        "Fuente: eldiario.es / Comisión 8M Madrid.",
+        "alto", "400.000"),
     _ev("manifestacion_gran_via", date(2026, 5, 1), date(2026, 5, 1),
         "1 de Mayo · Manifestación Día del Trabajo",
-        "Sindicatos CCOO y UGT convocaron desde Neptuno hasta la Puerta del Sol.",
-        "alto", "200.000"),
+        "Convocada por CCOO y UGT. Concentración en Neptuno con recorrido "
+        "hasta Puerta del Sol pasando por Gran Vía. Reclama mejoras salariales "
+        "y derechos laborales ante el incremento del coste de vida.",
+        "alto", "150.000"),
     _ev("manifestacion_gran_via", date(2026, 4, 19), date(2026, 4, 19),
         "Marcha por la Vivienda",
-        "Plataforma de Afectados por la Hipoteca. Concentración frente al Congreso, paso por Gran Vía.",
+        "Plataforma de Afectados por la Hipoteca. Concentración frente al Congreso, "
+        "paso por Gran Vía. Reclama medidas urgentes contra la especulación "
+        "y el alquiler abusivo.",
         "medio", "60.000"),
     _ev("manifestacion_gran_via", date(2026, 6, 5), date(2026, 6, 5),
         "Marcha por el Clima · Día Mundial del Medio Ambiente",
-        "Convocada por Fridays for Future. Recorrido Sol–Gran Vía–Cibeles.",
-        "medio", "40.000"),
+        "Convocada por Fridays for Future España. Recorrido Sol–Gran Vía–Cibeles. "
+        "Exige cumplimiento de objetivos climáticos europeos y protección de ecosistemas.",
+        "medio", "35.000"),
     _ev("manifestacion_gran_via", date(2026, 7, 19), date(2026, 7, 19),
         "Manifestación Sanitaria · Defensa de la Sanidad Pública",
-        "Marea Blanca. Concentración en Puerta del Sol con paso por Gran Vía.",
-        "medio", "75.000"),
-    # ── Orgullo / Festivales ──────────────────────────────────────────────────
-    _ev("festival_madrid", date(2026, 6, 27), date(2026, 6, 28),
-        "WorldPride Madrid 2026 · Desfile del Orgullo",
-        "El desfile principal recorre Paseo de la Castellana y afluye a Gran Vía. El área queda cortada.",
-        "alto", "2.000.000"),
-    _ev("festival_madrid", date(2026, 5, 15), date(2026, 5, 17),
+        "Marea Blanca. Concentración en Puerta del Sol con paso por Gran Vía. "
+        "Protesta contra recortes en atención primaria y listas de espera.",
+        "medio", "70.000"),
+
+    # ── Festividades y eventos de ciudad ──────────────────────────────────────
+    _ev("festival_madrid", date(2026, 7, 4), date(2026, 7, 4),
+        "Orgullo de Madrid 2026 · Desfile Estatal LGTBI+",
+        "El desfile estatal parte de Atocha (Paseo del Prado) hacia Colón a las 18:00 h. "
+        "Afluencia masiva en Gran Vía, Chueca y zona centro. Mayor movilización LGTBI+ de Europa. "
+        "Festividades del 25 de junio al 5 de julio. Fuente: madridorgullo.com",
+        "alto", "1.500.000"),
+    _ev("festival_madrid", date(2026, 5, 7), date(2026, 5, 17),
         "San Isidro 2026 · Festividades Patronales de Madrid",
-        "Verbenas, conciertos gratuitos y atracciones populares en todo el centro histórico.",
-        "alto", "500.000"),
+        "Verbenas, conciertos gratuitos y atracciones populares en Pradera de San Isidro, "
+        "Plaza Mayor y Matadero. Día del patrón el 15 de mayo con fuegos artificiales. "
+        "Artistas confirmados: Fangoria, Miguel Ríos y bandas de zarzuela. "
+        "Fuente: Ayuntamiento de Madrid.",
+        "alto", "600.000"),
     _ev("festival_madrid", date(2026, 5, 2), date(2026, 5, 2),
-        "Fiesta de la Comunidad de Madrid",
-        "Día festivo autonómico. Alta afluencia turística y de ocio en zona centro.",
+        "Día de la Comunidad de Madrid",
+        "Festivo autonómico. Alta afluencia turística y de ocio en zona centro. "
+        "Acceso gratuito a museos municipales y actividades en el Parque del Retiro.",
         "medio", "120.000"),
-    _ev("festival_madrid", date(2026, 3, 28), date(2026, 4, 4),
+    _ev("festival_madrid", date(2026, 3, 27), date(2026, 4, 5),
         "Semana Santa 2026",
-        "Máxima afluencia turística del año. Procesiones en el centro con cierre de calles.",
+        "Más de 30 procesiones por el centro de Madrid. Epicentro en Puerta del Sol "
+        "y Calle Mayor. Viernes Santo (3 de abril) con dos procesiones principales. "
+        "Máxima afluencia turística del año con cierre de calles. "
+        "Fuente: Ayuntamiento de Madrid.",
         "alto", "1.200.000"),
-    _ev("festival_madrid", date(2026, 10, 3), date(2026, 10, 3),
-        "Noche en Blanco · Madrid",
-        "Museos gratuitos, instalaciones artísticas y actuaciones en Gran Vía y Paseo del Prado.",
+    _ev("festival_madrid", date(2026, 9, 12), date(2026, 9, 13),
+        "Noche en Blanco 2026 · Madrid",
+        "252 instituciones culturales con acceso gratuito de 21:00 h a 07:00 h. "
+        "Museos, galerías e instalaciones artísticas en Gran Vía y Paseo del Prado. "
+        "Fuente: Ayuntamiento de Madrid.",
         "alto", "400.000"),
     _ev("festival_madrid", date(2026, 8, 15), date(2026, 8, 15),
         "Verbenas de La Paloma · Cierre Fiestas de Verano",
-        "Último día festivo de agosto en Madrid. Máxima afluencia turística de la temporada.",
-        "medio", "300.000"),
-    # ── Conciertos WiZink ─────────────────────────────────────────────────────
+        "Último festivo de agosto en Madrid. Máxima afluencia turística de la temporada "
+        "estival. Gran Vía y Chueca como principales focos de actividad.",
+        "medio", "250.000"),
+
+    # ── Conciertos WiZink Center ──────────────────────────────────────────────
     _ev("concierto_wizink", date(2026, 3, 14), date(2026, 3, 14),
-        "Dua Lipa · Radical Optimism Tour", "Sold out 20.000 entradas. Picos en metro Ventas y Gran Vía.",
-        "alto", "20.000"),
+        "Dua Lipa · Radical Optimism Tour",
+        "WiZink Center · 17 500 localidades. Afluencia intensa en metro Gran Vía "
+        "y Ventas desde las 19:00 h.",
+        "alto", "17.500"),
     _ev("concierto_wizink", date(2026, 4, 11), date(2026, 4, 11),
-        "Coldplay · Music of the Spheres", "Sold out. Dos noches. Extra de metro desde Gran Vía.",
-        "alto", "20.000"),
+        "Coldplay · Music of the Spheres World Tour — Noche 1",
+        "Sold out · 17 500 entradas. Primera de dos noches consecutivas. "
+        "Refuerzo de metro en L5 (Gran Vía–Ventas) a partir de las 23:00 h.",
+        "alto", "17.500"),
     _ev("concierto_wizink", date(2026, 4, 12), date(2026, 4, 12),
-        "Coldplay · Music of the Spheres (Noche 2)", "Segunda fecha agotada.",
-        "alto", "20.000"),
-    _ev("concierto_wizink", date(2026, 5, 9), date(2026, 5, 9),
-        "Rosalía · MOTOMAMI Tour Europe",
-        "20.000 asistentes. Flujo intenso metro Gran Vía y Callao a partir de las 21h.",
-        "alto", "20.000"),
+        "Coldplay · Music of the Spheres World Tour — Noche 2",
+        "Segunda fecha. Dos noches consecutivas sold out en WiZink Center.",
+        "alto", "17.500"),
+    _ev("concierto_wizink", date(2026, 5, 31), date(2026, 5, 31),
+        "La Oreja de Van Gogh · Gira 30 Aniversario",
+        "Fecha confirmada en WiZink Center. Sold out. "
+        "El grupo vasco celebra 30 años de carrera con gira por España. "
+        "Fuente: Songkick / WiZink Center.",
+        "alto", "17.500"),
     _ev("concierto_wizink", date(2026, 6, 13), date(2026, 6, 13),
-        "Bad Bunny · Tour Más Fechas", "Sold out. Alta demanda de transporte.",
-        "alto", "20.000"),
+        "Bad Bunny · Tour 2026",
+        "Sold out. Artista urbano con mayor demanda en Europa en 2025–2026. "
+        "Flujo intenso en metro Ventas y Gran Vía desde las 20:00 h.",
+        "alto", "17.500"),
     _ev("concierto_wizink", date(2026, 7, 4), date(2026, 7, 4),
-        "The Weeknd · After Hours til Dawn", "Sold out.",
-        "alto", "20.000"),
+        "The Weeknd · After Hours til Dawn Tour",
+        "Coincide con el Desfile del Orgullo 2026. Picos excepcionales de "
+        "afluencia en todo el transporte público del área central.",
+        "alto", "17.500"),
     _ev("concierto_wizink", date(2026, 7, 18), date(2026, 7, 18),
-        "Sabrina Carpenter · Short n' Sweet Tour", "Sold out.",
-        "alto", "18.000"),
+        "Sabrina Carpenter · Short n' Sweet Tour",
+        "17 000 localidades. Audiencia juvenil con alta concentración en metro "
+        "Gran Vía y Callao tarde-noche.",
+        "alto", "17.000"),
     _ev("concierto_wizink", date(2026, 9, 5), date(2026, 9, 5),
         "Billie Eilish · HIT ME HARD AND SOFT: The Tour",
-        "Vuelta de la temporada. Primeras noches de septiembre.",
-        "alto", "20.000"),
-    # ── Estrenos Cine Callao ──────────────────────────────────────────────────
+        "Apertura de la temporada de otoño en WiZink Center. Sold out.",
+        "alto", "17.500"),
+    _ev("concierto_wizink", date(2026, 9, 22), date(2026, 9, 22),
+        "La Oreja de Van Gogh · Segunda fecha Madrid",
+        "Segunda fecha confirmada por alta demanda. Fuente: Songkick.",
+        "alto", "17.500"),
+
+    # ── Estrenos Cines Callao ─────────────────────────────────────────────────
+    # Cines Callao cumple 100 años en 2026 (inauguración: 25 diciembre 1926).
     _ev("estreno_callao", date(2026, 3, 6), date(2026, 3, 6),
-        "Premiere — 'Avengers: Doomsday'", "Cola en Gran Vía desde las 19h. 14 salas agotadas.",
+        "Premiere — Avengers: Doomsday (Marvel Studios)",
+        "Estreno global simultáneo. Cola en Gran Vía desde las 19:00 h. "
+        "Pases de medianoche agotados. Mayor estreno de Marvel desde Endgame.",
         "alto", "4.200"),
-    _ev("estreno_callao", date(2026, 3, 20), date(2026, 3, 20),
-        "Premiere — 'Paddington en Perú'", "Reposición del éxito navideño. Familiar.",
-        "bajo", "1.800"),
-    _ev("estreno_callao", date(2026, 4, 3), date(2026, 4, 3),
-        "Premiere — 'Misión Imposible: El Ajuste Final'",
-        "Premiere con Tom Cruise en Madrid. Corte parcial de Gran Vía.",
+    _ev("estreno_callao", date(2026, 4, 3), date(2026, 4, 4),
+        "Premiere — Misión Imposible: The Final Reckoning",
+        "Paramount Pictures. Tom Cruise presente en Madrid para la premiere. "
+        "Corte parcial de Gran Vía para alfombra roja. "
+        "Pases especiales Jueves y Viernes Santo.",
         "alto", "3.600"),
     _ev("estreno_callao", date(2026, 4, 17), date(2026, 4, 17),
-        "Premiere — 'Minerva' (Alejandro Amenábar)",
-        "Producción española. Alfombra roja en acceso principal de Callao.",
+        "Premiere — Minerva (dir. Alejandro Amenábar)",
+        "Producción española con alfombra roja en la Plaza de Callao. "
+        "Gran expectación por el regreso de Amenábar al thriller histórico.",
         "medio", "2.100"),
-    _ev("estreno_callao", date(2026, 5, 1), date(2026, 5, 1),
-        "Premiere — 'Lilo & Stitch' (live action)",
-        "Estreno global Disney. Máxima ocupación en horario de tarde.",
-        "medio", "3.000"),
     _ev("estreno_callao", date(2026, 5, 22), date(2026, 5, 22),
-        "Premiere — 'Star Wars: The New Dawn'",
-        "Colas desde Callao hasta Sol. Maratón de proyecciones 0h, 3h, 6h.",
+        "Premiere — Star Wars: The New Dawn",
+        "Colas desde Callao hasta Sol. Pases especiales a las 00:00, 03:00 y 06:00 h. "
+        "Afluencia nocturna excepcional en Gran Vía.",
         "alto", "4.800"),
     _ev("estreno_callao", date(2026, 6, 5), date(2026, 6, 5),
-        "Premiere — 'Jurassic World: Rebirth'",
-        "Premiere internacional en Madrid. Afluencia familiar intensa.",
+        "Premiere — Jurassic World: Rebirth (Universal Pictures)",
+        "Premiere internacional en Madrid. Afluencia familiar intensa. "
+        "Cola previa en la Plaza de Callao.",
         "medio", "2.900"),
-    _ev("estreno_callao", date(2026, 6, 19), date(2026, 6, 19),
-        "Premiere — 'Fast X: Part II'",
-        "Franquicia con audiencia masiva. Colas registradas en Gran Vía.",
-        "medio", "3.200"),
     _ev("estreno_callao", date(2026, 7, 10), date(2026, 7, 10),
-        "Premiere — 'Superman: Legacy'",
-        "Nuevo DC Universe. Expectación máxima. Evento nocturno con photocall.",
+        "Premiere — Superman: Legacy (DC Studios)",
+        "Nuevo universo DC con James Gunn. Expectación máxima. "
+        "Photocall nocturno en Gran Vía con presencia de actores.",
         "alto", "4.500"),
-    _ev("estreno_callao", date(2026, 7, 24), date(2026, 7, 24),
-        "Premiere — 'Minecraft: La Película (Vol. 2)'",
-        "Éxito de taquilla. Horario extendido fin de semana.",
-        "medio", "2.600"),
     _ev("estreno_callao", date(2026, 8, 7), date(2026, 8, 7),
-        "Premiere — 'Avatar: Fire and Ash'",
-        "Tercera entrega de Cameron. Mayor expectación del verano.",
+        "Premiere — Avatar: Fire and Ash (James Cameron)",
+        "Tercera entrega. Proyección en formato IMAX y Dolby Atmos. "
+        "Mayor expectación del verano. Afluencia de toda la Comunidad.",
         "alto", "5.100"),
+    _ev("estreno_callao", date(2026, 9, 18), date(2026, 9, 18),
+        "Cines Callao · Gala Centenario 1926–2026",
+        "Evento de gala por el centenario del histórico cine de Gran Vía, inaugurado "
+        "el 25 de diciembre de 1926. Alfombra roja, orquesta en directo y proyección "
+        "especial. Presencia de autoridades y figuras del cine español.",
+        "alto", "1.200"),
 ]
-
-_IMPACTO_COLORS = {"alto": "#e74c3c", "medio": "#f39c12", "bajo": "#27ae60"}
-_KEY_ICONS = {
-    "estreno_callao":        "🎬",
-    "manifestacion_gran_via": "📢",
-    "concierto_wizink":       "🎵",
-    "festival_madrid":        "🏙️",
-}
 
 
 def main():
@@ -192,14 +245,12 @@ def main():
     rng  = random.Random(42)
     hoy  = date.today()
 
-    # Series temporales
     serie_rows = []
     for offset in range(args.dias, 0, -1):
         d = hoy - timedelta(days=offset)
         for fk, p in _SERIES.items():
             serie_rows.append((_SHOWROOM_UUID, fk, str(d), _serie_val(p, d, rng)))
 
-    # Eventos
     cal_rows = []
     for ev in _EVENTS:
         meta = json.dumps({
@@ -207,10 +258,10 @@ def main():
             "descripcion":  ev["desc"],
             "impacto":      ev["impacto"],
             "asistentes":   ev["asistentes"],
-            "icono":        _KEY_ICONS.get(ev["key"], "📍"),
+            "icono_fa":     _KEY_FA_ICONS.get(ev["key"], "fas fa-calendar"),
         }, ensure_ascii=False)
         cal_rows.append((
-            None,  # org_uuid — se rellena abajo
+            None,
             _SHOWROOM_UUID,
             "ES",
             ev["key"],
@@ -223,13 +274,21 @@ def main():
     if args.dry_run:
         print(f"Series: {len(serie_rows)} filas | Eventos: {len(cal_rows)}")
         for ev in sorted(_EVENTS, key=lambda e: e["fi"])[-5:]:
-            print(f"  {ev['fi']}  {_KEY_ICONS.get(ev['key'],'')} {ev['titulo']}")
+            print(f"  {ev['fi']}  {ev['titulo']}")
         return
 
     from src.db.store import get_conn
     conn = get_conn()
 
-    # Obtener org_uuid de Showroom
+    # Registrar feature_keys (FK constraint en store_features_ext)
+    for fk in _SERIES:
+        conn.execute(
+            "INSERT INTO feature_registry (feature_key, label, tipo, descripcion) "
+            "VALUES (?, ?, 'ext_area', '') "
+            "ON CONFLICT (feature_key) DO NOTHING",
+            [fk, fk.replace("_", " ").title()],
+        )
+
     org_row = conn.execute(
         "SELECT org_uuid FROM dim_ubicaciones WHERE location_uuid = ?",
         [_SHOWROOM_UUID],
@@ -241,9 +300,18 @@ def main():
             "DELETE FROM store_calendario_org WHERE location_uuid = ? AND fuente = 'mock'",
             [_SHOWROOM_UUID],
         )
+        fk_list = list(_SERIES.keys())
+        placeholders = ",".join(["?" for _ in fk_list])
         conn.execute(
-            "DELETE FROM store_features_ext WHERE location_uuid = ? AND feature_key IN (?,?)",
-            [_SHOWROOM_UUID, "afluencia_metro_gran_via", "n_turistas_isocrona"],
+            f"DELETE FROM store_features_ext "
+            f"WHERE location_uuid = ? AND feature_key IN ({placeholders})",
+            [_SHOWROOM_UUID] + fk_list,
+        )
+        # Limpiar también clave antigua si existe
+        conn.execute(
+            "DELETE FROM store_features_ext "
+            "WHERE location_uuid = ? AND feature_key = 'afluencia_metro_gran_via_l1l5'",
+            [_SHOWROOM_UUID],
         )
         print("Datos mock anteriores eliminados.")
 
