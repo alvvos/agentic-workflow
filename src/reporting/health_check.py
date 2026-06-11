@@ -628,7 +628,7 @@ def _render_zona_card(zona, r, a, d, dias_28, uid, periodo_label="semana",
         pct_str = "—"
     elif gap_anterior:
         sem_color, arrow = _C_AMBER, "fas fa-triangle-exclamation"
-        pct_str = f"~{dv:+.0f}%"
+        pct_str = "—"
     elif dv >= 5:
         sem_color, arrow = _C_SUCCESS, "fas fa-arrow-up"
         pct_str = f"{dv:+.0f}%"
