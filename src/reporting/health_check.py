@@ -972,7 +972,7 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
     # ── Jerarquía de zonas ───────────────────────────────────────────────
     zona_children_map: dict[str, list[str]] = {}
     child_zone_names: set[str] = set()
-    for parent_name, child_dicts in _dm.mapa_hijos_por_zona.items():
+    for parent_name, child_dicts in _dm.mapa_hijos_por_zona.get(location_uuid or '', {}).items():
         names = [z['value'] for z in child_dicts]
         if names:
             zona_children_map[parent_name] = names

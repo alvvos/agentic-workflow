@@ -75,11 +75,10 @@ def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, pm_ventana
         visor_children.append(html.Span(comparativa_txt, className="badge bg-primary text-white shadow-sm fs-6"))
     visor = html.Div(visor_children)
 
-    child_zone_names = {
-        z['label']
-        for children in data_master.mapa_hijos_por_zona.values()
-        for z in children
-    }
+    child_zone_names: set = set()
+    for l in (locs or []):
+        for children in data_master.mapa_hijos_por_zona.get(l, {}).values():
+            child_zone_names.update(z['label'] for z in children)
     bi_content = generar_panel_bi_completo(df_bi, df_bi_hist, comp, child_zones=child_zone_names)
     audit_content = generar_tabla_auditoria(df_actual) if not df_actual.empty else dbc.Alert("No hay datos para el radar en estas fechas.", color="info", className="rounded-4")
 

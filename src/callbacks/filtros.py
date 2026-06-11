@@ -87,7 +87,13 @@ def render_child_zone_selectors(locs, selected_parents):
         return []
     children_ui = []
     for parent_name in selected_parents:
-        child_zones = data_master.mapa_hijos_por_zona.get(parent_name, [])
+        child_zones = []
+        seen_vals: set = set()
+        for l in (locs or []):
+            for z in data_master.mapa_hijos_por_zona.get(l, {}).get(parent_name, []):
+                if z['value'] not in seen_vals:
+                    child_zones.append(z)
+                    seen_vals.add(z['value'])
         if not child_zones:
             continue
         children_ui.append(

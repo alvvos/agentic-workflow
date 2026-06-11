@@ -12,7 +12,7 @@ mapa_tiendas:        dict = {}
 mapa_zonas:          dict = {}
 mapa_zonas_por_loc:  dict = {}
 mapa_orgs:           dict = {}
-mapa_hijos_por_zona: dict = {}  # {parent_zone_name: [child_zone_dicts]}
+mapa_hijos_por_zona: dict = {}  # {loc_uuid: {parent_zone_name: [child_zone_dicts]}}
 
 _last_load: float = 0.0
 _TTL = 5.0  # segundos mínimos entre recargas
@@ -64,7 +64,7 @@ def _load_from_db() -> None:
         mapa_zonas_por_loc.setdefault(loc_uuid, []).append(z)
         if parent_uuid:
             parent_name = mapa_zonas.get(parent_uuid, parent_uuid)
-            mapa_hijos_por_zona.setdefault(parent_name, []).append(z)
+            mapa_hijos_por_zona.setdefault(loc_uuid, {}).setdefault(parent_name, []).append(z)
 
 
 def get_opciones_orgs_for_user(org_access: list | None) -> list:
