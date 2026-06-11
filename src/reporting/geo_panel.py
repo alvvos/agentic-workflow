@@ -64,6 +64,105 @@ _SPATIAL_LABELS = {
     "tourist_poi": "Polo turístico",
     "event_venue": "Sala de eventos",
 }
+
+# ── Contexto externo temporal ─────────────────────────────────────────────────
+_UNIVERSAL_EXT_KEYS = frozenset({
+    'ev_festivo_regional', 'ev_rank_concierto', 'ev_rank_deportivo',
+    'ev_rank_festival', 'ev_rank_municipal', 'ev_rank_total',
+    'ev_vacaciones_escolares', 'llueve', 'temp_max', 'temp_min',
+})
+_EXT_FEATURE_META = {
+    'n_pasajeros_crucero_dia': ('Pasajeros crucero', 'pax',      'sum', '#1abc9c'),
+    'afluencia_metro_gran_via': ('Metro Gran Vía',   'val./día', 'mean', '#1abc9c'),
+    'n_turistas_isocrona':     ('Turistas isocrona','pers./día','mean', '#f39c12'),
+    'n_eventos_gran_via':      ('Eventos Gran Vía', 'eventos',  'sum',  '#9b59b6'),
+}
+_MESES_ES_GEO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+
+
+def _ext_context_charts(location_uuid: str) -> list:
+    """
+    Devuelve una lista de columnas dbc.Col con charts de contexto externo.
+    Vacía si la ubicación no tiene features location-specific en store_features_ext.
+    """
+    from datetime import date, timedelta
+    try:
+        from src.db.store import get_conn
+        rows = get_conn().execute(
+            """SELECT feature_key, fecha::text, value
+               FROM   store_features_ext
+               WHERE  location_uuid = ? AND value IS NOT NULL
+                 AND  fecha >= ?
+               ORDER  BY feature_key, fecha""",
+            [location_uuid, str(date.today() - timedelta(days=112))],
+        ).fetchall()
+    except Exception:
+        return []
+
+    if not rows:
+        return []
+
+    df = pd.DataFrame(rows, columns=['feature_key', 'fecha', 'value'])
+    df['fecha'] = pd.to_datetime(df['fecha'])
+    keys = [k for k in df['feature_key'].unique() if k not in _UNIVERSAL_EXT_KEYS]
+    if not keys:
+        return []
+
+    df = df[df['feature_key'].isin(keys)].copy()
+    df['semana'] = df['fecha'].dt.to_period('W').dt.start_time
+
+    cols = []
+    for fk in sorted(keys):
+        label, unidad, agg_fn, color = _EXT_FEATURE_META.get(
+            fk, (fk.replace('_', ' ').title(), '', 'sum', _C_PRIMARY))
+
+        df_k   = df[df['feature_key'] == fk]
+        sem    = df_k.groupby('semana')['value'].agg(agg_fn).reset_index().sort_values('semana').tail(8)
+        s_lbls = [f"S{r.isocalendar()[1]}" for r in sem['semana'].dt.date]
+        s_vals = sem['value'].tolist()
+
+        # KPI: última semana y delta
+        kpi_html = html.Span()
+        if len(s_vals) >= 2 and s_vals[-2] > 0:
+            pct = (s_vals[-1] - s_vals[-2]) / s_vals[-2] * 100
+            arrow = '▲' if pct > 0 else '▼'
+            c_kpi = '#27ae60' if pct > 0 else '#e74c3c'
+            kpi_html = html.Span(f"{arrow} {pct:+.1f}% vs sem. ant.",
+                                 style={'color': c_kpi, 'fontSize': '0.72rem', 'fontWeight': '700'})
+
+        last_val = s_vals[-1] if s_vals else 0
+        val_fmt  = f"{int(last_val):,}" if last_val >= 1 else f"{last_val:.2f}"
+
+        fig = go.Figure(go.Bar(
+            x=s_lbls, y=s_vals,
+            marker_color=color, opacity=0.82,
+            text=[f"<b>{int(v):,}</b>" if v >= 100 else '' for v in s_vals],
+            textposition='outside',
+            textfont=dict(size=9, color='#2c3e50'),
+        ))
+        fig.update_layout(
+            plot_bgcolor='white', paper_bgcolor='white',
+            margin=dict(t=8, b=8, l=8, r=8),
+            xaxis=dict(showgrid=False, tickfont=dict(size=9, color='#7f8c8d')),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', visible=False),
+            height=160,
+        )
+
+        gid = f"ext-geo-{location_uuid[:8]}-{fk}"
+        card = dbc.Card(dbc.CardBody([
+            html.Div([
+                html.Span(label, className="fw-bold me-2",
+                          style={'fontSize': '0.82rem', 'color': _C_DARK}),
+                html.Span(f"{val_fmt} {unidad} esta semana",
+                          className="text-muted me-2", style={'fontSize': '0.72rem'}),
+                kpi_html,
+            ], className="d-flex align-items-center flex-wrap gap-1 mb-1"),
+            dcc.Graph(id=gid, figure=fig, config=_CFG, style={'height': '160px'}),
+        ], className="px-3 py-2"),
+        className="border-0 shadow-sm rounded-4 h-100 bg-white")
+        cols.append(dbc.Col(card, xs=12, md=6, className="mb-3"))
+
+    return cols
 _C_GREEN   = "#28A745"
 _C_AMBER   = "#f39c12"
 _C_RED     = "#DC3545"
@@ -999,11 +1098,11 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
             dbc.Col(
                 html.Div(
                     dbc.Badge(
-                        (f"Esri · {pd.Timestamp(fecha_captura).strftime('%d/%m/%Y')}"
-                         if fecha_captura else "Esri · datos disponibles"),
+                        (pd.Timestamp(fecha_captura).strftime('%d/%m/%Y')
+                         if fecha_captura else "datos disponibles"),
                         color="success", pill=True, className="fs-6 px-3 py-2",
                     ) if activos else
-                    dbc.Badge("Esri · pendiente", color="secondary", pill=True, className="fs-6 px-3 py-2"),
+                    dbc.Badge("pendiente", color="secondary", pill=True, className="fs-6 px-3 py-2"),
                     className="d-flex justify-content-end align-items-center h-100",
                 ), xs=3,
             ),
@@ -1014,7 +1113,7 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
 
     if not activos:
         return html.Div([header, dbc.Card(
-            dbc.CardBody(html.P("Variables geoespaciales pendientes de integración con Esri.",
+            dbc.CardBody(html.P("Variables geoespaciales pendientes de integración.",
                                 className="text-muted small mb-0")),
             className="border-0 shadow-sm rounded-4 mb-3 bg-white",
         )])
@@ -1064,13 +1163,15 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
             xs=12, lg=5, className="mb-3",
         ))
     if fig_mapa:
-        iso_label = "Área de influencia · isócronas peatonales Esri (WalkTime)" if get_catchment_rings(location_uuid) else "Área de influencia · isócronas aproximadas (círculos)"
+        iso_label = "Área de influencia · isócronas peatonales" if get_catchment_rings(location_uuid) else "Área de influencia · isócronas aproximadas"
         sec_a_charts.append(dbc.Col(
             _chart_card(fig_mapa, f"geo-map-{uid}", _H_CHART,
                         title=iso_label,
                         insight=ins_captacion),
             xs=12, lg=7, className="mb-3",
         ))
+
+    ext_cols = _ext_context_charts(location_uuid)
 
     sec_a_charts2 = []
     if fig_edad:
@@ -1088,11 +1189,21 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
             xs=12, lg=6, className="mb-3",
         ))
 
+    ext_section = html.Div([
+        html.Div([
+            html.I(className="fas fa-broadcast-tower me-2", style={'color': _C_TEAL}),
+            html.Span("Señales externas en el área", className="fw-bold text-dark",
+                      style={'fontSize': '0.88rem'}),
+        ], className="d-flex align-items-center border-bottom pb-2 mb-3 mt-1"),
+        dbc.Row(ext_cols, className="g-2"),
+    ], className="mb-3") if ext_cols else html.Div()
+
     seccion_a = html.Div([
         _section_header("fas fa-walking", "Alcance peatonal",
                         "¿Cuántas personas pueden llegar a pie y cuál es su perfil demográfico?"),
         _render_cards(cards_a, max_per_row=4),
         _row(sec_a_charts),
+        ext_section,
         _row(sec_a_charts2),
     ], className="mb-4")
 

@@ -1344,12 +1344,6 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
         ventana=ventana, child_zones=child_zone_names,
     )
 
-    # ── 4b. Eventos externos (features location-specific) ─────────────
-    eventos_ext = (
-        _render_eventos_externos(location_uuid, fecha_max)
-        if location_uuid else None
-    ) or html.Div()
-
     # ── 5. Geo panel ─────────────────────────────────────────────────────
     geo = (
         generar_panel_geo_visual(location_uuid, geo_vals_loc, clima,
@@ -1383,7 +1377,6 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
         narrativa,
         zonas_section,
         dias_section,
-        eventos_ext,
         geo,
     ])
 
