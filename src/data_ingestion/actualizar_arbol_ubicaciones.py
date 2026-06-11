@@ -57,6 +57,12 @@ _PRESET_MX = {
 _PRESETS = {'ES': _PRESET_ES, 'MX': _PRESET_MX}
 
 
+def _tiene_cp_y_dir(loc: dict) -> bool:
+    cp  = (loc.get('postCode') or loc.get('postal_code') or '').strip()
+    dir_ = (loc.get('address') or '').strip()
+    return bool(cp) and bool(dir_)
+
+
 def _pais(loc: dict) -> str:
     if loc.get('country_code'):
         return loc['country_code'].upper()
@@ -113,6 +119,7 @@ def descargar_maestro_ubicaciones():
     }
 
     n_orgs = n_locs = n_zones = n_geo_rest = n_zt_rest = 0
+    n_orgs_skip = n_locs_skip = 0
 
     org_rows, loc_rows, zone_rows = [], [], []
 
@@ -120,13 +127,20 @@ def descargar_maestro_ubicaciones():
         org_uuid = org.get('uuid')
         if not org_uuid:
             continue
+
+        locs_validas = [loc for loc in org.get('locations', []) if _tiene_cp_y_dir(loc)]
+        n_locs_skip += len(org.get('locations', [])) - len(locs_validas)
+        if not locs_validas:
+            n_orgs_skip += 1
+            continue
+
         n_orgs += 1
-        first_loc = org['locations'][0] if org.get('locations') else {}
+        first_loc = locs_validas[0]
         pais = _pais(first_loc)
         config = json.dumps(_PRESETS.get(pais, _PRESET_ES))
         org_rows.append((org_uuid, org['name'], pais, config))
 
-        for loc in org.get('locations', []):
+        for loc in locs_validas:
             n_locs += 1
             mem = mem_locs.get(loc['uuid'], {})
             lat = loc.get('lat') or mem.get('lat')
@@ -205,8 +219,8 @@ def descargar_maestro_ubicaciones():
     n_with_parent = sum(1 for r in zone_rows if r[5] is not None)
     n_last_zone   = sum(1 for r in zone_rows if r[7])
     print('OK — árbol de ubicaciones actualizado en PostgreSQL.')
-    print(f'  Organizaciones : {n_orgs}')
-    print(f'  Ubicaciones    : {n_locs}  ({n_geo_rest} con geo preservada)')
+    print(f'  Organizaciones : {n_orgs}  ({n_orgs_skip} sin ubicaciones válidas, omitidas)')
+    print(f'  Ubicaciones    : {n_locs}  ({n_locs_skip} sin CP/dirección, omitidas · {n_geo_rest} con geo preservada)')
     print(f'  Zonas          : {n_zones}  ({n_zt_rest} con zoneType preservado)')
     print(f'  Jerarquía      : {n_with_parent} zonas con padre asignado · {n_last_zone} hojas (lastZone)')
 
