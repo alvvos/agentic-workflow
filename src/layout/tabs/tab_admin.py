@@ -9,6 +9,43 @@ def build_tab_admin():
         dcc.Store(id='admin-crud-signal', data=0),
         dcc.Store(id='admin-pending-delete', data=None),
         dcc.Store(id='admin-zone-edit-loc', data=None),
+        dcc.Store(id='admin-access-modal-user', data=None),
+
+        # Modal gestión de acceso por organización
+        dbc.Modal([
+            dbc.ModalHeader(
+                dbc.ModalTitle([
+                    html.I(className="fas fa-key me-2"),
+                    html.Span(id="admin-access-modal-title"),
+                ], className="fw-bold text-primary"),
+                close_button=True,
+            ),
+            dbc.ModalBody(html.Div([
+                html.P(
+                    id="admin-access-modal-info",
+                    className="text-muted small mb-3",
+                ),
+                dbc.Checklist(
+                    id="admin-access-checklist",
+                    options=[],
+                    value=[],
+                    input_class_name="me-2",
+                ),
+            ], className="px-1")),
+            dbc.ModalFooter([
+                dbc.Button(
+                    [html.I(className="fas fa-times me-2"), "Cancelar"],
+                    id="admin-access-modal-cancel", color="secondary",
+                    outline=True, className="rounded-3 me-2",
+                ),
+                dbc.Button(
+                    [html.I(className="fas fa-save me-2"), "Guardar acceso"],
+                    id="admin-access-modal-save", color="primary",
+                    className="rounded-3 fw-bold shadow-sm",
+                ),
+            ]),
+        ], id="admin-access-modal", is_open=False, size="lg", centered=True,
+           contentClassName="border-0 rounded-4 shadow"),
 
         # Modal edición jerarquía de zonas
         dbc.Modal([

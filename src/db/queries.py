@@ -451,6 +451,54 @@ def get_all_zones_flat() -> list[dict]:
     ]
 
 
+def get_active_ext_features(
+    location_uuid: str,
+    fecha_min: pd.Timestamp,
+    fecha_max: pd.Timestamp,
+) -> pd.DataFrame:
+    """
+    Devuelve un DataFrame (índice DatetimeIndex diario) con una columna por cada
+    feature activa en feature_flags para esta location.
+
+    Forward-fill diario aplicado: features mensuales (ICM) se propagan al resto del mes.
+    """
+    from src.db.store import get_conn
+    conn = get_conn()
+
+    rows = conn.execute("""
+        SELECT feature_key
+        FROM   feature_flags
+        WHERE  location_uuid = ?
+          AND  status = 'active'
+        ORDER  BY feature_key
+    """, [location_uuid]).fetchall()
+
+    feature_keys = [r[0] for r in rows]
+    if not feature_keys:
+        return pd.DataFrame(index=pd.date_range(fecha_min, fecha_max, freq='D'))
+
+    full_idx = pd.date_range(fecha_min, fecha_max, freq='D')
+    result   = pd.DataFrame(index=full_idx)
+
+    for fk in feature_keys:
+        df = conn.execute("""
+            SELECT fecha, value::double precision AS value
+            FROM   store_features_ext
+            WHERE  location_uuid = ?
+              AND  feature_key   = ?
+              AND  fecha BETWEEN ? AND ?
+            ORDER  BY fecha
+        """, [location_uuid, fk, fecha_min.date(), fecha_max.date()]).df()
+
+        if df.empty:
+            continue
+        df['fecha'] = pd.to_datetime(df['fecha'])
+        serie = df.set_index('fecha')['value'].reindex(full_idx).fillna(0.0)
+        result[fk] = serie.values
+
+    return result
+
+
 def _snap_value(col_snaps: pd.DataFrame, fecha: pd.Timestamp) -> Optional[float]:
     mask = (col_snaps['valid_from'] <= fecha) & (col_snaps['valid_to'] >= fecha)
     rows = col_snaps[mask]

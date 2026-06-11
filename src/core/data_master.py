@@ -67,6 +67,14 @@ def _load_from_db() -> None:
             mapa_hijos_por_zona.setdefault(parent_name, []).append(z)
 
 
+def get_opciones_orgs_for_user(org_access: list | None) -> list:
+    """Devuelve las opciones de org filtradas por acceso. None → admin (ve todo)."""
+    if org_access is None:
+        return list(opciones_orgs)
+    allowed = set(org_access)
+    return [o for o in opciones_orgs if o['value'] in allowed]
+
+
 def reload_if_changed() -> bool:
     """Recarga desde DuckDB con TTL de 5 s. Devuelve True si recargó."""
     global _last_load

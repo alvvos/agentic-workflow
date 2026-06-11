@@ -3,7 +3,8 @@ from dash import html, dcc
 import dash_bootstrap_components as dbc
 
 from src.core.config import MODO_DESARROLLO
-from src.core.auth import get_current_role
+from src.core.auth import get_current_role, get_current_org_access
+from src.core import data_master
 from src.layout.sidebar import build_sidebar
 from src.layout.tabs.tab_pm import build_tab_pm
 from src.chatbot.chat_panel import build_chat_fab, build_chat_modal
@@ -17,7 +18,9 @@ def serve_layout():
     session_id = "local_dev" if MODO_DESARROLLO else flask.session.get('user', '')
     role = get_current_role()
 
-    sidebar = build_sidebar()
+    data_master.reload_if_changed()
+    org_options = data_master.get_opciones_orgs_for_user(get_current_org_access())
+    sidebar = build_sidebar(org_options=org_options)
 
     main_content = html.Div([
         dbc.Row([

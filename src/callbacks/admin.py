@@ -37,6 +37,23 @@ def _update_role(username: str, new_role: str) -> None:
     get_conn().execute("UPDATE dim_usuarios SET role = ? WHERE user_id = ?", [new_role, username])
 
 
+def _get_user_org_access(user_id: str) -> list[str]:
+    rows = get_conn().execute(
+        "SELECT org_uuid FROM user_org_access WHERE user_id = ? ORDER BY org_uuid", [user_id]
+    ).fetchall()
+    return [r[0] for r in rows]
+
+
+def _set_user_org_access(user_id: str, org_uuids: list[str]) -> None:
+    conn = get_conn()
+    conn.execute("DELETE FROM user_org_access WHERE user_id = ?", [user_id])
+    if org_uuids:
+        conn.executemany(
+            "INSERT INTO user_org_access (user_id, org_uuid) VALUES (?, ?)",
+            [(user_id, uuid) for uuid in org_uuids],
+        )
+
+
 def _normalize(entry) -> dict:
     if isinstance(entry, str):
         return {"password": entry, "role": "user"}
@@ -87,7 +104,7 @@ def _zone_modal_body(loc_uuid: str):
     conn = get_conn()
     zones = conn.execute(
         "SELECT zone_uuid, nombre, zone_type, parent_zone_uuid, hidden"
-        " FROM dim_zonas WHERE location_uuid = ? ORDER BY nombre",
+        " FROM dim_zonas WHERE location_uuid = ? ORDER BY sort_order, nombre",
         [loc_uuid],
     ).fetchall()
 
@@ -97,11 +114,24 @@ def _zone_modal_body(loc_uuid: str):
             color="info", className="rounded-3 border-0",
         )
 
+    # Build parent→children map; treat unknown parents as roots
+    by_uuid     = {z[0]: z for z in zones}
+    children_of = {z[0]: [] for z in zones}
+    roots       = []
+    for z in zones:
+        zone_uuid, _, _, parent_uuid, _ = z
+        if parent_uuid and parent_uuid in by_uuid:
+            children_of[parent_uuid].append(zone_uuid)
+        else:
+            roots.append(zone_uuid)
+
     all_opts = [{"label": z[1], "value": z[0]} for z in zones]
 
-    rows = []
-    for zone_uuid, nombre, zone_type, parent_uuid, hidden in zones:
+    def _rows(uuid: str, depth: int = 0) -> list:
+        zone_uuid, nombre, zone_type, parent_uuid, hidden = by_uuid[uuid]
         visible = not bool(hidden)
+        is_leaf = not children_of[uuid]
+
         opts = [{"label": "Sin padre", "value": ""}] + [
             o for o in all_opts if o["value"] != zone_uuid
         ]
@@ -109,12 +139,21 @@ def _zone_modal_body(loc_uuid: str):
             dbc.Badge(zone_type, color="info", pill=True, className="fw-normal")
             if zone_type else html.Span("—", className="text-muted small")
         )
-        rows.append(html.Tr([
-            html.Td(
-                [html.I(className="fas fa-layer-group me-2 text-primary"),
-                 html.Span(nombre, className="fw-semibold")],
-                className="align-middle py-2 px-3",
-            ),
+        icon = "fa-circle fa-xs text-muted" if is_leaf else "fa-layer-group text-primary"
+        name_cell = html.Div(
+            [
+                html.I(className=f"fas {icon} me-2"),
+                html.Span(nombre, className="fw-semibold"),
+                *(
+                    [dbc.Badge("hoja", color="success", pill=True,
+                               className="fw-normal ms-2 opacity-75")]
+                    if is_leaf else []
+                ),
+            ],
+            style={"paddingLeft": f"{depth * 22}px"},
+        )
+        result = [html.Tr([
+            html.Td(name_cell, className="align-middle py-2 px-3"),
             html.Td(type_badge, className="align-middle"),
             html.Td(
                 dcc.Dropdown(
@@ -123,7 +162,7 @@ def _zone_modal_body(loc_uuid: str):
                     value=parent_uuid or "",
                     clearable=False,
                     className="shadow-sm",
-                    style={"minWidth": "200px"},
+                    style={"minWidth": "180px"},
                 ),
                 className="align-middle",
             ),
@@ -136,7 +175,14 @@ def _zone_modal_body(loc_uuid: str):
                 ),
                 className="align-middle text-center",
             ),
-        ]))
+        ])]
+        for child_uuid in children_of[uuid]:
+            result.extend(_rows(child_uuid, depth + 1))
+        return result
+
+    rows = []
+    for root_uuid in roots:
+        rows.extend(_rows(root_uuid))
 
     return dbc.Table(
         [
@@ -191,13 +237,23 @@ def _render_users_table(users: dict) -> html.Div:
                 html.Td(
                     dbc.ButtonGroup([
                         dbc.Button(
+                            [html.I(className="fas fa-key me-1"), "Acceso"],
+                            id={"type": "admin-access-btn", "index": username},
+                            size="sm",
+                            color="info",
+                            outline=True,
+                            className="rounded-start-3 fw-bold",
+                            disabled=role == "admin",
+                            title="Gestionar acceso a organizaciones" if role != "admin" else "Los administradores tienen acceso total",
+                        ),
+                        dbc.Button(
                             [html.I(className=f"fas {'fa-user-shield' if role == 'user' else 'fa-user'} me-1"),
                              "→ Admin" if role == "user" else "→ Usuario"],
                             id={"type": "admin-del-btn", "index": f"role:{username}"},
                             size="sm",
                             color="warning" if role == "user" else "secondary",
                             outline=True,
-                            className="rounded-start-3 fw-bold",
+                            className="fw-bold",
                             disabled=me,
                         ),
                         dbc.Button(
@@ -532,7 +588,6 @@ def handle_delete_modal(_, __, pending, signal):
         if not row:
             return no_update, *_u, "Ubicación no encontrada.", True, "warning", False
         nombre = row[0]
-        conn.execute("DELETE FROM dim_zonas WHERE location_uuid = ?", [identifier])
         conn.execute("DELETE FROM dim_ubicaciones WHERE location_uuid = ?", [identifier])
         return (signal or 0) + 1, *_u, f"Ubicación '{nombre}' eliminada.", True, "success", False
 
@@ -544,12 +599,6 @@ def handle_delete_modal(_, __, pending, signal):
         if not row:
             return no_update, *_u, "Organización no encontrada.", True, "warning", False
         nombre = row[0]
-        loc_uuids = [r[0] for r in conn.execute(
-            "SELECT location_uuid FROM dim_ubicaciones WHERE org_uuid = ?", [identifier]
-        ).fetchall()]
-        for loc_uuid in loc_uuids:
-            conn.execute("DELETE FROM dim_zonas WHERE location_uuid = ?", [loc_uuid])
-        conn.execute("DELETE FROM dim_ubicaciones WHERE org_uuid = ?", [identifier])
         conn.execute("DELETE FROM dim_organizaciones WHERE org_uuid = ?", [identifier])
         return (signal or 0) + 1, *_u, f"Organización '{nombre}' eliminada.", True, "success", False
 
@@ -625,6 +674,66 @@ def open_zone_modal(edit_clicks, _cancel):
     return True, f"Jerarquía de zonas — {nombre_loc}", _zone_modal_body(loc_uuid), loc_uuid
 
 
+# ── Modal acceso a organizaciones ────────────────────────────────────────────
+
+@app.callback(
+    Output("admin-access-modal", "is_open"),
+    Output("admin-access-modal-title", "children"),
+    Output("admin-access-modal-info", "children"),
+    Output("admin-access-checklist", "options"),
+    Output("admin-access-checklist", "value"),
+    Output("admin-access-modal-user", "data"),
+    Input({"type": "admin-access-btn", "index": ALL}, "n_clicks"),
+    Input("admin-access-modal-cancel", "n_clicks"),
+    prevent_initial_call=True,
+)
+def open_access_modal(access_clicks, _cancel):
+    from src.core import data_master as dm
+    ctx = callback_context
+    trigger = (ctx.triggered or [{}])[0].get("prop_id", "")
+
+    if "admin-access-modal-cancel" in trigger:
+        return False, no_update, no_update, no_update, no_update, no_update
+
+    if all((n or 0) == 0 for n in access_clicks):
+        return no_update, no_update, no_update, no_update, no_update, no_update
+
+    try:
+        username = json.loads(trigger.split(".")[0])["index"]
+    except Exception:
+        return no_update, no_update, no_update, no_update, no_update, no_update
+
+    dm.reload_if_changed()
+    current = _get_user_org_access(username)
+    options = [{"label": o["label"], "value": o["value"]} for o in dm.opciones_orgs]
+    info = [
+        html.I(className="fas fa-info-circle me-2 text-info"),
+        f"Organizaciones accesibles para '{username}'. Sin selección, el usuario no verá datos.",
+    ]
+    return True, f"Acceso a organizaciones — {username}", info, options, current, username
+
+
+@app.callback(
+    Output("admin-access-modal", "is_open", allow_duplicate=True),
+    Output("admin-users-feedback", "children", allow_duplicate=True),
+    Output("admin-users-feedback", "is_open", allow_duplicate=True),
+    Output("admin-users-feedback", "color", allow_duplicate=True),
+    Output("admin-crud-signal", "data", allow_duplicate=True),
+    Input("admin-access-modal-save", "n_clicks"),
+    State("admin-access-checklist", "value"),
+    State("admin-access-modal-user", "data"),
+    State("admin-crud-signal", "data"),
+    prevent_initial_call=True,
+)
+def save_access_modal(n_clicks, selected_orgs, user_id, signal):
+    if not n_clicks or not user_id:
+        return no_update, no_update, no_update, no_update, no_update
+    _set_user_org_access(user_id, selected_orgs or [])
+    n = len(selected_orgs or [])
+    msg = f"Acceso de '{user_id}' actualizado — {n} organización{'es' if n != 1 else ''}."
+    return False, msg, True, "success", (signal or 0) + 1
+
+
 @app.callback(
     Output("admin-zone-modal", "is_open", allow_duplicate=True),
     Output("admin-locs-feedback", "children", allow_duplicate=True),
@@ -643,13 +752,23 @@ def save_zone_hierarchy(n_clicks, parent_values, zone_ids, visible_values, signa
         return no_update, no_update, no_update, no_update, no_update
 
     conn = get_conn()
+    uuid_to_parent: dict[str, str | None] = {}
     for id_dict, parent_val, visible in zip(zone_ids, parent_values, visible_values):
         zone_uuid   = id_dict["index"]
         parent_uuid = parent_val if parent_val else None
         hidden      = not bool(visible)
+        uuid_to_parent[zone_uuid] = parent_uuid
         conn.execute(
             "UPDATE dim_zonas SET parent_zone_uuid = ?, hidden = ? WHERE zone_uuid = ?",
             [parent_uuid, hidden, zone_uuid],
+        )
+
+    # Re-derive last_zone: a zone is a leaf when no other zone in the batch lists it as parent
+    parent_set = set(v for v in uuid_to_parent.values() if v)
+    for zone_uuid in uuid_to_parent:
+        conn.execute(
+            "UPDATE dim_zonas SET last_zone = ? WHERE zone_uuid = ?",
+            [zone_uuid not in parent_set, zone_uuid],
         )
 
     n = len(zone_ids)

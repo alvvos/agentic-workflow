@@ -182,31 +182,15 @@ def seed_feature_registry() -> int:
     # Import here to avoid circular deps at module level
     from src.data_processing.geo_enrichment import GEO_FEATURE_COLS
     from src.data_processing.supercalendario import CALENDARIO_FEATURE_COLS
-    from src.data_processing.eventos_client import EVENTOS_FEATURE_COLS
 
     conn = get_conn()
     entries = []
 
     for key in GEO_FEATURE_COLS:
-        entries.append((key, 'esri', 'geo', '"all"', None, 'active', None, None))
+        entries.append((key, 'esri', 'geo', '"all"', None, 'incompleto', None, None))
 
     for key in CALENDARIO_FEATURE_COLS:
-        entries.append((key, 'supercalendario', 'calendario', '"all"', None, 'active', None, None))
-
-    _EVENTOS_NOTAS = {
-        'ev_vacaciones_escolares': 'Vacaciones escolares por CCAA/región. Fuente: Open Holidays API (sin key).',
-        'ev_festivo_regional':     'Festivos regionales/locales más allá del nacional. Fuente: Open Holidays API.',
-        'ev_rank_deportivo':       'Score 0-100 de eventos deportivos (partidos liga + Ticketmaster + TheSportsDB).',
-        'ev_rank_concierto':       'Score 0-100 de conciertos/música en radio 10 km. Fuente: Ticketmaster (key opcional).',
-        'ev_rank_festival':        'Score 0-100 de festivales/teatro/cultura. Fuente: Ticketmaster + agenda municipal.',
-        'ev_rank_municipal':       'Score 0-100 de eventos agenda cultural municipal. Fuente: datos.gob.es.',
-        'ev_rank_total':           'Score 0-100 agregado de todas las fuentes de eventos.',
-    }
-    for key in EVENTOS_FEATURE_COLS:
-        entries.append((
-            key, 'eventos_externos', 'evento', '"all"', None, 'testing', None,
-            _EVENTOS_NOTAS.get(key, ''),
-        ))
+        entries.append((key, 'supercalendario', 'calendario', '"all"', None, 'con_cobertura', None, None))
 
     # Open-Meteo weather — stored in store_features_ext, fetched on first training call
     for key, nota in [
@@ -214,14 +198,14 @@ def seed_feature_registry() -> int:
         ('temp_min', 'Temperatura mínima diaria (°C). API Open-Meteo archive. Caché en store_features_ext.'),
         ('llueve',   'Precipitación > 0 mm (0/1). API Open-Meteo archive. Caché en store_features_ext.'),
     ]:
-        entries.append((key, 'open_meteo', 'clima', '"all"', None, 'active', None, nota))
+        entries.append((key, 'open_meteo', 'clima', '"all"', None, 'con_cobertura', None, nota))
 
     # Port data placeholder — Málaga Muelle 1 only
     entries.append((
         'n_pasajeros_crucero_dia', 'puerto_malaga', 'evento',
         json.dumps(['5c13b57d-782d-4458-911b-64cd40eebb55']),  # Miniso España org
         json.dumps(['67034276-0d01-4c90-a363-fa75699a19a4']),  # Malaga Muelle 1
-        'testing', None,
+        'con_cobertura', None,
         'Escalas de cruceros en Puerto Málaga. Datos públicos en puertodemalaga.es. '
         'Pendiente ingesta automática.',
     ))
@@ -230,11 +214,11 @@ def seed_feature_registry() -> int:
         """
         INSERT INTO feature_registry
             (feature_key, source, categoria, org_applicability, location_applicability,
-             status, wmape_delta, notas)
-        VALUES (?,?,?,?,?,?,?,?)
+             status, notas)
+        VALUES (?,?,?,?,?,?,?)
         ON CONFLICT DO NOTHING
         """,
-        entries,
+        [(e[0], e[1], e[2], e[3], e[4], e[5], e[7]) for e in entries],
     )
     return len(entries)
 
@@ -307,16 +291,44 @@ def seed_conversaciones() -> int:
     return total
 
 
-def reject_esri_features() -> int:
-    """Mark all Esri features as rejected — static snapshots with no temporal signal."""
+def seed_feature_flags() -> dict:
+    """
+    Seeds feature_flags for climate and geo features across all active locations.
+    - open_meteo → active  (climate variables always enter the model)
+    - esri       → inactive (no temporal signal; excluded globally)
+    Idempotent: ON CONFLICT DO UPDATE enforces the target state on every run.
+    Returns {'active': n, 'inactive': n}.
+    """
     conn = get_conn()
-    conn.execute("""
-        UPDATE feature_registry
-        SET status = 'rejected',
-            notas  = 'Datos estáticos sin varianza temporal. No aportan señal al modelo de forecasting. Retirados 2026-06-01.'
-        WHERE source = 'esri' AND status != 'rejected'
-    """)
-    return conn.execute("SELECT COUNT(*) FROM feature_registry WHERE source = 'esri'").fetchone()[0]
+
+    locs = [r[0] for r in conn.execute(
+        "SELECT location_uuid FROM dim_ubicaciones WHERE activa = TRUE"
+    ).fetchall()]
+    if not locs:
+        return {'active': 0, 'inactive': 0}
+
+    climate_keys = [r[0] for r in conn.execute(
+        "SELECT feature_key FROM feature_registry WHERE source = 'open_meteo'"
+    ).fetchall()]
+    geo_keys = [r[0] for r in conn.execute(
+        "SELECT feature_key FROM feature_registry WHERE source = 'esri'"
+    ).fetchall()]
+
+    sql = """
+        INSERT INTO feature_flags (feature_key, location_uuid, status)
+        VALUES (?, ?, ?)
+        ON CONFLICT (feature_key, location_uuid) DO UPDATE
+            SET status = EXCLUDED.status
+    """
+    active_rows   = [(fk, loc, 'active')   for fk in climate_keys for loc in locs]
+    inactive_rows = [(fk, loc, 'inactive') for fk in geo_keys      for loc in locs]
+
+    if active_rows:
+        conn.executemany(sql, active_rows)
+    if inactive_rows:
+        conn.executemany(sql, inactive_rows)
+
+    return {'active': len(active_rows), 'inactive': len(inactive_rows)}
 
 
 # ── CSV ingestion ─────────────────────────────────────────────────────────────
@@ -435,9 +447,9 @@ def run_all(verbose: bool = True) -> None:
     n = seed_feature_registry()
     log(f'   {n} features registradas')
 
-    log('── feature_registry: Esri → rejected')
-    n = reject_esri_features()
-    log(f'   {n} features Esri marcadas como rejected')
+    log('── feature_flags: clima → active · geo → inactive')
+    r = seed_feature_flags()
+    log(f'   {r["active"]} flags active · {r["inactive"]} flags inactive')
 
     log('── fact_visitas (dataset_*.csv → DuckDB)')
     n = ingest_all_session_csvs()

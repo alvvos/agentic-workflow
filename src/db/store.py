@@ -1,8 +1,5 @@
 """
-PostgreSQL store — ThreadedConnectionPool via psycopg2.
-
-Provides PgConn, a DuckDB-compatible wrapper so existing callers
-(queries.py, seed.py, auth.py, chatbot/tools.py) need zero changes.
+PostgreSQL store — ConnectionPool via psycopg (v3).
 
 Connection config via .env:
     DB_HOST / DB_PORT / DB_USER / DB_PASSWORD / DB_NAME / DB_POOL_MAX
@@ -13,21 +10,21 @@ Usage
   conn = get_conn()                  # thread-local, autocommit=True
   conn = get_conn(read_only=False)   # read_only ignored (pool is shared)
 """
+import atexit
 import os
 import threading
 from typing import Optional
 
 import pandas as pd
-import psycopg2
-import psycopg2.extras
-from psycopg2.pool import ThreadedConnectionPool
+import psycopg
+from psycopg_pool import ConnectionPool
 from dotenv import load_dotenv
 
 load_dotenv()
 
 # ── Connection pool ────────────────────────────────────────────────────────────
 
-_POOL: Optional[ThreadedConnectionPool] = None
+_POOL: Optional[ConnectionPool] = None
 _POOL_LOCK = threading.Lock()
 _local = threading.local()
 
@@ -35,20 +32,27 @@ _DDL_APPLIED = False
 _DDL_LOCK = threading.Lock()
 
 
-def _build_pool() -> ThreadedConnectionPool:
-    return ThreadedConnectionPool(
-        minconn=1,
-        maxconn=int(os.getenv("DB_POOL_MAX", "10")),
-        host=os.getenv("DB_HOST", "localhost"),
-        port=int(os.getenv("DB_PORT", "5432")),
-        user=os.getenv("DB_USER", "agentic"),
-        password=os.getenv("DB_PASSWORD", ""),
-        dbname=os.getenv("DB_NAME", "agentic"),
-        connect_timeout=10,
+def _build_pool() -> ConnectionPool:
+    conninfo = (
+        f"host={os.getenv('DB_HOST', 'localhost')} "
+        f"port={os.getenv('DB_PORT', '5432')} "
+        f"user={os.getenv('DB_USER', 'agentic')} "
+        f"password={os.getenv('DB_PASSWORD', '')} "
+        f"dbname={os.getenv('DB_NAME', 'agentic')} "
+        f"connect_timeout=10"
     )
+    pool = ConnectionPool(
+        conninfo,
+        min_size=1,
+        max_size=int(os.getenv("DB_POOL_MAX", "10")),
+        open=False,
+    )
+    pool.open()
+    atexit.register(pool.close)
+    return pool
 
 
-def _pool() -> ThreadedConnectionPool:
+def _pool() -> ConnectionPool:
     global _POOL
     if _POOL is None:
         with _POOL_LOCK:
@@ -57,14 +61,14 @@ def _pool() -> ThreadedConnectionPool:
     return _POOL
 
 
-# ── DuckDB-compatible result wrapper ───────────────────────────────────────────
+# ── Query result wrapper ──────────────────────────────────────────────────────
 
 class _PgResult:
-    """Wraps a psycopg2 cursor to expose fetchone / fetchall / df."""
+    """Wraps a psycopg cursor to expose fetchone / fetchall / df."""
 
     __slots__ = ("_cur",)
 
-    def __init__(self, cur: psycopg2.extensions.cursor):
+    def __init__(self, cur: psycopg.Cursor):
         self._cur = cur
 
     def fetchone(self):
@@ -80,13 +84,11 @@ class _PgResult:
         return pd.DataFrame(self._cur.fetchall(), columns=cols)
 
 
-# ── DuckDB-compatible connection wrapper ───────────────────────────────────────
+# ── Connection wrapper ────────────────────────────────────────────────────────
 
-def _duck_to_pg(sql: str) -> str:
-    """Convert DuckDB ? positional placeholders to psycopg2 %s.
+def _norm_sql(sql: str) -> str:
+    """Convert ? positional placeholders to psycopg %s.
 
-    Safe because all ? in this codebase are parameter placeholders,
-    never literal question marks inside string literals.
     Note: if you add SQL with literal % (e.g. LIKE '%foo%'), escape as %%.
     """
     return sql.replace("?", "%s")
@@ -94,28 +96,26 @@ def _duck_to_pg(sql: str) -> str:
 
 class PgConn:
     """
-    Thread-local PostgreSQL connection with a DuckDB-compatible surface.
+    Thread-local PostgreSQL connection.
 
     execute()     → returns _PgResult with .fetchone() / .fetchall() / .df()
-    executemany() → batched INSERT/UPDATE via psycopg2.extras.execute_batch
+    executemany() → batched INSERT/UPDATE via psycopg cursor.executemany
     """
 
     __slots__ = ("_conn", "_cur")
 
-    def __init__(self, raw: psycopg2.extensions.connection):
+    def __init__(self, raw: psycopg.Connection):
         self._conn = raw
-        self._cur: psycopg2.extensions.cursor = raw.cursor()
+        self._cur: psycopg.Cursor = raw.cursor()
 
     def execute(self, sql: str, params=None) -> _PgResult:
-        self._cur.execute(_duck_to_pg(sql), params)
+        self._cur.execute(_norm_sql(sql), params)
         return _PgResult(self._cur)
 
     def executemany(self, sql: str, params_list) -> None:
         if not params_list:
             return
-        psycopg2.extras.execute_batch(
-            self._cur, _duck_to_pg(sql), params_list, page_size=500
-        )
+        self._cur.executemany(_norm_sql(sql), params_list)
 
     def close(self) -> None:
         try:
@@ -164,7 +164,7 @@ def close_conn() -> None:
             pass
 
 
-# ── DDL — identical schema to the DuckDB version, types adapted ───────────────
+# ── DDL ───────────────────────────────────────────────────────────────────────
 
 _DDL: list[str] = [
     """
@@ -200,7 +200,9 @@ _DDL: list[str] = [
         nombre           TEXT    NOT NULL,
         hidden           BOOLEAN DEFAULT FALSE,
         zone_type        TEXT    DEFAULT '',
-        parent_zone_uuid TEXT    DEFAULT NULL
+        parent_zone_uuid TEXT    DEFAULT NULL,
+        sort_order       INT     DEFAULT 0,
+        last_zone        BOOLEAN DEFAULT FALSE
     )
     """,
     """
@@ -266,8 +268,8 @@ _DDL: list[str] = [
         categoria              TEXT,
         org_applicability      JSONB DEFAULT '"all"'::jsonb,
         location_applicability JSONB,
-        status                 TEXT  DEFAULT 'testing',
-        wmape_delta            DOUBLE PRECISION,
+        status                 TEXT  DEFAULT 'incompleto'
+                                   CHECK (status IN ('incompleto', 'con_cobertura')),
         notas                  TEXT,
         registrado_en          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
@@ -301,6 +303,13 @@ _DDL: list[str] = [
         role          TEXT      DEFAULT 'user',
         created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         last_login    TIMESTAMP
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS user_org_access (
+        user_id  TEXT NOT NULL REFERENCES dim_usuarios(user_id)        ON DELETE CASCADE,
+        org_uuid TEXT NOT NULL REFERENCES dim_organizaciones(org_uuid) ON DELETE CASCADE,
+        PRIMARY KEY (user_id, org_uuid)
     )
     """,
     """
@@ -359,6 +368,42 @@ _DDL: list[str] = [
     CREATE INDEX IF NOT EXISTS idx_cache_expires
         ON cache_responses (expires_at)
     """,
+    """
+    CREATE TABLE IF NOT EXISTS feature_eval_results (
+        id             SERIAL           PRIMARY KEY,
+        evaluated_at   TIMESTAMPTZ      DEFAULT NOW(),
+        feature_key    TEXT             NOT NULL,
+        location_uuid  TEXT             NOT NULL,
+        split_idx      INT              NOT NULL,
+        fecha_eval_ini DATE             NOT NULL,
+        fecha_eval_fin DATE             NOT NULL,
+        n_train        INT              NOT NULL,
+        n_eval         INT              NOT NULL,
+        wmape_baseline DOUBLE PRECISION NOT NULL,
+        wmape_con_feat DOUBLE PRECISION NOT NULL,
+        wmape_delta    DOUBLE PRECISION NOT NULL,
+        horizonte      INT              NOT NULL
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_eval_results_feature
+        ON feature_eval_results (feature_key, evaluated_at)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS feature_flags (
+        feature_key   TEXT             NOT NULL,
+        location_uuid TEXT             NOT NULL,
+        status        TEXT             NOT NULL DEFAULT 'inactive'
+                          CHECK (status IN ('active', 'inactive')),
+        wmape_delta   DOUBLE PRECISION,
+        evaluated_at  TIMESTAMPTZ      DEFAULT NOW(),
+        PRIMARY KEY (feature_key, location_uuid)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_feature_flags_loc
+        ON feature_flags (location_uuid)
+    """,
 ]
 
 _FACT_VISITAS_COLS = [
@@ -385,6 +430,44 @@ def _apply_ddl(conn: PgConn) -> None:
     _migrate_dim_zonas(conn)
     _migrate_fact_visitas(conn)
     _migrate_dim_ubicaciones(conn)
+    _migrate_fk_constraints(conn)
+    _migrate_feature_flags(conn)
+    _migrate_feature_registry(conn)
+    _migrate_feature_registry_fks(conn)
+
+
+def _migrate_feature_registry(conn: PgConn) -> None:
+    """Elimina wmape_delta de feature_registry, actualiza CHECK de status, añade fill_method."""
+    conn.execute("ALTER TABLE feature_registry DROP COLUMN IF EXISTS wmape_delta")
+    conn.execute("ALTER TABLE feature_registry DROP COLUMN IF EXISTS fill_method")
+    conn.execute("ALTER TABLE feature_registry DROP CONSTRAINT IF EXISTS feature_registry_status_check")
+    # Primero sanear filas con status obsoleto (active/rejected), luego añadir constraint
+    conn.execute(
+        "UPDATE feature_registry SET status = 'con_cobertura' "
+        "WHERE status IN ('active', 'testing')"
+    )
+    conn.execute(
+        "UPDATE feature_registry SET status = 'incompleto' "
+        "WHERE status NOT IN ('incompleto', 'con_cobertura')"
+    )
+    conn.execute(
+        "ALTER TABLE feature_registry ADD CONSTRAINT feature_registry_status_check "
+        "CHECK (status IN ('incompleto', 'con_cobertura'))"
+    )
+
+
+def _migrate_feature_flags(conn: PgConn) -> None:
+    """Elimina zone_uuid de feature_flags si aún existe (versión anterior del esquema)."""
+    has_col = conn.execute(
+        "SELECT 1 FROM information_schema.columns "
+        "WHERE table_name='feature_flags' AND column_name='zone_uuid'"
+    ).fetchone()
+    if has_col:
+        conn.execute("ALTER TABLE feature_flags DROP COLUMN IF EXISTS zone_uuid")
+        conn.execute("ALTER TABLE feature_flags DROP CONSTRAINT IF EXISTS uq_feature_flags")
+        conn.execute(
+            "ALTER TABLE feature_flags ADD PRIMARY KEY (feature_key, location_uuid)"
+        )
 
 
 def _migrate_dim_ubicaciones(conn: PgConn) -> None:
@@ -393,13 +476,71 @@ def _migrate_dim_ubicaciones(conn: PgConn) -> None:
     )
 
 
+def _migrate_fk_constraints(conn: PgConn) -> None:
+    """Añade FK ON DELETE CASCADE/SET NULL donde no existan. NOT VALID evita escanear filas existentes."""
+    # (table, constraint_name, fk_col, ref_table, ref_col, on_delete_action)
+    fks = [
+        # jerarquía principal
+        ("dim_ubicaciones",    "fk_ubi_org",       "org_uuid",         "dim_organizaciones", "org_uuid",   "CASCADE"),
+        ("dim_zonas",          "fk_zonas_loc",     "location_uuid",    "dim_ubicaciones",    "location_uuid","CASCADE"),
+        ("dim_zonas",          "fk_zona_parent",   "parent_zone_uuid", "dim_zonas",          "zone_uuid",  "SET NULL"),
+        # datos de visitas y features
+        ("fact_visitas",       "fk_fact_loc",      "location_uuid",    "dim_ubicaciones",    "location_uuid","CASCADE"),
+        ("store_geo_snapshots","fk_geo_loc",       "location_uuid",    "dim_ubicaciones",    "location_uuid","CASCADE"),
+        ("store_features_ext", "fk_feat_ext_loc",  "location_uuid",    "dim_ubicaciones",    "location_uuid","CASCADE"),
+        # calendario (nullable: solo afecta filas con valor)
+        ("store_calendario_org","fk_cal_org",      "org_uuid",         "dim_organizaciones", "org_uuid",   "CASCADE"),
+        ("store_calendario_org","fk_cal_loc",      "location_uuid",    "dim_ubicaciones",    "location_uuid","CASCADE"),
+        # modelos ML
+        ("model_registry",     "fk_model_loc",     "location_uuid",    "dim_ubicaciones",    "location_uuid","CASCADE"),
+        ("model_registry",     "fk_model_zone",    "zone_uuid",        "dim_zonas",          "zone_uuid",  "CASCADE"),
+        # chatbot
+        ("chat_conversaciones","fk_conv_user",     "user_id",          "dim_usuarios",       "user_id",    "CASCADE"),
+        ("chat_conversaciones","fk_conv_loc",      "location_uuid",    "dim_ubicaciones",    "location_uuid","CASCADE"),
+        ("chat_mensajes",      "fk_mensajes_conv", "conv_id",          "chat_conversaciones","conv_id",    "CASCADE"),
+        # caché de respuestas (nullable)
+        ("cache_responses",    "fk_cache_loc",     "location_uuid",    "dim_ubicaciones",    "location_uuid","CASCADE"),
+    ]
+    for table, cname, fk_col, ref_table, ref_col, action in fks:
+        exists = conn.execute(
+            "SELECT 1 FROM information_schema.table_constraints "
+            "WHERE constraint_name = ? AND table_name = ?",
+            [cname, table],
+        ).fetchone()
+        if not exists:
+            conn.execute(
+                f"ALTER TABLE {table} ADD CONSTRAINT {cname} "
+                f"FOREIGN KEY ({fk_col}) REFERENCES {ref_table}({ref_col}) "
+                f"ON DELETE {action} NOT VALID"
+            )
+
+
+def _migrate_feature_registry_fks(conn: PgConn) -> None:
+    """feature_registry es la fuente de verdad: borrar una feature la elimina de todas las tablas."""
+    fks = [
+        ("feature_flags",        "fk_flags_registry",    "feature_key", "feature_registry", "feature_key"),
+        ("feature_eval_results", "fk_eval_registry",     "feature_key", "feature_registry", "feature_key"),
+        ("store_features_ext",   "fk_feat_ext_registry", "feature_key", "feature_registry", "feature_key"),
+    ]
+    for table, cname, fk_col, ref_table, ref_col in fks:
+        exists = conn.execute(
+            "SELECT 1 FROM information_schema.table_constraints "
+            "WHERE constraint_name = ? AND table_name = ?",
+            [cname, table],
+        ).fetchone()
+        if not exists:
+            conn.execute(
+                f"ALTER TABLE {table} ADD CONSTRAINT {cname} "
+                f"FOREIGN KEY ({fk_col}) REFERENCES {ref_table}({ref_col}) "
+                f"ON DELETE CASCADE NOT VALID"
+            )
+
+
 def _migrate_dim_zonas(conn: PgConn) -> None:
-    conn.execute(
-        "ALTER TABLE dim_zonas ADD COLUMN IF NOT EXISTS zone_type TEXT DEFAULT ''"
-    )
-    conn.execute(
-        "ALTER TABLE dim_zonas ADD COLUMN IF NOT EXISTS parent_zone_uuid TEXT DEFAULT NULL"
-    )
+    conn.execute("ALTER TABLE dim_zonas ADD COLUMN IF NOT EXISTS zone_type TEXT DEFAULT ''")
+    conn.execute("ALTER TABLE dim_zonas ADD COLUMN IF NOT EXISTS parent_zone_uuid TEXT DEFAULT NULL")
+    conn.execute("ALTER TABLE dim_zonas ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0")
+    conn.execute("ALTER TABLE dim_zonas ADD COLUMN IF NOT EXISTS last_zone BOOLEAN DEFAULT FALSE")
 
 
 def _migrate_fact_visitas(conn: PgConn) -> None:

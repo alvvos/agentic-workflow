@@ -20,3 +20,9 @@ app.title = "Reporting Aitanna"
 
 server = app.server
 server.secret_key = os.getenv("SECRET_KEY", "dev-only-change-in-prod")
+
+
+@server.teardown_request
+def _release_db_conn(exc):
+    from src.db.store import close_conn
+    close_conn()

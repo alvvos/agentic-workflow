@@ -129,12 +129,30 @@ def descargar_maestro_ubicaciones():
                 True,
             ))
 
-            for z in loc.get('zones', []):
+            # Zones with children are those whose UUID appears in any other zone's 'fathers'.
+            # 'fathers' is a list of all direct parent UUIDs (DAG, not a chain).
+            # The last element is the primary parent used for tree navigation.
+            loc_zones = loc.get('zones', [])
+            parent_uuids = {f for z in loc_zones for f in (z.get('fathers') or [])}
+
+            for z in loc_zones:
                 n_zones += 1
                 zone_type = mem_zones.get(z['uuid'], z.get('zoneType', ''))
                 if zone_type:
                     n_zt_rest += 1
-                zone_rows.append((z['uuid'], loc['uuid'], z['zoneName'], z.get('hidden', False), zone_type or ''))
+                fathers = z.get('fathers') or []
+                parent_uuid = fathers[-1] if fathers else None
+                is_leaf = z['uuid'] not in parent_uuids
+                zone_rows.append((
+                    z['uuid'],
+                    loc['uuid'],
+                    z.get('name') or z.get('zoneName', ''),
+                    z.get('hidden', False),
+                    zone_type or '',
+                    parent_uuid,
+                    z.get('sort', 0),
+                    is_leaf,
+                ))
 
     conn.executemany(
         "INSERT INTO dim_organizaciones (org_uuid, nombre, pais_codigo, config_calendario) "
@@ -154,16 +172,26 @@ def descargar_maestro_ubicaciones():
         loc_rows,
     )
     conn.executemany(
-        "INSERT INTO dim_zonas (zone_uuid, location_uuid, nombre, hidden, zone_type) VALUES (?,?,?,?,?) "
-        "ON CONFLICT (zone_uuid) DO UPDATE SET nombre = excluded.nombre, hidden = excluded.hidden, "
-        "zone_type = CASE WHEN excluded.zone_type != '' THEN excluded.zone_type ELSE dim_zonas.zone_type END",
+        "INSERT INTO dim_zonas "
+        "(zone_uuid, location_uuid, nombre, hidden, zone_type, parent_zone_uuid, sort_order, last_zone) "
+        "VALUES (?,?,?,?,?,?,?,?) "
+        "ON CONFLICT (zone_uuid) DO UPDATE SET "
+        "  nombre           = excluded.nombre, "
+        "  hidden           = excluded.hidden, "
+        "  zone_type        = CASE WHEN excluded.zone_type != '' THEN excluded.zone_type ELSE dim_zonas.zone_type END, "
+        "  parent_zone_uuid = COALESCE(excluded.parent_zone_uuid, dim_zonas.parent_zone_uuid), "
+        "  sort_order       = excluded.sort_order, "
+        "  last_zone        = excluded.last_zone",
         zone_rows,
     )
 
+    n_with_parent = sum(1 for r in zone_rows if r[5] is not None)
+    n_last_zone   = sum(1 for r in zone_rows if r[7])
     print('OK — árbol de ubicaciones actualizado en PostgreSQL.')
     print(f'  Organizaciones : {n_orgs}')
     print(f'  Ubicaciones    : {n_locs}  ({n_geo_rest} con geo preservada)')
     print(f'  Zonas          : {n_zones}  ({n_zt_rest} con zoneType preservado)')
+    print(f'  Jerarquía      : {n_with_parent} zonas con padre asignado · {n_last_zone} hojas (lastZone)')
 
 
 # ── Geocodificación ───────────────────────────────────────────────────────────

@@ -131,4 +131,5 @@ def combine_zones(parent_zones, child_zones_all):
 )
 def refresh_org_options(signal):
     data_master.reload_if_changed()
-    return list(data_master.opciones_orgs)
+    from src.core.auth import get_current_org_access
+    return data_master.get_opciones_orgs_for_user(get_current_org_access())

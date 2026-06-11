@@ -102,9 +102,7 @@ def rename_conversation(session_id: str, conv_id: str, new_title: str) -> None:
 
 
 def delete_conversation(session_id: str, conv_id: str) -> None:
-    conn = get_conn()
-    conn.execute("DELETE FROM chat_mensajes WHERE conv_id = ?", [conv_id])
-    conn.execute(
+    get_conn().execute(
         "DELETE FROM chat_conversaciones WHERE conv_id = ? AND user_id = ?",
         [conv_id, session_id],
     )

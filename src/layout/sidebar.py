@@ -4,7 +4,9 @@ import dash_bootstrap_components as dbc
 from src.core.data_master import opciones_orgs
 
 
-def build_sidebar():
+def build_sidebar(org_options=None):
+    if org_options is None:
+        org_options = list(opciones_orgs)
     return html.Div([
         html.Div(
             html.Img(src="/assets/logo.png", style={"maxWidth": "100%", "maxHeight": "70px", "objectFit": "contain"}),
@@ -15,7 +17,7 @@ def build_sidebar():
                 html.H5([html.I(className="fas fa-sliders-h me-2 text-primary"), "Filtros Globales"], className="fw-bold mb-4 text-dark"),
 
                 html.Label("Organización", className="fw-bold text-muted small text-uppercase mb-1"),
-                dcc.Dropdown(id="drop-org", options=opciones_orgs, value=None, placeholder="Selecciona una organización...", className="mb-3 shadow-sm"),
+                dcc.Dropdown(id="drop-org", options=org_options, value=None, placeholder="Selecciona una organización...", className="mb-3 shadow-sm"),
 
                 html.Label("Ubicaciones", className="fw-bold text-muted small text-uppercase mb-1 mt-2"),
                 dcc.Dropdown(id="drop-locs", multi=True, className="mb-4 shadow-sm"),

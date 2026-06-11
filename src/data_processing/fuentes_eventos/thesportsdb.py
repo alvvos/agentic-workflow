@@ -165,8 +165,12 @@ def _fetch_past_league(league_id: str) -> list[dict]:
 
 
 def _seasons_for(date_from: date, date_to: date) -> list[str]:
+    # No pedir temporadas futuras que aún no tienen fixtures en la API.
+    # cap_year = año actual; la temporada "cap_year/cap_year+1" puede existir
+    # si ya empezó (ej. agosto), pero la del año siguiente es siempre vacía.
+    cap_year = date.today().year
     seasons: set[str] = set()
-    for yr in range(date_from.year, date_to.year + 1):
+    for yr in range(date_from.year, min(date_to.year, cap_year) + 1):
         seasons.add(f"{yr}-{yr+1}")
         seasons.add(str(yr))
     return list(seasons)

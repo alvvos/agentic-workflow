@@ -47,6 +47,15 @@ def is_admin() -> bool:
     return get_current_role() == "admin"
 
 
+def get_current_org_access() -> list | None:
+    """Devuelve la lista de org_uuids accesibles, o None si el usuario ve todo (admin/dev)."""
+    if MODO_DESARROLLO:
+        return None
+    if flask.session.get('role') == 'admin':
+        return None
+    return flask.session.get('org_access', [])
+
+
 _LOGIN_HTML = """<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -163,6 +172,15 @@ def login():
         if authenticated:
             flask.session['user'] = username
             flask.session['role'] = role
+            if role != 'admin':
+                try:
+                    from src.db.store import get_conn
+                    rows = get_conn().execute(
+                        "SELECT org_uuid FROM user_org_access WHERE user_id = ?", [username]
+                    ).fetchall()
+                    flask.session['org_access'] = [r[0] for r in rows]
+                except Exception:
+                    flask.session['org_access'] = []
             return flask.redirect('/')
         return flask.render_template_string(_LOGIN_HTML, error='Usuario o contraseña incorrectos')
     return flask.render_template_string(_LOGIN_HTML, error=None)
