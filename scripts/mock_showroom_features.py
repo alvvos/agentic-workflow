@@ -283,8 +283,8 @@ def main():
     # Registrar feature_keys (FK constraint en store_features_ext)
     for fk in _SERIES:
         conn.execute(
-            "INSERT INTO feature_registry (feature_key, source, categoria) "
-            "VALUES (?, 'mock', 'ext_area') "
+            "INSERT INTO feature_registry (feature_key, source, categoria, status) "
+            "VALUES (?, 'mock', 'ext_area', 'con_cobertura') "
             "ON CONFLICT (feature_key) DO NOTHING",
             [fk],
         )
