@@ -99,7 +99,7 @@ def render_child_zone_selectors(locs, selected_parents):
                 dbc.Checklist(
                     id={"type": "child-zone-checklist", "index": parent_name},
                     options=child_zones,
-                    value=[z['value'] for z in child_zones],
+                    value=[],
                     inline=True,
                     input_class_name="btn-check",
                     label_class_name="btn btn-outline-secondary mb-2 me-2 fw-bold shadow-sm rounded-3",

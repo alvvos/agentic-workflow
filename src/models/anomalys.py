@@ -22,14 +22,26 @@ def formato_fecha_es(fecha):
     meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
     return f"{dias[fecha.weekday()]} {fecha.day} {meses[fecha.month - 1]}"
 
+_PALETA_DEFAULT = [
+    '#0052CC', '#E67E22', '#27AE60', '#8E44AD', '#E74C3C',
+    '#17A2B8', '#F39C12', '#2ECC71', '#9B59B6', '#C0392B',
+    '#1ABC9C', '#D35400', '#2980B9', '#16A085', '#7D3C98',
+]
+
 def obtener_mapa_colores(zonas):
     color_map = {}
+    palette_idx = 0
     for z in zonas:
         zl = str(z).lower()
-        if 'caja' in zl: color_map[z] = '#8e44ad'
-        elif 'tienda' in zl: color_map[z] = '#e67e22'
-        elif 'calle' in zl or 'exterior' in zl: color_map[z] = '#2980b9'
-        else: color_map[z] = '#7f8c8d'
+        if 'caja' in zl:
+            color_map[z] = '#8e44ad'
+        elif 'tienda' in zl:
+            color_map[z] = '#e67e22'
+        elif 'calle' in zl or 'exterior' in zl:
+            color_map[z] = '#2980b9'
+        else:
+            color_map[z] = _PALETA_DEFAULT[palette_idx % len(_PALETA_DEFAULT)]
+            palette_idx += 1
     return color_map
 
 def ordenar_zonas(zonas):
