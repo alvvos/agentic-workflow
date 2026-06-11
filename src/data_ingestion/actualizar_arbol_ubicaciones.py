@@ -345,7 +345,6 @@ def poblar_region_code(solo_vacias=True):
             fail += 1
         time.sleep(1)
 
-    conn.commit()
     print(f'\nCompletado: {ok} actualizados · {fail} sin mapeo.')
 
 
