@@ -140,6 +140,15 @@ def get_conn(read_only: bool = False) -> PgConn:  # noqa: ARG001  (read_only kep
 
     conn_obj: Optional[PgConn] = getattr(_local, "conn", None)
     if conn_obj is None or conn_obj._conn.closed:
+        # Devolver la conexión cerrada al pool ANTES de pedir una nueva.
+        # Sin esto, cada reconexión (ej. idle timeout de Postgres) pierde
+        # un slot del pool y eventualmente lo agota (PoolTimeout → 504).
+        if conn_obj is not None:
+            try:
+                _pool().putconn(conn_obj._conn)
+            except Exception:
+                pass
+            _local.conn = None
         raw = _pool().getconn()
         raw.autocommit = True
         conn_obj = PgConn(raw)

@@ -261,6 +261,7 @@ def insert_suggestion(n_clicks_list):
     Output("chat-input",            "value"),
     Output("chat-loading-sink",     "children"),
     Output("chat-stream-interval",  "disabled"),
+    Output("chat-stream-interval",  "n_intervals"),
     Output("chat-stream-id",        "data"),
     Output("chat-conv-id",          "data",     allow_duplicate=True),
     Output("chat-conv-list",        "children", allow_duplicate=True),
@@ -274,9 +275,9 @@ def insert_suggestion(n_clicks_list):
     prevent_initial_call=True,
 )
 def on_send(n_clicks, n_submit, user_text, history, locs, session_id, conv_id):
-    _nu8 = (no_update,) * 8
+    _nu9 = (no_update,) * 9
     if not user_text or not user_text.strip():
-        return _nu8
+        return _nu9
 
     raw_text = user_text.strip()
     history  = history or []
@@ -314,16 +315,16 @@ def on_send(n_clicks, n_submit, user_text, history, locs, session_id, conv_id):
         history.append({"role": "assistant", "content": respuesta})
         update_conversation(sid, conv_id, history, location_uuid)
         conv_list = build_conv_list(list_conversations(sid))
-        return (render_history(history), history, "", None, True, None,
-                conv_id, conv_list)
+        return (render_history(history), history, "", None, True, 0,
+                None, conv_id, conv_list)
 
     # Sin API key → error legible
     if not os.environ.get("ANTHROPIC_API_KEY", ""):
         err = "Configura ANTHROPIC_API_KEY en el entorno para activar el asistente."
         history.append({"role": "assistant", "content": err})
         update_conversation(sid, conv_id, history, location_uuid)
-        return (render_history(history), history, "", None, True, None,
-                conv_id, conv_list)
+        return (render_history(history), history, "", None, True, no_update,
+                None, conv_id, conv_list)
 
     # Iniciar stream en background
     from src.chatbot import streaming
@@ -345,7 +346,7 @@ def on_send(n_clicks, n_submit, user_text, history, locs, session_id, conv_id):
         "extra_mentions": extra_mentions or [],
     }
     partial = render_history(history) + [streaming_bubble("", None)]
-    return partial, history, "", None, False, meta, conv_id, conv_list
+    return partial, history, "", None, False, 0, meta, conv_id, conv_list
 
 
 # ── Polling del stream ────────────────────────────────────────────────────────
