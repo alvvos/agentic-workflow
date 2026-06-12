@@ -232,7 +232,7 @@ def _fig_dias_semana(df_todas_zonas, fecha_max, dias=28):
         text=text_labels,
         textposition='outside',
         textfont=dict(size=11, color=_C_DARK),
-        hovertemplate='%{x}: <b>%{y:,.0f}</b> visitantes únicos (media/día)<extra></extra>',
+        hovertemplate='%{x}: <b>%{y:,.0f}</b> visitantes (media/día)<extra></extra>',
     ))
     fig.update_layout(
         height=160,
@@ -275,7 +275,7 @@ def _fig_finde_vs_laborable(df_todas_zonas, fecha_max, dias=28):
         text=[f"{v:,.0f}" for v in vals],
         textposition='outside',
         textfont=dict(size=12, color=_C_DARK),
-        hovertemplate='%{x}: <b>%{y:,.0f}</b> visitantes únicos/día (media)<extra></extra>',
+        hovertemplate='%{x}: <b>%{y:,.0f}</b> visitantes/día (media)<extra></extra>',
     ))
     max_v = max(vals)
     fig.update_layout(
@@ -421,7 +421,7 @@ def _narrativa(zonas_data, fecha_max, clima, ventana="semana", geo_vals=None):
         peak = agg.loc[agg['unique_visitors'].idxmax()]
         items.append(("primary", "fas fa-calendar-day",
             f"El {formatear_fecha(peak['fecha_dt'])} fue el día con más afluencia del {periodo}, "
-            f"con {int(peak['unique_visitors']):,} visitantes únicos."))
+            f"con {int(peak['unique_visitors']):,} visitantes."))
 
     # 3. Estancia media
     est_p   = sum(z['r']['estancia'] * max(z['r']['visitantes'], 1) for z in zonas_data) / max(total_p,   1)
@@ -625,7 +625,7 @@ def _render_zona_card(zona, r, a, d, dias_28, uid, periodo_label="semana",
         sem_color, arrow = _C_AMBER,   "fas fa-minus"
         pct_str = f"{dv:+.0f}%"
 
-    abs_str  = f"{r['visitantes']:,.0f} visitantes únicos"
+    abs_str  = f"{r['visitantes']:,.0f} visitantes"
     ant_str  = f" · ant. {a['visitantes']:,.0f}" if a['visitantes'] else ""
     dwell_str = f" · {r['estancia']:.1f} min estancia" if r['estancia'] > 0 else ""
 
@@ -691,7 +691,7 @@ def _render_zona_card(zona, r, a, d, dias_28, uid, periodo_label="semana",
                     html.I(className="fas fa-circle-info", id=spark_info_id,
                            style={"color": _C_MUTED, "fontSize": "0.65rem", "cursor": "help"}),
                     dbc.Tooltip(
-                        "Visitantes únicos diarios · últimos 28 días. "
+                        "Visitantes diarios · últimos 28 días. "
                         "Línea continua = tráfico real; línea punteada = tendencia "
                         "(verde = subiendo, roja = bajando).",
                         target=spark_info_id, placement="top",
@@ -826,7 +826,7 @@ def _fig_nuevos_ratio(df_todas_zonas, fecha_max, dias=7):
 
 
 def _fig_semanas_mes(df, fecha_max):
-    """Visitantes únicos totales por semana — desglose del último mes."""
+    """Visitantes totales por semana — desglose del último mes."""
     if df.empty or 'unique_visitors' not in df.columns:
         return None
     fmin = fecha_max - timedelta(days=27)
@@ -855,7 +855,7 @@ def _fig_semanas_mes(df, fecha_max):
         textposition='outside',
         textfont=dict(size=11, color=_C_DARK),
         customdata=hover,
-        hovertemplate='%{x} (%{customdata}): <b>%{y:,.0f}</b> visitantes únicos<extra></extra>',
+        hovertemplate='%{x} (%{customdata}): <b>%{y:,.0f}</b> visitantes<extra></extra>',
         cliponaxis=False,
     ))
     fig.update_layout(
@@ -914,7 +914,7 @@ def _render_pm_questions(df, zonas_data, fecha_max, uid, ventana="semana", child
             _fig_semanas_mes(df, fecha_max),
             f"q-semanas-{uid}",
             "¿Cómo evolucionó el tráfico semana a semana?",
-            "Visitantes únicos por semana · último mes · de izquierda (más antigua) a derecha (más reciente)",
+            "Visitantes por semana · último mes · de izquierda (más antigua) a derecha (más reciente)",
             "180px",
         ))
 
@@ -922,7 +922,7 @@ def _render_pm_questions(df, zonas_data, fecha_max, uid, ventana="semana", child
         (
             _fig_dias_semana(df, fecha_max, dias=dias_v),
             f"q-dias-{uid}",
-            "¿Cuándo viene la gente?",
+            "¿Cuándo llegan los visitantes?",
             f"{_lbl_dias} · tono más oscuro = día pico",
             "160px",
         ),
@@ -937,7 +937,7 @@ def _render_pm_questions(df, zonas_data, fecha_max, uid, ventana="semana", child
             _fig_finde_vs_laborable(df, fecha_max, dias=dias_v),
             f"q-finde-{uid}",
             "¿Rinde mejor el fin de semana o entre semana?",
-            f"Visitantes únicos/día (media) · {_periodo}",
+            f"Visitantes/día (media) · {_periodo}",
             "180px",
         ),
         (
@@ -958,7 +958,7 @@ def _render_pm_questions(df, zonas_data, fecha_max, uid, ventana="semana", child
             _fig_embudo_conversion(zonas_top),
             f"q-embudo-{uid}",
             "¿Cuántos visitantes convierten?",
-            f"Visitantes únicos por etapa · {_periodo_corto} · % respecto al paso anterior",
+            f"Visitantes por etapa · {_periodo_corto} · % respecto al paso anterior",
             "180px",
         ),
     ]
@@ -994,14 +994,18 @@ def _render_pm_questions(df, zonas_data, fecha_max, uid, ventana="semana", child
 _UNIVERSAL_KEYS = frozenset({
     'ev_festivo_regional', 'ev_rank_concierto', 'ev_rank_deportivo',
     'ev_rank_festival', 'ev_rank_municipal', 'ev_rank_total',
-    'ev_vacaciones_escolares', 'llueve', 'temp_max', 'temp_min',
+    'llueve', 'temp_max', 'temp_min',
 })
 
 _FEATURE_META = {
-    'n_pasajeros_crucero_dia': ('Pasajeros de crucero', 'pax totales', 'sum', '#1abc9c'),
-    'n_turistas_isocrona':     ('Turistas en isocrona',  'pers. estimadas', 'sum', '#3498db'),
-    'n_eventos_gran_via':      ('Eventos Gran Vía',       'eventos en rango', 'sum', '#9b59b6'),
-    'afluencia_metro_gran_via':('Metro Gran Vía',         'viajeros validados', 'sum', '#e67e22'),
+    'n_pasajeros_crucero_dia':  ('Pasajeros de crucero',    'pax totales',        'sum', '#1abc9c'),
+    'n_turistas_isocrona':      ('Turistas en isócrona',    'pers. estimadas',    'sum', '#3498db'),
+    'n_eventos_gran_via':       ('Eventos Gran Vía',         'eventos en rango',   'sum', '#9b59b6'),
+    'afluencia_metro_gran_via': ('Metro Gran Vía',           'viajeros validados', 'sum', '#e67e22'),
+    'afluencia_metro_callao':   ('Metro Callao',             'viajeros validados', 'sum', '#00539B'),
+    'ev_vacaciones_escolares':  ('Vacaciones escolares',     'días en el mes',     'sum', '#8e44ad'),
+    'cal_escolar_is_break':     ('Período vacacional',       'días en el mes',     'sum', '#8e44ad'),
+    'cal_escolar_dias_hasta':   ('Días hasta próx. vacaciones', 'días (media)',    'mean','#8e44ad'),
 }
 _DEFAULT_COLOR = '#0052CC'
 
@@ -1135,6 +1139,616 @@ def _render_eventos_externos(location_uuid: str, fecha_max) -> html.Div | None:
     ], className="mb-4 p-3 bg-white rounded-4 shadow-sm border")
 
 
+# ── Shared zone-ordering helper ───────────────────────────────────────────────
+
+def _orden_zona(zona: str) -> int:
+    zl = zona.lower()
+    if 'exterior' in zl or 'calle' in zl: return 0
+    if 'tienda' in zl:                    return 1
+    if 'caja' in zl:                      return 2
+    return 3
+
+
+# ── New "Estado" redesign helpers ─────────────────────────────────────────────
+
+def _hex_rgba(hex_color: str, alpha: float) -> str:
+    h = hex_color.lstrip('#')
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+
+
+_FEATURE_FA_ICONS = {
+    'afluencia_metro_gran_via':  'fas fa-train-subway',
+    'afluencia_metro_callao':    'fas fa-train-subway',
+    'n_turistas_isocrona':       'fas fa-passport',
+    'n_pasajeros_crucero_dia':   'fas fa-ship',
+    'n_eventos_gran_via':        'fas fa-calendar-check',
+    'ev_vacaciones_escolares':   'fas fa-school',
+    'cal_escolar_is_break':      'fas fa-school',
+    'cal_escolar_dias_hasta':    'fas fa-school',
+}
+
+
+def _icon_for_feature(fk: str) -> str:
+    return _FEATURE_FA_ICONS.get(fk, 'fas fa-satellite-dish')
+
+
+def _render_signal_yoy_chart(df_k, fk, label, sublabel, color, uid,
+                              anio_actual, anio_prev, meses_es, agg_fn):
+    """Grouped-bar chart with current year (solid) and prior year (translucent)."""
+    mes_pivot = df_k.groupby(['anio', 'mes_num'])['value'].agg(agg_fn).reset_index()
+
+    meses_actuales = sorted(mes_pivot[mes_pivot['anio'] == anio_actual]['mes_num'].unique())
+    if not meses_actuales:
+        return None
+
+    x_labels = [meses_es[m - 1] for m in meses_actuales]
+
+    def _get(anio, mes):
+        row = mes_pivot[(mes_pivot['anio'] == anio) & (mes_pivot['mes_num'] == mes)]
+        return float(row['value'].iloc[0]) if not row.empty else 0.0
+
+    y_actual = [_get(anio_actual, m) for m in meses_actuales]
+    y_prev   = [_get(anio_prev,   m) for m in meses_actuales]
+    has_prev = any(v > 0 for v in y_prev)
+
+    fig = go.Figure()
+    if has_prev:
+        fig.add_trace(go.Bar(
+            name=str(anio_prev), x=x_labels, y=y_prev,
+            marker_color=color, opacity=0.15,
+            marker_line_width=1, marker_line_color=color,
+            hoverinfo='skip', showlegend=False,
+        ))
+    fig.add_trace(go.Bar(
+        name=str(anio_actual), x=x_labels, y=y_actual,
+        marker_color=color, opacity=0.9,
+        text=[f"<b>{int(v):,}</b>" if v > 0 else "" for v in y_actual],
+        textposition='outside', textfont=dict(size=9, color=_C_DARK),
+        hovertemplate=f'{anio_actual} · %{{x}}: <b>%{{y:,.0f}}</b><extra></extra>',
+    ))
+
+    max_v = max([max(y_actual or [0]), max(y_prev or [0])]) or 1
+    fig.update_layout(
+        barmode='group', height=210,
+        margin=dict(t=44, b=10, l=10, r=10),
+        plot_bgcolor='white', paper_bgcolor='rgba(0,0,0,0)',
+        xaxis=dict(showgrid=False, tickfont=dict(size=10, color=_C_DARK), fixedrange=True),
+        yaxis=dict(visible=False, fixedrange=True, range=[0, max_v * 1.45]),
+        showlegend=False,
+        bargap=0.28,
+    )
+    return html.Div([
+        html.Div([
+            html.I(className=f"{_icon_for_feature(fk)} me-2",
+                   style={'color': color, "fontSize": "0.9rem"}),
+            html.Span(label, className="fw-semibold me-1",
+                      style={'fontSize': '0.9rem', 'color': _C_DARK}),
+            html.Span(sublabel, className="text-muted",
+                      style={'fontSize': '0.74rem'}),
+        ], className="d-flex align-items-center mb-2"),
+        dcc.Graph(id=f"yoy-{uid}-{fk[:16]}", figure=fig, config=_CFG_GRAPH,
+                  style={"height": "210px"}),
+    ], className="mb-4")
+
+
+_SRC_COLOR: dict = {
+    'concierto_wizink':       '#e74c3c',
+    'estreno_callao':         '#8e44ad',
+    'festival_madrid':        '#f39c12',
+    'manifestacion_gran_via': '#e67e22',
+    'partido_deportivo':      '#3498db',
+    'festivo_regional':       '#27ae60',
+    'vacaciones_escolares':   '#9b59b6',
+    'crucero':                '#1abc9c',
+}
+_SRC_LABEL: dict = {
+    'concierto_wizink':       'Concierto',
+    'estreno_callao':         'Estreno',
+    'festival_madrid':        'Festival',
+    'manifestacion_gran_via': 'Manifestación',
+    'partido_deportivo':      'Deportivo',
+    'festivo_regional':       'Festivo',
+    'vacaciones_escolares':   'Vacaciones',
+    'crucero':                'Crucero',
+}
+
+
+def _render_calendario_eventos_clima(location_uuid: str, fecha_max) -> html.Div | None:
+    """
+    CSS-grid calendar split by month. Each day cell: climate icons + one tag per
+    event source (calendar events + cruise calls). Legend maps colors to sources.
+    """
+    import calendar as _cal
+    try:
+        from src.db.store import get_conn
+        conn = get_conn()
+        hoy_d   = fecha_max.date() if hasattr(fecha_max, 'date') else fecha_max
+        desde_d = hoy_d - timedelta(days=56)
+        hasta_d = hoy_d + timedelta(days=28)
+        ev_rows = conn.execute(
+            """SELECT evento_key, fecha_inicio, metadata
+               FROM store_calendario_org
+               WHERE location_uuid = ? AND fecha_fin >= ? AND fecha_inicio <= ?
+               ORDER BY fecha_inicio""",
+            [location_uuid, str(desde_d), str(hasta_d)],
+        ).fetchall()
+        cl_rows = conn.execute(
+            """SELECT feature_key, fecha::text, value
+               FROM store_features_ext
+               WHERE location_uuid = ? AND feature_key IN ('llueve','temp_max','temp_min')
+                 AND fecha >= ? AND fecha <= ?""",
+            [location_uuid, str(desde_d), str(hasta_d)],
+        ).fetchall()
+        # Cruise calls
+        crucero_rows: list = []
+        try:
+            crucero_rows = conn.execute(
+                """SELECT fecha::text, nombre_barco, operador
+                   FROM store_crucero_llamadas
+                   WHERE location_uuid = ? AND fecha >= ? AND fecha <= ?
+                   ORDER BY fecha""",
+                [location_uuid, str(desde_d), str(hasta_d)],
+            ).fetchall()
+        except Exception:
+            pass
+    except Exception:
+        return None
+
+    _IMPACT = {'alto': 3, 'medio': 2, 'bajo': 1}
+    _CLEAN  = str.maketrans({'—': ' ', '–': ' '})
+
+    # day_events: date → list of {source, titulo, icono_fa, score}
+    day_events: dict = {}
+    for key, fi, meta_json in ev_rows:
+        fi_d = pd.to_datetime(fi).date()
+        meta = meta_json if isinstance(meta_json, dict) else (json.loads(meta_json) if meta_json else {})
+        is_vac = 'vacaciones' in key.lower()
+        # Normalize source for color lookup — any crucero-like key maps to 'crucero'
+        src_key = 'crucero' if 'crucero' in key.lower() else key
+        titulo_raw = meta.get('titulo', meta.get('nombre', key.replace('_', ' ').title()))
+        day_events.setdefault(fi_d, []).append(dict(
+            source=src_key,
+            titulo=titulo_raw.translate(_CLEAN).strip(),
+            icono_fa=meta.get('icono_fa', 'fas fa-calendar-day'),
+            is_vacation=is_vac,
+            score=0.5 if is_vac else float(_IMPACT.get(meta.get('impacto', ''), 1)),
+        ))
+
+    # Inject cruise calls as calendar events (source='crucero')
+    _CLEAN_T = str.maketrans({'—': ' ', '–': ' '})
+    for fecha_s, nombre, operador in crucero_rows:
+        fi_d = pd.to_datetime(fecha_s).date()
+        day_events.setdefault(fi_d, []).append(dict(
+            source='crucero',
+            titulo=(nombre or operador or 'Crucero').translate(_CLEAN_T).strip(),
+            icono_fa='fas fa-ship',
+            is_vacation=False,
+            score=1.5,
+        ))
+
+    clima: dict = {}
+    for fk, fecha, val in cl_rows:
+        d = pd.to_datetime(fecha).date()
+        clima.setdefault(d, {})[fk] = val
+
+    if not day_events and not clima:
+        return None
+
+    _MES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+               'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+    DIAS_HDR = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+
+    months = []
+    y, m = desde_d.year, desde_d.month
+    while date(y, m, 1) <= hasta_d:
+        months.append((y, m))
+        m += 1
+        if m > 12:
+            m, y = 1, y + 1
+
+    def _ev_tag(ev):
+        c = _SRC_COLOR.get(ev['source'], '#7f8c8d')
+        lbl = _SRC_LABEL.get(ev['source'], ev['source'].replace('_', ' ').title())
+        short = ev['titulo'][:18] + ('…' if len(ev['titulo']) > 18 else '')
+        return html.Div([
+            html.Span(style={"display": "inline-block", "width": "7px", "height": "7px",
+                             "borderRadius": "50%", "background": c, "flexShrink": "0",
+                             "marginTop": "2px"}),
+            html.Span(f"{lbl} · {short}",
+                      style={"fontSize": "0.60rem", "lineHeight": "1.2",
+                             "color": '#2c3e50', "fontWeight": "500"}),
+        ], className="d-flex align-items-start gap-1 mt-1")
+
+    def _day_cell(d):
+        is_today = d == hoy_d
+        evs  = day_events.get(d, [])
+        acts = sorted([e for e in evs if not e['is_vacation']],
+                      key=lambda e: -e['score'])
+        vac  = [e for e in evs if e['is_vacation']]
+
+        # Border and background from top event's source
+        if acts:
+            bc = _SRC_COLOR.get(acts[0]['source'], '#7f8c8d')
+            bg = _hex_rgba(bc, 0.06)
+        elif vac:
+            bc, bg = '#9b59b6', '#f3e5f5'
+        else:
+            bg = '#ffffff'
+            bc = _C_PRIMARY if is_today else '#e9ecef'
+
+        cl   = clima.get(d, {})
+        tmax = cl.get('temp_max', None)
+        tmin = cl.get('temp_min', None)
+        lluv = cl.get('llueve', 0) or 0
+        if lluv > 0:
+            w_cls, w_col = 'fas fa-cloud-showers-heavy', '#3498db'
+        elif tmax is not None and tmax >= 25:
+            w_cls, w_col = 'fas fa-sun', '#f39c12'
+        elif tmax is not None and tmax < 12:
+            w_cls, w_col = 'fas fa-snowflake', '#74b9ff'
+        else:
+            w_cls, w_col = 'fas fa-cloud-sun', '#95a5a6'
+        temp_txt = (f"{round(tmax)}°/{round(tmin)}°"
+                    if tmax is not None and tmin is not None else "")
+
+        num_color = _C_PRIMARY if is_today else (_C_DARK if d <= hoy_d else '#555')
+        cell_style = {
+            "background": bg, "borderLeft": f"3px solid {bc}",
+            "minHeight": "130px", "padding": "6px 8px", "borderRadius": "4px",
+        }
+        if is_today:
+            cell_style["boxShadow"] = f"0 0 0 2px {_C_PRIMARY}"
+
+        ev_content: list = [_ev_tag(e) for e in acts[:3]]
+        if len(acts) > 3:
+            ev_content.append(html.Div(
+                f"+{len(acts) - 3} más",
+                style={"fontSize": "0.57rem", "color": _C_MUTED, "marginLeft": "10px"},
+            ))
+        if not acts and vac:
+            ev_content.append(html.Div(
+                html.I(className="fas fa-school",
+                       style={"color": "#9b59b6", "fontSize": "0.62rem"}),
+                style={"marginTop": "3px"},
+            ))
+
+        return html.Div([
+            html.Div([
+                html.Span(str(d.day),
+                          style={"fontSize": "0.88rem", "fontWeight": "700",
+                                 "color": num_color}),
+                html.I(className=f"{w_cls} ms-1", title=temp_txt,
+                       style={"color": w_col, "fontSize": "0.72rem"}),
+                html.Span(temp_txt, className="ms-1 text-muted",
+                          style={"fontSize": "0.60rem"}),
+            ], className="d-flex align-items-center"),
+            *ev_content,
+        ], style=cell_style)
+
+    header_row = [
+        html.Div(lbl, className="text-center fw-bold py-1 text-secondary bg-light",
+                 style={"fontSize": "0.70rem", "textTransform": "uppercase",
+                        "letterSpacing": "0.5px", "borderRadius": "3px"})
+        for lbl in DIAS_HDR
+    ]
+
+    tabs_meses = []
+    for (y, m) in months:
+        primer_dia = date(y, m, 1)
+        ultimo_dia = date(y, m, _cal.monthrange(y, m)[1])
+        grid_start = primer_dia - timedelta(days=primer_dia.weekday())
+        grid_end   = ultimo_dia + timedelta(days=6 - ultimo_dia.weekday())
+
+        cells = list(header_row)
+        d_iter = grid_start
+        while d_iter <= grid_end:
+            if d_iter.month != m:
+                cells.append(html.Div(style={
+                    "minHeight": "130px", "background": "#f8f9fa",
+                    "borderRadius": "4px", "opacity": "0.4",
+                }))
+            else:
+                cells.append(_day_cell(d_iter))
+            d_iter += timedelta(days=1)
+
+        grilla = html.Div(cells, style={
+            "display": "grid",
+            "gridTemplateColumns": "repeat(7, 1fr)",
+            "gap": "8px",
+        })
+        tab_id  = f"tab-{y}-{m}"
+        tab_lbl = _MES_ES[m - 1] if y == hoy_d.year else f"{_MES_ES[m - 1]} {y}"
+        tabs_meses.append(dbc.Tab(
+            html.Div(grilla, className="pt-3"),
+            label=tab_lbl, tab_id=tab_id, className="fw-bold",
+        ))
+
+    # Legend by source (only sources present in the current window)
+    present_sources = {e['source']
+                       for evs in day_events.values()
+                       for e in evs}
+    present_sources.discard('vacaciones_escolares')  # shown via icon
+    legend_items = []
+    for src in ['crucero','concierto_wizink','estreno_callao','festival_madrid',
+                'partido_deportivo','manifestacion_gran_via','festivo_regional']:
+        if src not in present_sources:
+            continue
+        c = _SRC_COLOR[src]
+        legend_items.append(html.Div([
+            html.Span(style={"display": "inline-block", "width": "8px", "height": "8px",
+                             "borderRadius": "50%", "background": c, "marginRight": "4px"}),
+            html.Span(_SRC_LABEL[src], style={"fontSize": "0.67rem", "color": _C_MUTED}),
+        ], className="d-flex align-items-center me-3"))
+
+    # Always show clima icons in legend
+    legend_items.append(html.Div([
+        html.I(className="fas fa-cloud-showers-heavy me-1",
+               style={"color": "#3498db", "fontSize": "0.67rem"}),
+        html.I(className="fas fa-sun me-1",
+               style={"color": "#f39c12", "fontSize": "0.67rem"}),
+        html.I(className="fas fa-snowflake me-1",
+               style={"color": "#74b9ff", "fontSize": "0.67rem"}),
+        html.I(className="fas fa-cloud-sun",
+               style={"color": "#95a5a6", "fontSize": "0.67rem"}),
+    ], className="d-flex align-items-center"))
+
+    active_tab = f"tab-{hoy_d.year}-{hoy_d.month}"
+    if tabs_meses and active_tab not in {t.tab_id for t in tabs_meses}:
+        active_tab = tabs_meses[-1].tab_id
+
+    return html.Div([
+        html.H6("Calendario del entorno", className="fw-bold mb-2",
+                style={"color": _C_DARK, "fontSize": "0.98rem"}),
+        html.Div(legend_items, className="d-flex flex-wrap gap-1 mb-3"),
+        dbc.Tabs(tabs_meses, active_tab=active_tab),
+    ])
+
+
+def _render_cruceros_section(location_uuid: str, fecha_max) -> html.Div | None:
+    """Monthly YoY passenger comparison for cruise locations."""
+    try:
+        from src.db.store import get_conn
+        conn = get_conn()
+        desde_yoy = fecha_max - timedelta(days=760)
+        yoy_rows = conn.execute(
+            """SELECT e.fecha::text, e.value
+               FROM store_features_ext e
+               JOIN feature_flags f ON f.feature_key = e.feature_key
+                 AND f.location_uuid = e.location_uuid AND f.status = 'active'
+               WHERE e.location_uuid = ? AND e.feature_key = 'n_pasajeros_crucero_dia'
+                 AND e.value IS NOT NULL AND e.fecha >= ?
+               ORDER BY e.fecha""",
+            [location_uuid,
+             str(desde_yoy.date() if hasattr(desde_yoy, 'date') else desde_yoy)],
+        ).fetchall()
+    except Exception:
+        return None
+
+    if not yoy_rows:
+        return None
+
+    _MESES_ES = ['Ene','Feb','Mar','Abr','May','Jun',
+                 'Jul','Ago','Sep','Oct','Nov','Dic']
+    color = '#1abc9c'
+
+    children: list = [
+        html.Div([
+            html.I(className="fas fa-ship me-2", style={'color': color}),
+            html.Span("Pasajeros de crucero", className="fw-bold",
+                      style={'fontSize': '0.9rem', 'color': _C_DARK}),
+        ], className="d-flex align-items-center mb-3"),
+    ]
+
+    if yoy_rows:
+        df_y = pd.DataFrame(yoy_rows, columns=['fecha', 'value'])
+        df_y['fecha']   = pd.to_datetime(df_y['fecha'])
+        df_y['anio']    = df_y['fecha'].dt.year
+        df_y['mes_num'] = df_y['fecha'].dt.month
+
+        anio_actual = (fecha_max.year if hasattr(fecha_max, 'year')
+                       else pd.Timestamp(fecha_max).year)
+        anio_prev   = anio_actual - 1
+
+        mes_pivot = df_y.groupby(['anio', 'mes_num'])['value'].sum().reset_index()
+        meses_act = sorted(
+            mes_pivot[mes_pivot['anio'] == anio_actual]['mes_num'].unique()
+        )
+        if meses_act:
+            xl = [_MESES_ES[m - 1] for m in meses_act]
+
+            def _gv(yr, m):
+                r = mes_pivot[
+                    (mes_pivot['anio'] == yr) & (mes_pivot['mes_num'] == m)
+                ]
+                return float(r['value'].iloc[0]) if not r.empty else 0.0
+
+            y_act  = [_gv(anio_actual, m) for m in meses_act]
+            y_prev = [_gv(anio_prev,   m) for m in meses_act]
+            has_p  = any(v > 0 for v in y_prev)
+
+            fig = go.Figure()
+            if has_p:
+                fig.add_trace(go.Bar(
+                    x=xl, y=y_prev,
+                    marker_color=color, opacity=0.15,
+                    marker_line_width=1, marker_line_color=color,
+                    hoverinfo='skip', showlegend=False,
+                ))
+            fig.add_trace(go.Bar(
+                x=xl, y=y_act,
+                marker_color=color, opacity=0.9,
+                text=[f"<b>{int(v):,}</b>" if v > 0 else "" for v in y_act],
+                textposition='outside', textfont=dict(size=9, color=_C_DARK),
+                hovertemplate=f'{anio_actual} · %{{x}}: <b>%{{y:,.0f}}</b> pax<extra></extra>',
+            ))
+            max_v = max([max(y_act or [0]), max(y_prev or [0])]) or 1
+            sub   = (f"pax/mes · {anio_actual} (sólido) vs {anio_prev} (translúcido)"
+                     if has_p else f"pax/mes · {anio_actual}")
+            fig.update_layout(
+                barmode='group', height=200,
+                margin=dict(t=30, b=10, l=10, r=10),
+                plot_bgcolor='white', paper_bgcolor='rgba(0,0,0,0)',
+                xaxis=dict(showgrid=False, tickfont=dict(size=10), fixedrange=True),
+                yaxis=dict(visible=False, fixedrange=True, range=[0, max_v * 1.45]),
+                showlegend=False,
+                title=dict(text=sub, font=dict(size=10, color='#7f8c8d'), x=0),
+            )
+            children.append(
+                dcc.Graph(id=f"crucero-yoy-{location_uuid[:8]}",
+                          figure=fig, config=_CFG_GRAPH,
+                          style={"height": "200px"})
+            )
+
+    return html.Div(children, className="mb-4") if len(children) > 1 else None
+
+
+def _render_senal_contexto_modal(location_uuid: str, uid: str, fecha_max) -> html.Div | None:
+    """External signals modal: YoY bar charts per feature + events feed."""
+    if not location_uuid:
+        return None
+    try:
+        from src.db.store import get_conn
+        conn = get_conn()
+        desde = fecha_max - timedelta(days=760)
+        ts_rows = conn.execute(
+            """SELECT e.feature_key, e.fecha::text, e.value
+               FROM store_features_ext e
+               JOIN feature_flags f
+                 ON f.feature_key = e.feature_key
+                AND f.location_uuid = e.location_uuid
+                AND f.status = 'active'
+               WHERE e.location_uuid = ? AND e.value IS NOT NULL AND e.fecha >= ?
+               ORDER BY e.feature_key, e.fecha""",
+            [location_uuid, str(desde)],
+        ).fetchall()
+    except Exception:
+        return None
+
+    _MESES_ES = ['Ene','Feb','Mar','Abr','May','Jun',
+                 'Jul','Ago','Sep','Oct','Nov','Dic']
+    anio_actual = fecha_max.year
+    anio_prev   = anio_actual - 1
+
+    charts = []
+    if ts_rows:
+        df_ts = pd.DataFrame(ts_rows, columns=['feature_key', 'fecha', 'value'])
+        df_ts['fecha']   = pd.to_datetime(df_ts['fecha'])
+        df_ts['anio']    = df_ts['fecha'].dt.year
+        df_ts['mes_num'] = df_ts['fecha'].dt.month
+
+        keys       = [k for k in df_ts['feature_key'].unique()
+                      if k not in _UNIVERSAL_KEYS and k != 'n_pasajeros_crucero_dia']
+        metro_keys = sorted([k for k in keys if 'metro' in k])
+        other_keys = sorted([k for k in keys if k not in metro_keys])
+
+        for fk in metro_keys + other_keys:
+            meta = _FEATURE_META.get(fk, (fk.replace('_', ' ').title(), '', 'sum', _DEFAULT_COLOR))
+            label, sublabel, agg_fn, color = meta
+            if 'gran_via' in fk:
+                station = "Gran Vía: validaciones diarias"
+                sub = "Línea 1 (azul) · Línea 5 (verde)"
+            elif 'callao' in fk:
+                station = "Callao: validaciones diarias"
+                sub = "Línea 3 (amarilla) · Línea 5 (verde)"
+            else:
+                station, sub = label, sublabel
+            c = _render_signal_yoy_chart(
+                df_ts[df_ts['feature_key'] == fk], fk, station, sub,
+                color, uid, anio_actual, anio_prev, _MESES_ES, agg_fn,
+            )
+            if c:
+                charts.append(c)
+
+    cal_section      = _render_calendario_eventos_clima(location_uuid, fecha_max)
+    cruceros_section = _render_cruceros_section(location_uuid, fecha_max)
+
+    if not charts and not cal_section and not cruceros_section:
+        return None
+
+    return html.Div([
+        *([html.Div([
+            html.H6("Afluencia en el entorno · comparativa interanual",
+                    className="fw-bold mb-1",
+                    style={"color": _C_DARK, "fontSize": "0.98rem"}),
+            html.P(
+                f"Barras sólidas = {anio_actual} · barras translúcidas = {anio_prev}. "
+                "Agregación mensual.",
+                className="text-muted mb-3", style={"fontSize": "0.80rem"},
+            ),
+            html.Div(charts),
+        ])] if charts else []),
+        *([html.Div([html.Hr(className="my-4"), cruceros_section])]
+          if cruceros_section else []),
+        *([html.Div([html.Hr(className="my-4"), cal_section])]
+          if cal_section else []),
+    ])
+
+
+def _render_zona_section_jerarquica(zonas_data, zona_children_map,
+                                    child_zone_names, uid, periodo_label) -> html.Div:
+    """Zone cards: parent zones first (blue accent), children grouped below each parent."""
+    parent_zones = sorted(
+        [z for z in zonas_data if z['zona'] not in child_zone_names],
+        key=lambda z: _orden_zona(z['zona']),
+    )
+
+    if not zona_children_map:
+        cols = [
+            dbc.Col(
+                _render_zona_card(
+                    z['zona'], z['r'], z['a'], z['d'], z['dias_28'], uid, periodo_label,
+                    has_children=False,
+                    gap_actual=z.get('gap_actual', False),
+                    gap_anterior=z.get('gap_anterior', False),
+                ),
+                xs=12, sm=6, xl=3, className="mb-3",
+            )
+            for z in sorted(zonas_data, key=lambda z: _orden_zona(z['zona']))
+        ]
+        return dbc.Row(cols, className="g-3")
+
+    sections = []
+    for pz in parent_zones:
+        children_names = zona_children_map.get(pz['zona'], [])
+        children_data  = [z for z in zonas_data if z['zona'] in children_names]
+
+        parent_card = _render_zona_card(
+            pz['zona'], pz['r'], pz['a'], pz['d'], pz['dias_28'], uid, periodo_label,
+            child_names=None,
+            has_children=bool(children_names),
+            gap_actual=pz.get('gap_actual', False),
+            gap_anterior=pz.get('gap_anterior', False),
+        )
+
+        block = [dbc.Row([dbc.Col(parent_card, xs=12)], className="mb-2 g-2")]
+
+        if children_data:
+            child_cols = [
+                dbc.Col(
+                    _render_zona_card(
+                        cz['zona'], cz['r'], cz['a'], cz['d'], cz['dias_28'],
+                        uid, periodo_label, has_children=False,
+                        gap_actual=cz.get('gap_actual', False),
+                        gap_anterior=cz.get('gap_anterior', False),
+                    ),
+                    xs=12, sm=6, className="mb-2",
+                )
+                for cz in sorted(children_data, key=lambda z: _orden_zona(z['zona']))
+            ]
+            block.append(
+                html.Div(
+                    dbc.Row(child_cols, className="g-2"),
+                    className="ps-4",
+                    style={"borderLeft": f"3px solid {_color_zona(pz['zona'])}",
+                           "marginLeft": "8px"},
+                )
+            )
+        sections.append(html.Div(block, className="mb-4"))
+
+    return html.Div(sections)
+
+
 # ── Main assembly ─────────────────────────────────────────────────────────────
 
 def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None, ventana="semana"):
@@ -1163,7 +1777,7 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
     )
 
     uid = _slug(location_uuid or ubi)
-    dias_v       = 28 if ventana == "mes" else 7
+    dias_v        = 28 if ventana == "mes" else 7
     periodo_label = "mes" if ventana == "mes" else "semana"
 
     # ── Jerarquía de zonas ───────────────────────────────────────────────
@@ -1176,39 +1790,34 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
             child_zone_names.update(names)
 
     # ── Datos por zona ───────────────────────────────────────────────────
-    puntos  = 0
+    puntos = 0
     zonas_data = []
     for zona in df['Zona'].unique():
         dz = df[df['Zona'] == zona]
         r7,  a7,  d7,  fmin7,  fmax7,  dias7  = evaluar_periodo_zona(dz, fecha_max, 7)
         r28, a28, d28, fmin28, fmax28, dias28  = evaluar_periodo_zona(dz, fecha_max, 28)
 
-        # Period-specific data for cards / narrative
-        r_p  = r28  if ventana == "mes" else r7
-        a_p  = a28  if ventana == "mes" else a7
-        d_p  = d28  if ventana == "mes" else d7
+        r_p    = r28  if ventana == "mes" else r7
+        a_p    = a28  if ventana == "mes" else a7
+        d_p    = d28  if ventana == "mes" else d7
         dias_p = dias28 if ventana == "mes" else dias7
 
-        # Sparkline always 28d for visual context
         dias_28_raw = (
             dz[dz['fecha_dt'] >= fecha_max - timedelta(days=27)]
             .groupby('fecha_dt')['unique_visitors'].sum().reset_index()
             if 'unique_visitors' in dz.columns else pd.DataFrame()
         )
-        # Zeros → NaN: sensor outage days must not pull the trend line down
         if not dias_28_raw.empty:
             dias_28 = dias_28_raw.copy()
             dias_28['unique_visitors'] = dias_28['unique_visitors'].replace(0, np.nan)
         else:
             dias_28 = dias_28_raw
 
-        # Gap detection — compares active days in current vs previous period
         fmin_p = fecha_max - timedelta(days=dias_v - 1)
         fmin_a = fmin_p - timedelta(days=dias_v)
         fmax_a = fmin_p - timedelta(days=1)
         pct_p  = _pct_activos(dz, fmin_p, fecha_max)
         pct_a  = _pct_activos(dz, fmin_a, fmax_a)
-        # >50% of days in a period without data → that period is unreliable
         gap_actual   = pct_p < 0.5
         gap_anterior = pct_a < 0.5
 
@@ -1216,16 +1825,12 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
         elif d_p['visitantes'] <= -5: puntos -= 1
 
         zonas_data.append(dict(
-            zona=zona,
-            r=r_p, a=a_p, d=d_p, dias_p=dias_p,
+            zona=zona, r=r_p, a=a_p, d=d_p, dias_p=dias_p,
             r7=r7, a7=a7, d7=d7, fmin7=fmin7, fmax7=fmax7, dias7=dias7,
-            r28=r28, a28=a28, d28=d28,
-            dias_28=dias_28,
-            gap_actual=gap_actual,
-            gap_anterior=gap_anterior,
+            r28=r28, a28=a28, d28=d28, dias_28=dias_28,
+            gap_actual=gap_actual, gap_anterior=gap_anterior,
         ))
 
-    # Subset used for narrative and zone-segmented charts (parent zones only)
     zonas_data_top = [z for z in zonas_data if z['zona'] not in child_zone_names] or zonas_data
 
     # ── Health status ────────────────────────────────────────────────────
@@ -1242,11 +1847,19 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
         f"Score total: {puntos:+d}."
     )
 
-    # ── 1. Header ────────────────────────────────────────────────────────
+    # ── Geo data ─────────────────────────────────────────────────────────
+    geo_vals_loc  = get_geo_vals(location_uuid) if location_uuid else {}
+    fecha_captura = get_geo_snapshot_date(location_uuid) if location_uuid else None
+
+    # ── Narrativa ────────────────────────────────────────────────────────
+    items_narrativa = _narrativa(zonas_data_top, fecha_max, clima, ventana=ventana,
+                                 geo_vals=geo_vals_loc)
+
+    # ── Header ───────────────────────────────────────────────────────────
     header = dbc.Card(
         dbc.CardBody(dbc.Row([
             dbc.Col([
-                html.P("Panel PM", className="mb-1 text-white-50 text-uppercase fw-bold",
+                html.P("ESTADO", className="mb-1 text-white-50 text-uppercase fw-bold",
                        style={"fontSize": "0.61rem", "letterSpacing": "1px"}),
                 html.H4(ubi, className="fw-bold mb-1 text-white"),
                 html.P(
@@ -1262,93 +1875,13 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
                     dbc.Badge(health_label, color=badge_color, pill=True,
                               className="fs-6 px-3 py-2", id=health_badge_id,
                               style={"cursor": "help"}),
-                    dbc.Tooltip(health_tooltip, target=health_badge_id,
-                                placement="left"),
+                    dbc.Tooltip(health_tooltip, target=health_badge_id, placement="left"),
                 ], className="d-flex justify-content-end align-items-center h-100"),
                 xs=3,
             ),
         ])),
         className="border-0 rounded-4 mb-4 shadow-sm",
         style={"background": "linear-gradient(135deg, #0052CC 0%, #003d99 100%)"},
-    )
-
-    # ── Geo data (loaded once — shared by narrativa and geo panel) ───────
-    geo_vals_loc  = get_geo_vals(location_uuid) if location_uuid else {}
-    fecha_captura = get_geo_snapshot_date(location_uuid) if location_uuid else None
-
-    # ── 2. Narrativa ─────────────────────────────────────────────────────
-    items_narrativa = _narrativa(zonas_data_top, fecha_max, clima, ventana=ventana,
-                                 geo_vals=geo_vals_loc)
-
-    _ventana_label = "este mes" if ventana == "mes" else "esta semana"
-    narrativa_header = html.Div([
-        html.H5(
-            [html.I(className="fas fa-comment-dots me-2 text-primary"),
-             f"¿Qué pasó {_ventana_label}?"],
-            className="fw-bold mb-1",
-            style={"fontSize": "1.15rem", "color": _C_DARK},
-        ),
-        html.P(
-            (f"Análisis de los últimos 28 días vs los 28 días anteriores."
-             if ventana == "mes" else
-             f"Análisis de los últimos 7 días vs los 7 días anteriores."),
-            className="text-muted mb-3",
-            style={"fontSize": "0.84rem"},
-        ),
-    ], className="mb-2")
-
-    narrativa = html.Div([narrativa_header, _render_narrativa(items_narrativa)])
-
-    # ── 3. Zonas (semáforo + sparkline) ──────────────────────────────────
-    def _orden(z):
-        zl = z['zona'].lower()
-        if 'exterior' in zl or 'calle' in zl: return 0
-        if 'tienda' in zl:                    return 1
-        if 'caja' in zl:                      return 2
-        return 3
-
-    zona_cols = [
-        dbc.Col(
-            _render_zona_card(
-                z['zona'], z['r'], z['a'], z['d'], z['dias_28'], uid, periodo_label,
-                child_names=zona_children_map.get(z['zona'], []),
-                has_children=z['zona'] in zona_children_map,
-                gap_actual=z.get('gap_actual', False),
-                gap_anterior=z.get('gap_anterior', False),
-            ),
-            xs=12, sm=6, xl=3, className="mb-3",
-        )
-        for z in sorted(zonas_data, key=_orden)
-    ]  # noqa: E501
-
-    _ventana_zona_lbl = "últimos 28 días" if ventana == "mes" else "últimos 7 días"
-    zonas_section = html.Div([
-        html.H5(
-            [html.I(className="fas fa-layer-group me-2 text-primary"),
-             f"Estado por zona — {_ventana_zona_lbl}"],
-            className="fw-bold mb-1",
-            style={"fontSize": "1.15rem", "color": _C_DARK},
-        ),
-        html.P(
-            "Variación de visitantes únicos respecto al período equivalente anterior. "
-            "La línea punteada en el sparkline marca la tendencia de los últimos 28 días.",
-            className="text-muted mb-3",
-            style={"fontSize": "0.84rem"},
-        ),
-        dbc.Row(zona_cols, className="g-3"),
-    ], className="mb-4")
-
-    # ── 4. Preguntas PM ──────────────────────────────────────────────────
-    dias_section = _render_pm_questions(
-        df, zonas_data, fecha_max, uid,
-        ventana=ventana, child_zones=child_zone_names,
-    )
-
-    # ── 5. Geo panel ─────────────────────────────────────────────────────
-    geo = (
-        generar_panel_geo_visual(location_uuid, geo_vals_loc, clima,
-                                  fecha_captura=fecha_captura)
-        if location_uuid else html.Div()
     )
 
     # ── PDF header (print-only) ───────────────────────────────────────────
@@ -1371,13 +1904,100 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
         html.Br(),
     ], className="d-none d-print-block")
 
+    # ── Narrativa (briefing siempre visible) ─────────────────────────────
+
+    _ventana_label = "este mes" if ventana == "mes" else "esta semana"
+    narrativa = html.Div([
+        html.H5(
+            [html.I(className="fas fa-comment-dots me-2 text-primary"),
+             f"Resumen · {_ventana_label}"],
+            className="fw-bold mb-1",
+            style={"fontSize": "1.05rem", "color": _C_DARK},
+        ),
+        html.P(
+            ("Análisis de los últimos 28 días vs los 28 días anteriores."
+             if ventana == "mes" else
+             "Análisis de los últimos 7 días vs los 7 días anteriores."),
+            className="text-muted mb-2", style={"fontSize": "0.84rem"},
+        ),
+        _render_narrativa(items_narrativa),
+    ], className="mb-3")
+
+    # ── Contenidos de las secciones desplegables ──────────────────────────
+
+    _ventana_zona_lbl = "últimos 28 días" if ventana == "mes" else "últimos 7 días"
+
+    sec_zona = html.Div([
+        html.P(
+            "Variación de visitantes respecto al período equivalente anterior. "
+            "Las zonas padre se muestran con fondo azul; sus subzonas aparecen agrupadas debajo.",
+            className="text-muted mb-3", style={"fontSize": "0.82rem"},
+        ),
+        _render_zona_section_jerarquica(zonas_data, zona_children_map,
+                                        child_zone_names, uid, periodo_label),
+    ])
+
+    sec_patrones = html.Div([
+        html.P("Distribución temporal de visitantes por día, hora y tipo de jornada.",
+               className="text-muted mb-3", style={"fontSize": "0.82rem"}),
+        _render_pm_questions(df, zonas_data, fecha_max, uid,
+                             ventana=ventana, child_zones=child_zone_names),
+    ])
+
+    sec_senales = (
+        _render_senal_contexto_modal(location_uuid, uid, fecha_max)
+        or html.Div(html.P("Sin datos de contexto externo disponibles.", className="text-muted"))
+    )
+
+    sec_geo = (
+        generar_panel_geo_visual(location_uuid, geo_vals_loc, clima,
+                                 fecha_captura=fecha_captura)
+        if location_uuid
+        else html.Div(html.P("Sin datos de contexto geoespacial.", className="text-muted"))
+    )
+
+    # ── Acordeón ─────────────────────────────────────────────────────────
+
+    def _acc_title(icon_cls, texto, color):
+        return html.Span([
+            html.I(className=f"{icon_cls} me-2",
+                   style={"color": color, "fontSize": "0.9rem"}),
+            html.Span(texto, style={"fontWeight": "600", "fontSize": "0.92rem",
+                                    "color": _C_DARK}),
+        ])
+
+    acordeon = dbc.Accordion([
+        dbc.AccordionItem(
+            sec_zona,
+            title=_acc_title("fas fa-layer-group", f"Estado por zona · {_ventana_zona_lbl}", "#0052CC"),
+            item_id="zona",
+        ),
+        dbc.AccordionItem(
+            sec_patrones,
+            title=_acc_title("fas fa-chart-column", "Patrones de comportamiento", "#27AE60"),
+            item_id="patrones",
+        ),
+        dbc.AccordionItem(
+            sec_senales,
+            title=_acc_title("fas fa-broadcast-tower", "Señal del contexto exterior", "#E67E22"),
+            item_id="senales",
+        ),
+        dbc.AccordionItem(
+            sec_geo,
+            title=_acc_title("fas fa-map-marked-alt", "Contexto geoespacial", "#8E44AD"),
+            item_id="geo",
+        ),
+    ],
+    always_open=True,
+    active_item=[],
+    className="shadow-sm rounded-4",
+    )
+
     return html.Div([
         pdf_header,
         header,
         narrativa,
-        zonas_section,
-        dias_section,
-        geo,
+        acordeon,
     ])
 
 

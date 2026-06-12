@@ -14,7 +14,8 @@ app = dash.Dash(
     __name__,
     assets_folder=os.path.join(_PROJECT_ROOT, 'assets'),
     external_stylesheets=[dbc.themes.LUX, dbc.icons.FONT_AWESOME],
-    suppress_callback_exceptions=True
+    suppress_callback_exceptions=True,
+    update_title=None,
 )
 app.title = "Reporting Aitanna"
 

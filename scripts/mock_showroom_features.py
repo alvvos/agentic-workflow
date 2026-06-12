@@ -237,7 +237,7 @@ _EVENTS = [
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dias",    type=int, default=180)
+    parser.add_argument("--dias",    type=int, default=400)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--limpiar", action="store_true")
     args = parser.parse_args()
@@ -321,6 +321,15 @@ def main():
         "ON CONFLICT (fecha, location_uuid, feature_key) DO UPDATE SET value = excluded.value",
         [(r[2], r[0], r[1], r[3]) for r in serie_rows],
     )
+
+    # Registrar las series de área como activas en feature_flags
+    for fk in _SERIES:
+        conn.execute(
+            "INSERT INTO feature_flags (feature_key, location_uuid, status) "
+            "VALUES (?, ?, 'active') "
+            "ON CONFLICT (feature_key, location_uuid) DO UPDATE SET status = 'active'",
+            [fk, _SHOWROOM_UUID],
+        )
 
     cal_rows_db = [
         (org_uuid, r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8])

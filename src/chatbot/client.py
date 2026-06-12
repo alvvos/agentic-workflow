@@ -16,6 +16,8 @@ import anthropic
 from src.chatbot.tools import (
     get_pm_data, get_gis_data, get_weather_holidays,
     get_forecast, get_anomalies, get_hourly_breakdown, compare_locations,
+    get_location_info, get_active_features, get_external_features,
+    get_calendar_events, get_cruise_calls, get_model_metrics,
     _find_location,
 )
 from src.chatbot.cache import get_cached, set_cached
@@ -149,16 +151,134 @@ _TOOL_DEFINITIONS = [
             "required": ["location_uuid"],
         },
     },
+    {
+        "name": "get_location_info",
+        "description": (
+            "Devuelve información completa de una ubicación: nombre, organización, "
+            "dirección, ciudad, coordenadas y lista de todas sus zonas con sus UUIDs. "
+            "Úsala cuando el usuario pregunte qué es o dónde está una ubicación, "
+            "o para obtener los UUIDs de las zonas antes de llamar a otras herramientas."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location_uuid": {"type": "string", "description": "UUID de la ubicación."},
+            },
+            "required": ["location_uuid"],
+        },
+    },
+    {
+        "name": "get_active_features",
+        "description": (
+            "Lista las features externas activas para una ubicación: turistas, pasajeros "
+            "de crucero, viajeros de metro, clima, vacaciones escolares, etc. Muestra "
+            "fuente, categoría, último valor registrado e impacto en el modelo predictivo. "
+            "Úsala para responder qué datos de contexto externo tiene disponibles la ubicación."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location_uuid": {"type": "string", "description": "UUID de la ubicación."},
+            },
+            "required": ["location_uuid"],
+        },
+    },
+    {
+        "name": "get_external_features",
+        "description": (
+            "Devuelve la serie temporal de features externas (turistas, pasajeros de crucero, "
+            "viajeros de metro, temperatura, precipitación, etc.) en un rango de fechas. "
+            "Incluye resumen estadístico (total, media, máximo) y comparativa YoY opcional. "
+            "feature_keys disponibles típicos: n_turistas_ciudad, n_pasajeros_crucero_dia, "
+            "n_viajeros_metro_estacion, temp_max, temp_min, llueve."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location_uuid": {"type": "string", "description": "UUID de la ubicación."},
+                "feature_keys":  {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Lista de feature keys a consultar.",
+                },
+                "fecha_inicio":  {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
+                "fecha_fin":     {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
+                "incluir_yoy":   {"type": "boolean", "description": "Si true, añade comparativa con el mismo periodo del año anterior."},
+            },
+            "required": ["location_uuid", "feature_keys", "fecha_inicio", "fecha_fin"],
+        },
+    },
+    {
+        "name": "get_calendar_events",
+        "description": (
+            "Devuelve los eventos del calendario externo de una ubicación en un rango de fechas: "
+            "conciertos, festivales, partidos deportivos, escalas de cruceros, festivos regionales, "
+            "vacaciones escolares, estrenos, manifestaciones, etc. "
+            "Incluye título del evento, tipo, impacto y fechas de inicio y fin."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location_uuid": {"type": "string", "description": "UUID de la ubicación."},
+                "fecha_inicio":  {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
+                "fecha_fin":     {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
+                "evento_key":    {"type": "string", "description": "Filtrar por tipo de evento (opcional, ej: 'concierto_wizink')."},
+            },
+            "required": ["location_uuid", "fecha_inicio", "fecha_fin"],
+        },
+    },
+    {
+        "name": "get_cruise_calls",
+        "description": (
+            "Devuelve las escalas individuales de cruceros en una ubicación portuaria: "
+            "nombre del barco, operador, número de pasajeros y terminal. "
+            "Incluye resumen mensual de pasajeros y comparativa YoY con el año anterior. "
+            "Solo disponible para ubicaciones con puerto de cruceros (ej: Málaga Muelle 1)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location_uuid": {"type": "string", "description": "UUID de la ubicación portuaria."},
+                "fecha_inicio":  {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
+                "fecha_fin":     {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
+            },
+            "required": ["location_uuid", "fecha_inicio", "fecha_fin"],
+        },
+    },
+    {
+        "name": "get_model_metrics",
+        "description": (
+            "Devuelve las métricas de precisión del modelo predictivo XGBoost para una "
+            "ubicación o zona: WMAPE, MAE, fecha de entrenamiento, features usadas y "
+            "resultados de la evaluación individual de features. "
+            "Úsala cuando el usuario pregunte sobre la precisión del modelo, qué features "
+            "mejoran las predicciones o cuándo se entrenó el modelo."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location_uuid": {"type": "string", "description": "UUID de la ubicación."},
+                "zone_uuid":     {"type": "string", "description": "UUID de la zona específica (opcional)."},
+            },
+            "required": ["location_uuid"],
+        },
+    },
 ]
 
 _TOOL_FN = {
-    "get_pm_data":           lambda args: get_pm_data(**args),
-    "get_gis_data":          lambda args: get_gis_data(**args),
-    "get_weather_holidays":  lambda args: get_weather_holidays(**args),
-    "get_forecast":          lambda args: get_forecast(**args),
-    "get_anomalies":         lambda args: get_anomalies(**args),
-    "get_hourly_breakdown":  lambda args: get_hourly_breakdown(**args),
-    "compare_locations":     lambda args: compare_locations(**args),
+    "get_pm_data":            lambda args: get_pm_data(**args),
+    "get_gis_data":           lambda args: get_gis_data(**args),
+    "get_weather_holidays":   lambda args: get_weather_holidays(**args),
+    "get_forecast":           lambda args: get_forecast(**args),
+    "get_anomalies":          lambda args: get_anomalies(**args),
+    "get_hourly_breakdown":   lambda args: get_hourly_breakdown(**args),
+    "compare_locations":      lambda args: compare_locations(**args),
+    "get_location_info":      lambda args: get_location_info(**args),
+    "get_active_features":    lambda args: get_active_features(**args),
+    "get_external_features":  lambda args: get_external_features(**args),
+    "get_calendar_events":    lambda args: get_calendar_events(**args),
+    "get_cruise_calls":       lambda args: get_cruise_calls(**args),
+    "get_model_metrics":      lambda args: get_model_metrics(**args),
 }
 
 
@@ -172,7 +292,8 @@ def _system_prompt(
         f"Hoy es {today}. "
         "Eres el asistente analítico del panel de Project Management (PM Dashboard). "
         "Tienes acceso a datos reales de tráfico de visitantes, datos geoespaciales, "
-        "clima e información de festivos de las ubicaciones de los clientes. "
+        "clima, festivos, features externas (turistas, cruceros, metro), calendario de eventos, "
+        "escalas de cruceros, métricas del modelo predictivo e información de ubicaciones. "
         "Responde siempre en español, de forma concisa y orientada a decisiones de negocio. "
         "Si necesitas datos para responder, usa las herramientas disponibles. "
         "No inventes cifras; si no tienes datos, dilo claramente. "

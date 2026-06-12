@@ -181,29 +181,5 @@ def cancelar_sincronizacion(_, session_id):
     return "Cancelando… finalizando ubicación actual."
 
 
-# ── Flush (limpia caché de modelos ML, no los datos) ────────────────────────
-
-@app.callback(
-    Output("toast-notificacion", "is_open", allow_duplicate=True),
-    Output("toast-notificacion", "children", allow_duplicate=True),
-    Output("toast-notificacion", "icon", allow_duplicate=True),
-    Output("toast-notificacion", "header", allow_duplicate=True),
-    Input("btn-flush", "n_clicks"),
-    State("session-id", "data"),
-    prevent_initial_call=True,
-)
-def limpiar_memoria(n, session_id):
-    import os, glob
-    from src.services.ml_predictivo import _REGISTRY_DIR
-    try:
-        removed = 0
-        for f in glob.glob(os.path.join(_REGISTRY_DIR, "*")):
-            os.remove(f)
-            removed += 1
-        msg = f"Caché de modelos ML limpiada ({removed} ficheros)."
-        return True, msg, "success", "Flush caché ML"
-    except Exception as e:
-        return True, f"Error: {str(e)}", "danger", "Error"
-
 
 import pandas as pd  # noqa: E402 — needed by actualizar_alerta_sync

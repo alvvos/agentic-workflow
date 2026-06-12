@@ -285,7 +285,8 @@ def on_send(n_clicks, n_submit, user_text, history, locs, session_id, conv_id):
 
     clean_text, all_mentions = parse_all_mentions(raw_text)
     primary       = all_mentions[0] if all_mentions else None
-    dropdown_uuid = locs[0] if isinstance(locs, list) and locs else locs
+    _raw_loc      = locs[0] if isinstance(locs, list) and locs else locs
+    dropdown_uuid = _raw_loc if isinstance(_raw_loc, str) and _raw_loc else None
     location_uuid = (primary["location_uuid"] if primary else None) or dropdown_uuid
     zone_uuid     = primary["zone_uuid"] if primary else None
     extra_mentions = [

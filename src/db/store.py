@@ -443,6 +443,27 @@ def _apply_ddl(conn: PgConn) -> None:
     _migrate_feature_flags(conn)
     _migrate_feature_registry(conn)
     _migrate_feature_registry_fks(conn)
+    _sync_users_from_json(conn)
+
+
+def _sync_users_from_json(conn: PgConn) -> None:
+    """Upsert users from users.json into dim_usuarios on every startup."""
+    import json as _json
+    from pathlib import Path as _Path
+    users_file = _Path(__file__).parent.parent.parent / 'users.json'
+    if not users_file.exists():
+        return
+    users = _json.loads(users_file.read_text())
+    rows = []
+    for username, entry in users.items():
+        if isinstance(entry, str):
+            entry = {'password': entry, 'role': 'user'}
+        rows.append((username, entry.get('password', ''), entry.get('role', 'user')))
+    conn.executemany(
+        "INSERT INTO dim_usuarios (user_id, password_hash, role) VALUES (?,?,?)"
+        " ON CONFLICT (user_id) DO UPDATE SET password_hash = excluded.password_hash, role = excluded.role",
+        rows,
+    )
 
 
 def _migrate_feature_registry(conn: PgConn) -> None:

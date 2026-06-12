@@ -286,7 +286,7 @@ def _render_area_signals(location_uuid: str):
             html.Div([
                 html.I(className='fas fa-user-friends me-2',
                        style={'color': '#e67e22', 'fontSize': '0.75rem'}),
-                html.Span("Turistas estimados · isócrona 10 min · media mensual",
+                html.Span("Turistas estimados · isócrona 0-10 min · media mensual",
                           style={'fontSize': '0.66rem', 'color': _C_MUTED,
                                  'textTransform': 'uppercase', 'letterSpacing': '0.45px',
                                  'fontWeight': '600'}),
@@ -479,16 +479,16 @@ def _auto_insight_captacion(vals):
     if pob15 and pob15 > 0:
         pct = pob5 / pob15 * 100
         if pct < 15:
-            coment = (f"Solo el {pct:.0f}% de esa masa vive a menos de 5 minutos, "
-                      "la tienda depende del tráfico de paso del área ampliada.")
+            coment = (f"Solo el {pct:.0f}% de esa masa reside en la isócrona 0-5 min; "
+                      "el establecimiento depende del tráfico de paso del área ampliada.")
         else:
-            coment = (f"El {pct:.0f}% de toda la masa accesible a 15 min vive a menos de 5 min: "
-                      "concentración muy favorable para compra por impulso.")
+            coment = (f"El {pct:.0f}% de la población accesible en la isócrona 0-15 min "
+                      "reside en la isócrona 0-5 min: concentración favorable para compra por impulso.")
     else:
         coment = ""
-    bloque = f"{pob5:,.0f} personas viven a menos de 5 minutos de la tienda."
+    bloque = f"{pob5:,.0f} personas viven dentro de la isócrona 0-5 min."
     if pob10 and pob15:
-        bloque += f" A 10 min el área crece hasta {pob10:,.0f} y a 15 min alcanza {pob15:,.0f}."
+        bloque += f" En la isócrona 0-10 min el área crece hasta {pob10:,.0f} y en la isócrona 0-15 min alcanza {pob15:,.0f}."
     return f"{bloque} {coment}".strip()
 
 
@@ -696,12 +696,12 @@ def _build_metric_cards(vals):
     if pob5 is not None:
         nivel     = "Potencial alto"  if pob5 > 5_000 else ("Potencial medio" if pob5 > 2_000 else "Potencial bajo")
         badge_col = "success"         if pob5 > 5_000 else ("warning"         if pob5 > 2_000 else "danger")
-        funnel = [(f"{pob5:,.0f}", "5 min")]
-        if pob10: funnel.append((f"{pob10:,.0f}", "10 min"))
-        if pob15: funnel.append((f"{pob15:,.0f}", "15 min"))
+        funnel = [(f"{pob5:,.0f}", "0-5 min")]
+        if pob10: funnel.append((f"{pob10:,.0f}", "0-10 min"))
+        if pob15: funnel.append((f"{pob15:,.0f}", "0-15 min"))
         cards.append(dict(
             icon="fas fa-walking", label="Captación peatonal",
-            main_val=f"{pob5:,.0f}", unit="hab. a 5 min",
+            main_val=f"{pob5:,.0f}", unit="hab. isócrona 0-5 min",
             badge_txt=nivel, badge_col=badge_col,
             border_color=_C_PRIMARY, funnel=funnel, detail=None,
         ))
@@ -932,9 +932,9 @@ def _render_cards(cards_data, max_per_row=3):
 def _fig_captacion(vals):
     pob5, pob10, pob15 = vals.get("poblacion_5min"), vals.get("poblacion_10min"), vals.get("poblacion_15min")
     specs = []
-    if pob5  is not None: specs.append(("0–5 min",   pob5,                                    "rgba(40,167,69,0.75)",  pob5))
-    if pob10 is not None: specs.append(("5–10 min",  max(0, pob10 - (pob5 or 0)),              "rgba(243,156,18,0.80)", pob10))
-    if pob15 is not None: specs.append(("10–15 min", max(0, pob15 - (pob10 or pob5 or 0)),    "rgba(0,82,204,0.70)",  pob15))
+    if pob5  is not None: specs.append(("Isócrona 0-5 min",   pob5,                                    "rgba(40,167,69,0.75)",  pob5))
+    if pob10 is not None: specs.append(("Isócrona 0-10 min",  max(0, pob10 - (pob5 or 0)),              "rgba(243,156,18,0.80)", pob10))
+    if pob15 is not None: specs.append(("Isócrona 0-15 min",  max(0, pob15 - (pob10 or pob5 or 0)),    "rgba(0,82,204,0.70)",  pob15))
     if not specs:
         return None
     labels, values, colors, cum_vals = zip(*specs)
@@ -1051,6 +1051,44 @@ def _fig_estructura_hogar(vals):
     return fig
 
 
+def _flow_vectors(lat0, lon0, pois, n_rows=9, n_cols=11, arrow_len_m=75):
+    """
+    Returns (lats, lons) encoding a vector field: one short line segment per grid
+    point, oriented toward the weighted centroid of nearby attractions (store + POIs).
+    Each vector = [start, end, None] so a single Scattermapbox trace draws all arrows.
+    """
+    lat_m = 1 / 111_320
+    lon_m = 1 / (111_320 * math.cos(math.radians(lat0)))
+    half = 1100  # metres — covers isócrona 0-15 min
+    half_lat = half * lat_m
+    half_lon = half * lon_m
+
+    # Attractions: store (weight 2) + POIs
+    atts = [(lat0, lon0, 2.0)]
+    for p in pois:
+        atts.append((p["lat"], p["lon"], float(p.get("valor", 0.5))))
+
+    all_lats, all_lons = [], []
+    for i in range(n_rows):
+        for j in range(n_cols):
+            glat = lat0 - half_lat + 2 * half_lat * (i + 0.5) / n_rows
+            glon = lon0 - half_lon + 2 * half_lon * (j + 0.5) / n_cols
+            vx = vy = 0.0
+            for alat, alon, w in atts:
+                dlat = alat - glat
+                dlon = alon - glon
+                dist_m = math.sqrt((dlat / lat_m) ** 2 + (dlon / lon_m) ** 2) + 1e-3
+                factor = w / dist_m
+                vx += dlat * factor
+                vy += dlon * factor
+            mag = math.sqrt(vx ** 2 + vy ** 2) + 1e-12
+            elat = glat + (vx / mag) * arrow_len_m * lat_m
+            elon = glon + (vy / mag) * arrow_len_m * lon_m
+            all_lats += [glat, elat, None]
+            all_lons += [glon, elon, None]
+    return all_lats, all_lons
+
+
 def _fig_mapa(vals, lat, lon, uuid):
     if lat is None or lon is None:
         return None
@@ -1067,9 +1105,9 @@ def _fig_mapa(vals, lat, lon, uuid):
 
     # Anillos: dibujamos del mayor al menor para que los menores queden encima
     ring_specs = [
-        (2, "rgba(0,82,204,0.07)",   "rgba(0,82,204,0.28)",   "15 min a pie"),
-        (1, "rgba(243,156,18,0.10)", "rgba(243,156,18,0.42)", "10 min a pie"),
-        (0, "rgba(40,167,69,0.15)",  "rgba(40,167,69,0.65)",  " 5 min a pie"),
+        (2, "rgba(0,82,204,0.07)",   "rgba(0,82,204,0.28)",   "Isócrona 0-15 min"),
+        (1, "rgba(243,156,18,0.10)", "rgba(243,156,18,0.42)", "Isócrona 0-10 min"),
+        (0, "rgba(40,167,69,0.15)",  "rgba(40,167,69,0.65)",  "Isócrona 0-5 min"),
     ]
 
     if usa_geo_real:
@@ -1138,12 +1176,24 @@ def _fig_mapa(vals, lat, lon, uuid):
 
     store_tip = "<b>Tu ubicación</b>"
     if pob5:
-        store_tip += f"<br>{pob5:,.0f} hab. en 5 min a pie"
+        store_tip += f"<br>{pob5:,.0f} hab. en isócrona 0-5 min"
     store_tip += "<extra></extra>"
     fig.add_trace(go.Scattermapbox(
         lat=[lat], lon=[lon], mode="markers",
         marker=dict(size=20, color=_C_PRIMARY),
         name="Ubicación", hovertemplate=store_tip,
+    ))
+
+    # Campo vectorial de flujo peatonal — capa activable vía leyenda
+    vf_lats, vf_lons = _flow_vectors(lat, lon, spatial_pois)
+    fig.add_trace(go.Scattermapbox(
+        lat=vf_lats, lon=vf_lons,
+        mode="lines",
+        line=dict(color="#8e44ad", width=1.5),
+        opacity=0.70,
+        name="Flujo peatonal",
+        hoverinfo="skip",
+        visible="legendonly",
     ))
 
     fig.update_layout(
@@ -1396,11 +1446,11 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
     if fig_cap:
         sec_a_charts.append(dbc.Col(
             _chart_card(fig_cap, f"geo-cap-{uid}", _H_CHART,
-                        title="Población al alcance a pie · isócronas de 5 / 10 / 15 min"),
+                        title="Población al alcance a pie · isócronas 0-5 / 0-10 / 0-15 min"),
             xs=12, lg=5, className="mb-3",
         ))
     if fig_mapa:
-        iso_label = "Área de influencia · isócronas peatonales" if get_catchment_rings(location_uuid) else "Área de influencia · isócronas aproximadas"
+        iso_label = "Área de influencia · isócronas 0-5, 0-10 y 0-15 min" if get_catchment_rings(location_uuid) else "Área de influencia · isócronas aproximadas"
         sec_a_charts.append(dbc.Col(
             _chart_card(fig_mapa, f"geo-map-{uid}", _H_CHART,
                         title=iso_label,
@@ -1424,14 +1474,11 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
             xs=12, lg=6, className="mb-3",
         ))
 
-    ext_section = _render_area_signals(location_uuid) or html.Div()
-
     seccion_a = html.Div([
         _section_header("fas fa-walking", "Alcance peatonal",
                         "¿Cuántas personas pueden llegar a pie y cuál es su perfil demográfico?"),
         _render_cards(cards_a, max_per_row=4),
         _row(sec_a_charts),
-        ext_section,
         _row(sec_a_charts2),
     ], className="mb-4")
 

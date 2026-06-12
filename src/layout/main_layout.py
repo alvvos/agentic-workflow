@@ -31,7 +31,6 @@ def serve_layout():
             ], xs=12, md=7, className="mb-4 mb-md-0"),
             dbc.Col([
                 dbc.Button([html.I(className="fas fa-sync-alt me-2"), "Sincronizar"], id="btn-sync", color="primary", outline=True, className="fw-bold rounded-3 shadow-sm me-2"),
-                dbc.Button([html.I(className="fas fa-trash-alt me-2"), "Flush"], id="btn-flush", color="danger", outline=True, className="fw-bold rounded-3 shadow-sm me-2"),
                 html.A([html.I(className="fas fa-sign-out-alt me-1"), session_id], href="/logout", className="btn btn-outline-secondary btn-sm fw-bold rounded-3 shadow-sm") if not MODO_DESARROLLO else html.Span()
             ], xs=12, md=5, className="text-center text-md-end")
         ], id="cabecera-app", className="mb-4 align-items-center d-print-none"),
@@ -42,8 +41,9 @@ def serve_layout():
                     build_tab_pm(),
                     build_tab_bi(),
                     *([] if role != "admin" else [build_tab_ml()]),
-                    *([] if role != "admin" else [build_tab_admin()]),
                     *([] if role != "admin" else [build_tab_reportes()]),
+                    *([] if role != "admin" else [build_tab_admin()]),
+                    
                 ])
             ])
         ], className="border-0 shadow-sm rounded-4")

@@ -3,7 +3,7 @@ import dash_bootstrap_components as dbc
 
 
 def build_tab_bi():
-    return dcc.Tab(label='Panel BI', value='tab-auditoria', className="fw-bold", children=[
+    return dcc.Tab(label='Analítica', value='tab-auditoria', className="fw-bold", children=[
         html.Br(),
 
         dcc.Store(id="zonas-activas-combined"),

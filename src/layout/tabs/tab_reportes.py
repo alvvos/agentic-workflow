@@ -16,7 +16,7 @@ def _seccion_informe(num, titulo, desc, color_num, nota=None):
 
 
 def build_tab_reportes():
-    return dcc.Tab(label='Generador de reportes', value='tab-reportes', className="fw-bold", children=[
+    return dcc.Tab(label='Reportes', value='tab-reportes', className="fw-bold", children=[
         html.Br(),
         dbc.Row([
             dbc.Col([
