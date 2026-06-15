@@ -133,6 +133,38 @@
     box-shadow: 0 0 0 0.18rem rgba(0, 82, 204, 0.20) !important;
 }
 
+/* ── Panel Estado: cabeceras del acordeón ────────────────────────────────── */
+/* Cerradas → fondo azul corporativo */
+.pm-acordeon .accordion-button.collapsed {
+    background-color: #0052CC !important;
+    color: #fff !important;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+/* Iconos y texto dentro de la cabecera cerrada */
+.pm-acordeon .accordion-button.collapsed i {
+    color: rgba(255,255,255,0.88) !important;
+}
+.pm-acordeon .accordion-button.collapsed span {
+    color: #fff !important;
+}
+/* Chevron blanco cuando está cerrada */
+.pm-acordeon .accordion-button.collapsed::after {
+    filter: brightness(0) invert(1);
+}
+/* Abiertas → fondo muy claro, texto oscuro */
+.pm-acordeon .accordion-button:not(.collapsed) {
+    background-color: #f4f7ff;
+    color: #1a2e5a;
+    box-shadow: inset 0 -1px 0 rgba(0,82,204,0.12);
+}
+.pm-acordeon .accordion-button:not(.collapsed)::after {
+    filter: none;
+}
+/* Hover suave en estado abierto */
+.pm-acordeon .accordion-button:hover {
+    opacity: 0.92;
+}
+
 /* ── Chat @menciones — dropdown inline ──────────────────────────────────── */
 .mention-option-item:hover {
     background-color: #e8effc !important;

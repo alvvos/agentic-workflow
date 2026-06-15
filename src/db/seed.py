@@ -200,14 +200,14 @@ def seed_feature_registry() -> int:
     ]:
         entries.append((key, 'open_meteo', 'clima', '"all"', None, 'con_cobertura', None, nota))
 
-    # Port data placeholder — Málaga Muelle 1 only
+    # Port data — Málaga Muelle 1 only (prefetch: src/data_ingestion/prefetch/cruceros.py)
     entries.append((
-        'n_pasajeros_crucero_dia', 'puerto_malaga', 'evento',
+        'n_pasajeros_crucero_dia', 'cruceros', 'trafico_externo',
         json.dumps(['5c13b57d-782d-4458-911b-64cd40eebb55']),  # Miniso España org
         json.dumps(['67034276-0d01-4c90-a363-fa75699a19a4']),  # Malaga Muelle 1
         'con_cobertura', None,
-        'Escalas de cruceros en Puerto Málaga. Datos públicos en puertodemalaga.es. '
-        'Pendiente ingesta automática.',
+        'Escalas de cruceros en Puerto Málaga. Fuente: puertomalaga.com WP-AJAX. '
+        'Prefetch automático en src/data_ingestion/prefetch/cruceros.py.',
     ))
 
     conn.executemany(
@@ -216,7 +216,13 @@ def seed_feature_registry() -> int:
             (feature_key, source, categoria, org_applicability, location_applicability,
              status, notas)
         VALUES (?,?,?,?,?,?,?)
-        ON CONFLICT DO NOTHING
+        ON CONFLICT (feature_key) DO UPDATE
+            SET source               = EXCLUDED.source,
+                categoria            = EXCLUDED.categoria,
+                org_applicability    = EXCLUDED.org_applicability,
+                location_applicability = EXCLUDED.location_applicability,
+                status               = EXCLUDED.status,
+                notas                = COALESCE(EXCLUDED.notas, feature_registry.notas)
         """,
         [(e[0], e[1], e[2], e[3], e[4], e[5], e[7]) for e in entries],
     )
@@ -462,15 +468,6 @@ def run_all(verbose: bool = True) -> None:
     log('── chat_conversaciones + chat_mensajes (JSON → DuckDB)')
     n = seed_conversaciones()
     log(f'   {n} conversaciones migradas')
-
-    log('── eventos_externos: prefetch todas las ubicaciones')
-    try:
-        from src.data_processing.eventos_client import prefetch_all_locations
-        res = prefetch_all_locations()
-        total_dias = sum(res.values())
-        log(f'   {len(res)} ubicaciones · {total_dias} días con features')
-    except Exception as e:
-        log(f'   Aviso: prefetch falló ({e})')
 
     log('Done.')
 

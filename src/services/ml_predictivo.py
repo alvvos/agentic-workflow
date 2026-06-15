@@ -8,7 +8,6 @@ import holidays
 import gc
 from datetime import datetime, timedelta
 from src.data_processing.supercalendario import get_calendario_features, CALENDARIO_FEATURE_COLS
-from src.data_processing.eventos_client import get_eventos_features, EVENTOS_FEATURE_COLS, _prefetched, prefetch_eventos
 from src.db.queries import get_org_info, get_active_ext_features
 
 # Holiday calendar cache keyed by (pais_codigo, year)
@@ -160,34 +159,42 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
         for col in CALENDARIO_FEATURE_COLS:
             train[col] = cal_rows[col].values
 
-        _ev_ready = location_uuid in _prefetched
-        if not _ev_ready:
-            import threading
-            threading.Thread(target=prefetch_eventos, args=(location_uuid,), daemon=True).start()
-            ev_rows = pd.DataFrame([{col: 0 for col in EVENTOS_FEATURE_COLS}] * len(train), index=train.index)
-        else:
-            ev_rows = pd.DataFrame(
-                [get_eventos_features(fecha, location_uuid=location_uuid) for fecha in train['fecha']],
-                index=train.index
-            )
-        for col in EVENTOS_FEATURE_COLS:
-            train[col] = ev_rows[col].values
-
         # Features externas activas para este (location, zone) desde feature_flags
         ext_df = get_active_ext_features(
             location_uuid,
             train['fecha'].min(), train['fecha'].max(),
         )
-        ext_cols = [c for c in ext_df.columns if c in ext_df.columns and ext_df[c].notna().any()]
-        for col in ext_cols:
-            train[col] = ext_df[col].values
+        ext_cols = [c for c in ext_df.columns if ext_df[c].notna().any()]
 
-        features = [
+        # Join por fecha (no por posición) — evita corrupción si hay gaps en los datos
+        if ext_cols:
+            ext_aligned = (
+                ext_df[ext_cols]
+                .reindex(pd.DatetimeIndex(train['fecha'].values))
+                .fillna(0.0)
+            )
+            ext_aligned.index = train.index
+            for col in ext_cols:
+                train[col] = ext_aligned[col]
+
+        # Liberar la conexión antes del entrenamiento para no bloquear el pool
+        try:
+            from src.db.store import close_conn
+            close_conn()
+        except Exception:
+            pass
+
+        _BASE_FEATURES = [
             'es_finde', 'es_festivo', 'llueve', 'dia_semana', 'dia_mes', 'mes',
             'lag_1d', 'lag_7d', 'media_7d', 'quincena', 'vispera_festivo',
             'lag_14d', 'media_14d', 'std_7d', 'finde_lluvioso',
             'mucho_calor', 'mucho_frio', 'clima_ideal'
-        ] + CALENDARIO_FEATURE_COLS + EVENTOS_FEATURE_COLS + ext_cols
+        ] + CALENDARIO_FEATURE_COLS
+
+        # Excluir ext_cols que ya están en la lista base (duplicados → crash en XGBoost .dtype)
+        _reserved = set(_BASE_FEATURES)
+        ext_cols_safe = [c for c in ext_cols if c not in _reserved]
+        features = _BASE_FEATURES + ext_cols_safe
 
         X_train, y_train = train[features], train['total_visits']
 
@@ -246,12 +253,17 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
             std_7d = np.std(visits_array[-7:]) if len(visits_array) >= 7 else 0
 
             cal_feats = get_calendario_features(current_date, org_config=org_config)
-            ev_feats = get_eventos_features(current_date, location_uuid=location_uuid) if _ev_ready else {col: 0 for col in EVENTOS_FEATURE_COLS}
             pred_ts  = pd.Timestamp(current_date)
-            ext_feats = {
-                col: (ext_df.loc[pred_ts, col] if pred_ts in ext_df.index and not pd.isna(ext_df.loc[pred_ts, col]) else 0.0)
-                for col in ext_cols
-            }
+            ext_feats: dict = {}
+            for col in ext_cols_safe:
+                if pred_ts not in ext_df.index:
+                    ext_feats[col] = 0.0
+                    continue
+                val = ext_df.loc[pred_ts, col]
+                # .loc puede devolver Series/DataFrame si el índice tiene duplicados
+                if isinstance(val, (pd.Series, pd.DataFrame)):
+                    val = float(val.iloc[0]) if len(val) > 0 else 0.0
+                ext_feats[col] = 0.0 if pd.isna(val) else float(val)
             row = pd.DataFrame([{
                 'es_finde': es_finde, 'es_festivo': es_festivo, 'llueve': llueve,
                 'dia_semana': current_date.dayofweek, 'dia_mes': current_date.day,
@@ -264,7 +276,6 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
                 'mucho_frio': 1 if t_min <= 8.0 else 0,
                 'clima_ideal': 1 if (18.0 <= t_max <= 26.0 and llueve == 0) else 0,
                 **cal_feats,
-                **ev_feats,
                 **ext_feats,
             }])
 

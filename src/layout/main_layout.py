@@ -12,6 +12,7 @@ from src.layout.tabs.tab_bi import build_tab_bi
 from src.layout.tabs.tab_reportes import build_tab_reportes
 from src.layout.tabs.tab_ml import build_tab_ml
 from src.layout.tabs.tab_admin import build_tab_admin
+from src.layout.tabs.tab_prediccion_cliente import build_tab_prediccion_cliente
 
 
 def serve_layout():
@@ -40,10 +41,10 @@ def serve_layout():
                 dcc.Tabs(id="tabs-panel", value='tab-ejecutivo', className="custom-tabs", children=[
                     build_tab_pm(),
                     build_tab_bi(),
+                    build_tab_prediccion_cliente(),
                     *([] if role != "admin" else [build_tab_ml()]),
                     *([] if role != "admin" else [build_tab_reportes()]),
                     *([] if role != "admin" else [build_tab_admin()]),
-                    
                 ])
             ])
         ], className="border-0 shadow-sm rounded-4")

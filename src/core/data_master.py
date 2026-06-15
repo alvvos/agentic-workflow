@@ -30,12 +30,13 @@ def _load_from_db() -> None:
     mapa_orgs.clear()
     mapa_hijos_por_zona.clear()
 
+    _org_order = []
     for org_uuid, nombre in conn.execute(
         "SELECT org_uuid, nombre FROM dim_organizaciones ORDER BY nombre"
     ).fetchall():
-        opciones_orgs.append({'label': nombre, 'value': org_uuid})
         mapa_orgs[org_uuid] = nombre
         mapa_locs_por_org[org_uuid] = []
+        _org_order.append((org_uuid, nombre))
 
     for loc_uuid, org_uuid, nombre in conn.execute(
         "SELECT location_uuid, org_uuid, nombre FROM dim_ubicaciones WHERE activa = TRUE ORDER BY nombre"
@@ -43,6 +44,12 @@ def _load_from_db() -> None:
         mapa_tiendas[loc_uuid] = nombre
         mapa_locs_por_org.setdefault(org_uuid, []).append({'label': nombre, 'value': loc_uuid})
         mapa_zonas_por_loc[loc_uuid] = []
+
+    # Solo orgs con al menos 1 ubicación activa — evita que admins seleccionen
+    # orgs vacías y vean el dropdown de ubicaciones en blanco.
+    for org_uuid, nombre in _org_order:
+        if mapa_locs_por_org.get(org_uuid):
+            opciones_orgs.append({'label': nombre, 'value': org_uuid})
 
     all_zones = conn.execute(
         "SELECT zone_uuid, location_uuid, nombre, zone_type, parent_zone_uuid"
@@ -68,8 +75,11 @@ def _load_from_db() -> None:
 
 
 def get_opciones_orgs_for_user(org_access: list | None) -> list:
-    """Devuelve las opciones de org filtradas por acceso. None → admin (ve todo)."""
-    if org_access is None:
+    """Devuelve las opciones de org filtradas por acceso.
+    None  → admin/dev: ve todo.
+    []    → usuario sin asignaciones explícitas: ve todo (acceso abierto por defecto).
+    [..] → restringido a las orgs asignadas vía user_org_access."""
+    if not org_access:  # None o lista vacía
         return list(opciones_orgs)
     allowed = set(org_access)
     return [o for o in opciones_orgs if o['value'] in allowed]
@@ -83,15 +93,19 @@ def reload_if_changed() -> bool:
         return False
     try:
         _load_from_db()
-        _last_load = now
+        if opciones_orgs:
+            _last_load = now
         return True
     except Exception:
         return False
 
 
-# Carga inicial al importar el módulo
+# Carga inicial al importar el módulo.
+# Solo fija el TTL si hay datos reales — si la DB está vacía en este momento,
+# la próxima llamada a reload_if_changed() reintentará de inmediato.
 try:
     _load_from_db()
-    _last_load = time.time()
+    if opciones_orgs:
+        _last_load = time.time()
 except Exception:
     pass

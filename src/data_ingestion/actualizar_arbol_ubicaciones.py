@@ -202,6 +202,23 @@ def descargar_maestro_ubicaciones():
         "direccion = excluded.direccion, activa = excluded.activa",
         loc_rows,
     )
+    # Topological sort: insert parents before children to satisfy FK constraint
+    zone_by_uuid = {r[0]: r for r in zone_rows}
+    ordered, seen = [], set()
+
+    def _topo(uuid):
+        if uuid in seen:
+            return
+        seen.add(uuid)
+        row = zone_by_uuid.get(uuid)
+        if row and row[5]:  # has parent
+            _topo(row[5])
+        if row:
+            ordered.append(row)
+
+    for r in zone_rows:
+        _topo(r[0])
+
     conn.executemany(
         "INSERT INTO dim_zonas "
         "(zone_uuid, location_uuid, nombre, hidden, zone_type, parent_zone_uuid, sort_order, last_zone) "
@@ -213,7 +230,7 @@ def descargar_maestro_ubicaciones():
         "  parent_zone_uuid = COALESCE(excluded.parent_zone_uuid, dim_zonas.parent_zone_uuid), "
         "  sort_order       = excluded.sort_order, "
         "  last_zone        = excluded.last_zone",
-        zone_rows,
+        ordered,
     )
 
     n_with_parent = sum(1 for r in zone_rows if r[5] is not None)

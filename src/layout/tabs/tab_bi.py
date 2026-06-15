@@ -39,7 +39,7 @@ def build_tab_bi():
                 className="d-flex align-items-center justify-content-center loading-spinner-body",
             ),
             delay_show=350,
-            delay_hide=80,
+            delay_hide=500,
         ),
         html.Hr(className="text-muted my-5"),
         dbc.Row([

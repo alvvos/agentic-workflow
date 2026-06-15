@@ -15,6 +15,6 @@ def build_tab_pm():
                 style={"minHeight": "60vh"},
             ),
             delay_show=350,
-            delay_hide=80,
+            delay_hide=500,
         ),
     ])

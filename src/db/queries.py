@@ -284,11 +284,12 @@ def get_df_enriquecido(location_uuid: str, session_id: Optional[str] = None) -> 
     return df
 
 
-def get_df_visitas(location_uuids: list) -> pd.DataFrame:
+def get_df_visitas(location_uuids) -> pd.DataFrame:
     """
     Datos crudos de visitas para múltiples locations desde fact_visitas.
     Equivalent to reading the old dataset_{session}.csv filtered by location.
     Alias dwell_time_min → dwell_time para compatibilidad con callbacks.
+    Acepta un UUID como string o lista de UUIDs.
     """
     if not location_uuids:
         return pd.DataFrame()
@@ -391,11 +392,12 @@ def get_locs_for_org(org_uuid: str) -> list[dict]:
 
 
 def get_zones_for_loc(location_uuid: str) -> list[dict]:
-    """[{zone_uuid, nombre, zone_type, hidden}, ...] para una ubicación."""
+    """[{zone_uuid, nombre, zone_type, hidden, parent_zone_uuid}, ...] para una ubicación."""
     return [
-        {'zone_uuid': r[0], 'nombre': r[1], 'zone_type': r[2] or '', 'hidden': r[3]}
+        {'zone_uuid': r[0], 'nombre': r[1], 'zone_type': r[2] or '', 'hidden': r[3], 'parent_zone_uuid': r[4]}
         for r in get_conn().execute(
-            "SELECT zone_uuid, nombre, zone_type, hidden FROM dim_zonas WHERE location_uuid = ? ORDER BY nombre",
+            "SELECT zone_uuid, nombre, zone_type, hidden, parent_zone_uuid"
+            " FROM dim_zonas WHERE location_uuid = ? ORDER BY nombre",
             [location_uuid],
         ).fetchall()
     ]

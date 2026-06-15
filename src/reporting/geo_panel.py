@@ -108,7 +108,7 @@ _UNIVERSAL_EXT_KEYS = frozenset({
 _EXT_SERIES_META = {
     'afluencia_metro_gran_via': ('Gran Vía · L1/L5',   'mean', '#00539B'),
     'afluencia_metro_callao':   ('Callao · L3/L5',     'mean', '#c8a400'),
-    'n_turistas_isocrona':      ('Turistas isócrona',  'mean', '#e67e22'),
+    'n_turistas_isocrona':      ('Turistas zona 0-15 min', 'mean', '#e67e22'),
     'n_pasajeros_crucero_dia':  ('Pasajeros crucero',  'sum',  '#1abc9c'),
 }
 _EV_KEYS   = {'estreno_callao', 'manifestacion_gran_via', 'concierto_wizink', 'festival_madrid', 'escala_crucero'}
@@ -286,7 +286,7 @@ def _render_area_signals(location_uuid: str):
             html.Div([
                 html.I(className='fas fa-user-friends me-2',
                        style={'color': '#e67e22', 'fontSize': '0.75rem'}),
-                html.Span("Turistas estimados · isócrona 0-10 min · media mensual",
+                html.Span("Turistas estimados · zona 0-15 min · media mensual",
                           style={'fontSize': '0.66rem', 'color': _C_MUTED,
                                  'textTransform': 'uppercase', 'letterSpacing': '0.45px',
                                  'fontWeight': '600'}),
@@ -1374,36 +1374,12 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
     nombre, lat, lon = _info_ubicacion(location_uuid)
     all_cards = _build_metric_cards(activos)
 
-    # ── Header ───────────────────────────────────────────────────────────────
-    header = dbc.Card(
-        dbc.CardBody(dbc.Row([
-            dbc.Col([
-                html.P("CONTEXTO ESPACIAL", className="mb-1 text-white-50 text-uppercase fw-bold",
-                       style={"fontSize": "0.61rem", "letterSpacing": "1px"}),
-                html.H5(nombre, className="fw-bold mb-0 text-white"),
-            ], xs=9),
-            dbc.Col(
-                html.Div(
-                    dbc.Badge(
-                        (pd.Timestamp(fecha_captura).strftime('%d/%m/%Y')
-                         if fecha_captura else "datos disponibles"),
-                        color="success", pill=True, className="fs-6 px-3 py-2",
-                    ) if activos else
-                    dbc.Badge("pendiente", color="secondary", pill=True, className="fs-6 px-3 py-2"),
-                    className="d-flex justify-content-end align-items-center h-100",
-                ), xs=3,
-            ),
-        ])),
-        className="border-0 rounded-4 mb-4 shadow-sm",
-        style={"background": "linear-gradient(135deg, #0052CC 0%, #003d99 100%)"},
-    )
-
     if not activos:
-        return html.Div([header, dbc.Card(
+        return html.Div(dbc.Card(
             dbc.CardBody(html.P("Variables geoespaciales pendientes de integración.",
                                 className="text-muted small mb-0")),
             className="border-0 shadow-sm rounded-4 mb-3 bg-white",
-        )])
+        ))
 
     # ── Tarjetas A: Alcance ───────────────────────────────────────────────────
     cards_a = [c for c in all_cards if c["label"] in
@@ -1550,7 +1526,6 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
         )
 
     return html.Div([
-        header,
         seccion_a,
         seccion_b,
         seccion_c,

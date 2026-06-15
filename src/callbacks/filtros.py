@@ -6,7 +6,7 @@ from src.core import data_master
 
 @app.callback(Output("sidebar-periodo-wrapper", "style"), Input("tabs-panel", "value"))
 def toggle_periodo_sidebar(tab):
-    if tab in ('tab-ejecutivo', 'tab-ml', 'tab-admin'):
+    if tab in ('tab-ejecutivo', 'tab-ml', 'tab-admin', 'tab-prediccion-publica'):
         return {"display": "none"}
     return {}
 

@@ -72,18 +72,32 @@ def generar_panel_ml():
             ])
         ], className="border-0 shadow-sm rounded-4 bg-light mb-4"),
         
-        dbc.Row([
-            dbc.Col(dbc.Card(dbc.CardBody([html.H6("Precisión (Accuracy)", className="text-muted small text-uppercase fw-bold"), html.H3(id="ml-card-acc", children="-", className="text-success fw-bold mb-0")]), className="border-0 shadow-sm rounded-4 text-center"), xs=6, md=3, className="mb-3 mb-md-0"),
-            dbc.Col(dbc.Card(dbc.CardBody([html.H6("Error Medio (MAE)", className="text-muted small text-uppercase fw-bold"), html.H3(id="ml-card-mae", children="-", className="text-warning fw-bold mb-0")]), className="border-0 shadow-sm rounded-4 text-center"), xs=6, md=3, className="mb-3 mb-md-0"),
-            dbc.Col(dbc.Card(dbc.CardBody([html.H6("Desviación (WMAPE)", className="text-muted small text-uppercase fw-bold"), html.H3(id="ml-card-wmape", children="-", className="text-danger fw-bold mb-0")]), className="border-0 shadow-sm rounded-4 text-center"), xs=6, md=3, className="mb-3 mb-md-0"),
-            dbc.Col(dbc.Card(dbc.CardBody([html.H6("Iteraciones (Trees)", className="text-muted small text-uppercase fw-bold"), html.H3(id="ml-card-iter", children="-", className="text-info fw-bold mb-0")]), className="border-0 shadow-sm rounded-4 text-center"), xs=6, md=3),
-        ], className="mb-4"),
-        
-        dbc.Card([
-            dbc.CardBody([
-                dcc.Graph(id='ml-graph-res', style={"height": "400px"}, config={'displayModeBar': False})
-            ], className="p-2")
-        ], className="border-0 shadow-sm rounded-4 bg-white"),
+        dcc.Loading(
+            html.Div([
+                dbc.Row([
+                    dbc.Col(dbc.Card(dbc.CardBody([html.H6("Precisión (Accuracy)", className="text-muted small text-uppercase fw-bold"), html.H3(id="ml-card-acc", children="-", className="text-success fw-bold mb-0")]), className="border-0 shadow-sm rounded-4 text-center"), xs=6, md=3, className="mb-3 mb-md-0"),
+                    dbc.Col(dbc.Card(dbc.CardBody([html.H6("Error Medio (MAE)", className="text-muted small text-uppercase fw-bold"), html.H3(id="ml-card-mae", children="-", className="text-warning fw-bold mb-0")]), className="border-0 shadow-sm rounded-4 text-center"), xs=6, md=3, className="mb-3 mb-md-0"),
+                    dbc.Col(dbc.Card(dbc.CardBody([html.H6("Desviación (WMAPE)", className="text-muted small text-uppercase fw-bold"), html.H3(id="ml-card-wmape", children="-", className="text-danger fw-bold mb-0")]), className="border-0 shadow-sm rounded-4 text-center"), xs=6, md=3, className="mb-3 mb-md-0"),
+                    dbc.Col(dbc.Card(dbc.CardBody([html.H6("Iteraciones (Trees)", className="text-muted small text-uppercase fw-bold"), html.H3(id="ml-card-iter", children="-", className="text-info fw-bold mb-0")]), className="border-0 shadow-sm rounded-4 text-center"), xs=6, md=3),
+                ], className="mb-4"),
+
+                dbc.Card([
+                    dbc.CardBody([
+                        dcc.Graph(id='ml-graph-res', style={"height": "400px"}, config={'displayModeBar': False})
+                    ], className="p-2")
+                ], className="border-0 shadow-sm rounded-4 bg-white"),
+            ], style={"minHeight": "120px"}),
+            custom_spinner=html.Div(
+                [
+                    dbc.Spinner(color="primary", size="lg"),
+                    html.H5("Entrenando modelo...", className="ms-3 mb-0 text-primary fw-bold"),
+                ],
+                className="d-flex align-items-center justify-content-center loading-spinner-body",
+                style={"minHeight": "120px"},
+            ),
+            delay_show=100,
+            delay_hide=500,
+        ),
 
         html.Hr(className="text-muted my-5"),
 
@@ -111,7 +125,19 @@ def generar_panel_ml():
             ])
         ], className="border-0 shadow-sm rounded-4 bg-light mb-4"),
 
-        html.Div(id="ml-forecast-manana")
+        dcc.Loading(
+            html.Div(id="ml-forecast-manana", style={"minHeight": "60px"}),
+            custom_spinner=html.Div(
+                [
+                    dbc.Spinner(color="warning", size="lg"),
+                    html.H5("Calculando proyección...", className="ms-3 mb-0 fw-bold", style={"color": "#e67e22"}),
+                ],
+                className="d-flex align-items-center justify-content-center loading-spinner-body",
+                style={"minHeight": "60px"},
+            ),
+            delay_show=100,
+            delay_hide=500,
+        )
 
     ], className="p-2")
 
@@ -215,7 +241,7 @@ def ejecutar_forecast_manana(n, locs, session_id):
         falso_hoy = (ultima_fecha_global + timedelta(days=1)).strftime('%Y-%m-%d')
 
         zona_cards = []
-        for loc_uuid in locs:
+        for loc_uuid in (locs or []):
             df_e = enriquecer_datos_ubicacion(df_crudo, loc_uuid)
             if df_e.empty:
                 continue

@@ -11,7 +11,7 @@ Fuentes de referencia:
 Series temporales (store_features_ext):
   afluencia_metro_gran_via  — validaciones diarias estación Gran Vía (L1/L5)
   afluencia_metro_callao    — validaciones diarias estación Callao (L3/L5)
-  n_turistas_isocrona       — turistas estimados en isócrona 10 min (no metro)
+  n_turistas_isocrona       — turistas estimados en zona 0-15 min (no metro)
 
 Eventos (store_calendario_org):
   estreno_callao             — estrenos / premieres en Cines Callao (100 años en 2026)
@@ -40,7 +40,7 @@ _SHOWROOM_UUID = "faf7d203-342e-44c6-96e3-1ed64d8252c3"
 #   Sol (L1/L2/L3):        ~60 000 val./día — 1er puesto red metro
 #   Gran Vía (L1/L5):      ~32 000 val./día — nodo comercial central
 #   Callao (L3/L5):        ~24 000 val./día — plaza y acceso peatonal GV
-#   Turistas isócrona 10': ~5 500 entre semana · ~8 200 fin de semana
+#   Turistas zona 0-15 min: ~5 500 entre semana · ~8 200 fin de semana
 _SERIES = {
     "afluencia_metro_gran_via": {"base_l": 32_000, "base_w": 26_000, "amp": 0.10, "noise": 0.07},
     "afluencia_metro_callao":   {"base_l": 24_000, "base_w": 20_000, "amp": 0.09, "noise": 0.07},
@@ -280,13 +280,19 @@ def main():
     from src.db.store import get_conn
     conn = get_conn()
 
+    _GRAN_VIA_UUID = "251e7f40-95c7-4678-aa48-df1b90e3461c"
+    _loc_app = json.dumps([_SHOWROOM_UUID, _GRAN_VIA_UUID])
+
     # Registrar feature_keys (FK constraint en store_features_ext)
-    for fk in _SERIES:
+    _series_features = list(_SERIES.keys()) + ["n_eventos_gran_via"]
+    for fk in _series_features:
         conn.execute(
-            "INSERT INTO feature_registry (feature_key, source, categoria, status) "
-            "VALUES (?, 'mock', 'ext_area', 'con_cobertura') "
-            "ON CONFLICT (feature_key) DO NOTHING",
-            [fk],
+            "INSERT INTO feature_registry "
+            "  (feature_key, source, categoria, status, location_applicability) "
+            "VALUES (?, 'mock', 'ext_area', 'con_cobertura', ?) "
+            "ON CONFLICT (feature_key) DO UPDATE "
+            "  SET source='mock', status='con_cobertura', location_applicability=EXCLUDED.location_applicability",
+            [fk, _loc_app],
         )
 
     org_row = conn.execute(
@@ -322,12 +328,12 @@ def main():
         [(r[2], r[0], r[1], r[3]) for r in serie_rows],
     )
 
-    # Registrar las series de área como activas en feature_flags
+    # Señales de contexto: visibles en panel, nunca entran al modelo
     for fk in _SERIES:
         conn.execute(
             "INSERT INTO feature_flags (feature_key, location_uuid, status) "
-            "VALUES (?, ?, 'active') "
-            "ON CONFLICT (feature_key, location_uuid) DO UPDATE SET status = 'active'",
+            "VALUES (?, ?, 'contexto') "
+            "ON CONFLICT (feature_key, location_uuid) DO UPDATE SET status = 'contexto'",
             [fk, _SHOWROOM_UUID],
         )
 

@@ -35,3 +35,4 @@ src/data/.stream_cache/
 
 __pycache__/
 *.pyc
+src/models/registry/*.ubj

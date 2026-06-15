@@ -157,9 +157,9 @@ def construir_figura_bi(df, df_hist, metrica, titulo, zonas_ordenadas, color_map
         if tipo == 'bar':
             if not df_z_hist.empty:
                 df_z_hist = df_z_hist.sort_values('fecha_alineada')
-                fig.add_trace(go.Bar(x=df_z_hist['fecha_alineada'], y=df_z_hist[metrica], name=f"{zona} (Ant.)", marker_color=color_zona, opacity=0.15, marker_line_width=1, marker_line_color=color_zona, hoverinfo='skip', showlegend=False, customdata=[zona]*len(df_z_hist)))
+                fig.add_trace(go.Bar(x=df_z_hist['fecha_alineada'], y=df_z_hist[metrica], name=f"{zona} (Ant.)", marker=dict(color=color_zona, opacity=0.15, line=dict(color=color_zona, width=1), cornerradius=5), hoverinfo='skip', showlegend=False, customdata=[zona]*len(df_z_hist)))
             bar_text = [f"{int(round(v)):,}" if (mostrar_numeros and pd.notna(v) and v > 0) else "" for v in df_z[metrica]]
-            fig.add_trace(go.Bar(x=df_z['fecha_dia'], y=df_z[metrica], name=zona, marker_color=color_zona, hoverinfo='text', hovertext=hover_texts, opacity=0.9, customdata=[zona]*len(df_z), text=bar_text, textposition='inside', insidetextanchor='middle', constraintext='none', textfont=dict(size=10, color='white', family='Arial Black, Arial, sans-serif')))
+            fig.add_trace(go.Bar(x=df_z['fecha_dia'], y=df_z[metrica], name=zona, marker=dict(color=color_zona, opacity=0.9, cornerradius=5), hoverinfo='text', hovertext=hover_texts, customdata=[zona]*len(df_z), text=bar_text, textposition='inside', insidetextanchor='middle', constraintext='none', textfont=dict(size=10, color='white', family='Arial Black, Arial, sans-serif')))
         else:
             if not df_z_hist.empty:
                 df_z_hist = df_z_hist.sort_values('fecha_alineada')
@@ -346,8 +346,7 @@ def _seccion_uv_rolling(df_z, df_zh, cols_uv, multi_mes, zona, color_zona, ubi='
                 fig.add_trace(go.Bar(
                     x=labels, y=vals,
                     name=obtener_titulo_intuitivo(col),
-                    marker_color=colores_uv.get(col, '#7f8c8d'),
-                    opacity=0.85,
+                    marker=dict(color=colores_uv.get(col, '#7f8c8d'), opacity=0.85, cornerradius=5),
                     text=bar_labels,
                     textposition='inside',
                     insidetextanchor='middle',

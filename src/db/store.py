@@ -443,6 +443,7 @@ def _apply_ddl(conn: PgConn) -> None:
     _migrate_feature_flags(conn)
     _migrate_feature_registry(conn)
     _migrate_feature_registry_fks(conn)
+    _migrate_feature_flags_contexto(conn)
     _sync_users_from_json(conn)
 
 
@@ -484,6 +485,33 @@ def _migrate_feature_registry(conn: PgConn) -> None:
         "ALTER TABLE feature_registry ADD CONSTRAINT feature_registry_status_check "
         "CHECK (status IN ('incompleto', 'con_cobertura'))"
     )
+
+
+def _migrate_feature_flags_contexto(conn: PgConn) -> None:
+    """
+    Añade 'contexto' al CHECK de feature_flags.status y purga ev_* de la BD.
+
+    'active'   → entra al modelo ML y se muestra en panel
+    'contexto' → sólo panel (señal de contexto), nunca entra al modelo
+    'inactive' → oculto
+
+    ev_* se eliminan completamente: eran features de ML de baja calidad generadas
+    por el prefetch (Ticketmaster, TheSportsDB, Open Holidays, agenda municipal).
+    """
+    conn.execute("ALTER TABLE feature_flags DROP CONSTRAINT IF EXISTS feature_flags_status_check")
+    conn.execute(
+        "ALTER TABLE feature_flags ADD CONSTRAINT feature_flags_status_check "
+        "CHECK (status IN ('active', 'contexto', 'inactive'))"
+    )
+    ev_keys = [
+        'ev_vacaciones_escolares', 'ev_festivo_regional',
+        'ev_rank_deportivo', 'ev_rank_concierto',
+        'ev_rank_festival', 'ev_rank_municipal', 'ev_rank_total',
+    ]
+    ph = ','.join(['?' for _ in ev_keys])
+    conn.execute(f"DELETE FROM store_features_ext WHERE feature_key IN ({ph})", ev_keys)
+    conn.execute(f"DELETE FROM feature_flags     WHERE feature_key IN ({ph})", ev_keys)
+    conn.execute(f"DELETE FROM feature_registry  WHERE feature_key IN ({ph})", ev_keys)
 
 
 def _migrate_feature_flags(conn: PgConn) -> None:
