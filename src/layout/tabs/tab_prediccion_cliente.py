@@ -119,16 +119,11 @@ def _zona_card(nombre: str, res: dict, color: str) -> dbc.Col:
     return dbc.Col(
         dbc.Card([
             dbc.CardBody([
-                # Cabecera zona + badge fiabilidad
+                # Cabecera zona
                 html.Div([
                     html.Span(nombre, className='fw-bold text-dark',
                               style={'fontSize': '0.82rem', 'textTransform': 'uppercase',
                                      'letterSpacing': '0.6px'}),
-                    dbc.Badge(
-                        [html.I(className=f'{fiab_icon} me-1'), fiab_txt],
-                        color=fiab_color, pill=True,
-                        style={'fontSize': '0.62rem', 'fontWeight': '500'},
-                    ),
                 ], className='d-flex align-items-center justify-content-between mb-3'),
 
                 # Número grande: próximo día

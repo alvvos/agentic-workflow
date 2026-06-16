@@ -8,10 +8,10 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SSH_KEY="/home/alvvos/.ssh/id_ed25519"
+SSH_KEY="$HOME/.ssh/id_ed25519_servidor"
 REMOTE_USER="alvaro.salis"
 REMOTE_HOST="34.175.22.17"
-LOCAL_PORT=5434
+LOCAL_PORT=5433
 REMOTE_PORT=5432
 APP_PORT=8051
 
@@ -75,5 +75,6 @@ echo "→ App arrancada (PID $APP_PID)"
 echo "  Ctrl+C para parar todo."
 echo ""
 
-# Mantener vivo hasta Ctrl+C
+# Mantener vivo hasta Ctrl+C o muerte natural de la app
 wait "$APP_PID"
+cleanup
