@@ -2201,14 +2201,22 @@ def _render_calendario_eventos_clima(location_uuid: str, fecha_max) -> html.Div 
     def _ev_tag(ev):
         c = _SRC_COLOR.get(ev['source'], '#7f8c8d')
         lbl = _SRC_LABEL.get(ev['source'], ev['source'].replace('_', ' ').title())
-        short = ev['titulo'][:18] + ('…' if len(ev['titulo']) > 18 else '')
+        short = ev['titulo'][:24] + ('…' if len(ev['titulo']) > 24 else '')
+        extra = _meta_extra(ev['source'], ev.get('meta', {}))
+        lines = [
+            html.Span(f"{lbl} · {short}",
+                      style={"fontSize": "0.60rem", "lineHeight": "1.3",
+                             "color": '#2c3e50', "fontWeight": "500"}),
+        ]
+        if extra:
+            lines.append(html.Span(extra,
+                          style={"fontSize": "0.56rem", "lineHeight": "1.2",
+                                 "color": _C_MUTED}))
         return html.Div([
             html.Span(style={"display": "inline-block", "width": "7px", "height": "7px",
                              "borderRadius": "50%", "background": c, "flexShrink": "0",
-                             "marginTop": "2px"}),
-            html.Span(f"{lbl} · {short}",
-                      style={"fontSize": "0.60rem", "lineHeight": "1.2",
-                             "color": '#2c3e50', "fontWeight": "500"}),
+                             "marginTop": "3px"}),
+            html.Div(lines, className="d-flex flex-column"),
         ], className="d-flex align-items-start gap-1 mt-1")
 
     def _day_cell(d):
@@ -2246,7 +2254,7 @@ def _render_calendario_eventos_clima(location_uuid: str, fecha_max) -> html.Div 
         num_color = _C_PRIMARY if is_today else (_C_DARK if d <= hoy_d else '#555')
         cell_style = {
             "background": bg, "borderLeft": f"3px solid {bc}",
-            "minHeight": "130px", "padding": "6px 8px", "borderRadius": "4px",
+            "minHeight": "175px", "padding": "6px 8px", "borderRadius": "4px",
         }
         if is_today:
             cell_style["boxShadow"] = f"0 0 0 2px {_C_PRIMARY}"
@@ -2352,111 +2360,6 @@ def _render_calendario_eventos_clima(location_uuid: str, fecha_max) -> html.Div 
                style={"color": "#95a5a6", "fontSize": "0.67rem"}),
     ], className="d-flex align-items-center"))
 
-    # ── Timeline Plotly: una línea por tipología de evento ───────────────
-    by_source: dict[str, list] = {}
-    for d, evs in day_events.items():
-        for ev in evs:
-            if not ev['is_vacation']:
-                by_source.setdefault(ev['source'], []).append((d, ev))
-
-    timeline = None
-    if by_source:
-        # Orden fijo: crucero primero, resto alfabético por label
-        source_order = sorted(
-            by_source.keys(),
-            key=lambda s: (0 if s == 'crucero' else 1, _SRC_LABEL.get(s, s)),
-        )
-        y_labels = [_SRC_LABEL.get(s, s.replace('_', ' ').title()) for s in source_order]
-
-        traces = []
-        # Lane de fondo (línea punteada) para cada tipología
-        for src, lbl in zip(source_order, y_labels):
-            c = _SRC_COLOR.get(src, '#7f8c8d')
-            traces.append(go.Scatter(
-                x=[desde_d, hasta_d], y=[lbl, lbl],
-                mode='lines',
-                line=dict(color=c, width=1, dash='dot'),
-                opacity=0.18,
-                showlegend=False,
-                hoverinfo='skip',
-            ))
-
-        # Marcadores por evento
-        for src, lbl in zip(source_order, y_labels):
-            events = sorted(by_source[src], key=lambda x: x[0])
-            c = _SRC_COLOR.get(src, '#7f8c8d')
-            xs, ys, sizes, hovers = [], [], [], []
-            for d, ev in events:
-                extra = _meta_extra(src, ev.get('meta', {}))
-                tip = f"<b>{d.strftime('%d %b %Y')}</b><br>{ev['titulo']}"
-                if extra:
-                    tip += f"<br><i style='color:#888'>{extra}</i>"
-                is_past = d < hoy_d
-                xs.append(d)
-                ys.append(lbl)
-                sizes.append(12 if ev['score'] >= 1.5 else 9)
-                hovers.append(tip)
-            traces.append(go.Scatter(
-                x=xs, y=ys,
-                mode='markers',
-                marker=dict(
-                    color=c,
-                    size=sizes,
-                    opacity=[0.45 if d < hoy_d else 1.0 for d, _ in events],
-                    symbol='circle',
-                    line=dict(color='white', width=1.5),
-                ),
-                customdata=hovers,
-                hovertemplate='%{customdata}<extra></extra>',
-                showlegend=False,
-            ))
-
-        n_lanes = len(source_order)
-        fig = go.Figure(data=traces)
-
-        # Línea vertical "hoy"
-        fig.add_shape(
-            type='line', xref='x', yref='paper',
-            x0=hoy_d, x1=hoy_d, y0=0, y1=1,
-            line=dict(color=_C_PRIMARY, width=2, dash='dash'),
-        )
-        fig.add_annotation(
-            x=hoy_d, yref='paper', y=1.02,
-            text='Hoy', showarrow=False,
-            font=dict(size=10, color=_C_PRIMARY),
-            xanchor='center',
-        )
-
-        fig.update_layout(
-            height=max(100, n_lanes * 46 + 50),
-            margin=dict(l=0, r=4, t=22, b=4),
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(248,249,250,0.6)',
-            xaxis=dict(
-                type='date',
-                range=[str(desde_d), str(hasta_d)],
-                showgrid=True, gridcolor='#e9ecef', gridwidth=1,
-                tickformat='%d %b', tickangle=0,
-                zeroline=False,
-            ),
-            yaxis=dict(
-                categoryorder='array', categoryarray=list(reversed(y_labels)),
-                showgrid=False, tickfont=dict(size=11, color='#555'),
-                automargin=True,
-            ),
-            hoverlabel=dict(bgcolor='white', font_size=12, bordercolor='#dee2e6'),
-        )
-
-        timeline = html.Div([
-            html.H6("Línea de tiempo", className="fw-bold mb-1 mt-3",
-                    style={"color": _C_DARK, "fontSize": "0.82rem"}),
-            dcc.Graph(
-                figure=fig,
-                config={'displayModeBar': False},
-                style={"borderRadius": "6px"},
-            ),
-        ])
-
     active_tab = f"tab-{hoy_d.year}-{hoy_d.month}"
     if tabs_meses and active_tab not in {t.tab_id for t in tabs_meses}:
         active_tab = tabs_meses[-1].tab_id
@@ -2466,8 +2369,170 @@ def _render_calendario_eventos_clima(location_uuid: str, fecha_max) -> html.Div 
                 style={"color": _C_DARK, "fontSize": "0.98rem"}),
         html.Div(legend_items, className="d-flex flex-wrap gap-1 mb-3"),
         dbc.Tabs(tabs_meses, active_tab=active_tab),
-        *([timeline] if timeline else []),
     ])
+
+
+_ICONO_TIPO = {
+    'concierto':      'fas fa-music',
+    'festival':       'fas fa-calendar-star',
+    'deportivo':      'fas fa-futbol',
+    'evento_municipal': 'fas fa-city',
+}
+_NORM_TIPO = {
+    'tm_concierto': 'concierto', 'tm_festival': 'festival', 'tm_deportivo': 'deportivo',
+    'concierto_wizink': 'concierto', 'festival_madrid': 'festival',
+    'partido_deportivo': 'deportivo', 'estreno_callao': 'concierto',
+    'manifestacion_gran_via': 'evento_municipal',
+}
+_TIPOS_EXCLUIR = {'vacaciones_escolares', 'festivo_regional',
+                  'ev_vacaciones_escolares', 'ev_festivo_regional', 'escala_crucero'}
+
+
+def _render_eventos_mensual_section(location_uuid: str, fecha_max) -> html.Div | None:
+    """Monthly event-count bar charts (one per type), same visual pattern as cruise section."""
+    try:
+        from src.db.store import get_conn
+        conn = get_conn()
+        desde = fecha_max - timedelta(days=760)
+        rows = conn.execute(
+            """SELECT evento_key, fecha_inicio::text
+               FROM store_calendario_org
+               WHERE location_uuid = ? AND fecha_inicio >= ?
+               ORDER BY fecha_inicio""",
+            [location_uuid,
+             str(desde.date() if hasattr(desde, 'date') else desde)],
+        ).fetchall()
+    except Exception:
+        return None
+
+    if not rows:
+        return None
+
+    df = pd.DataFrame(rows, columns=['evento_key', 'fecha'])
+    df['fecha']   = pd.to_datetime(df['fecha'])
+    df['tipo']    = df['evento_key'].map(lambda k: _NORM_TIPO.get(k, k))
+    df['anio']    = df['fecha'].dt.year
+    df['mes_num'] = df['fecha'].dt.month
+    df = df[~df['tipo'].isin(_TIPOS_EXCLUIR)]
+
+    if df.empty:
+        return None
+
+    anio_actual = fecha_max.year if hasattr(fecha_max, 'year') else pd.Timestamp(fecha_max).year
+    anio_prev   = anio_actual - 1
+    _MESES_ES   = ['Ene','Feb','Mar','Abr','May','Jun',
+                   'Jul','Ago','Sep','Oct','Nov','Dic']
+
+    tipos = sorted(df['tipo'].unique(), key=lambda t: _SRC_LABEL.get(t, t))
+    charts = []
+
+    for tipo in tipos:
+        color = _SRC_COLOR.get(tipo, '#7f8c8d')
+        lbl   = _SRC_LABEL.get(tipo, tipo.replace('_', ' ').title())
+        sub   = df[df['tipo'] == tipo]
+
+        mes_pivot = sub.groupby(['anio', 'mes_num']).size().reset_index(name='n')
+
+        def _gv(yr, m):
+            r = mes_pivot[(mes_pivot['anio'] == yr) & (mes_pivot['mes_num'] == m)]
+            return int(r['n'].iloc[0]) if not r.empty else None
+
+        y_act  = [_gv(anio_actual, m) for m in range(1, 13)]
+        y_prev = [_gv(anio_prev,   m) for m in range(1, 13)]
+        has_p  = any(v for v in y_prev)
+
+        if not any(v for v in y_act):
+            continue
+
+        missing  = [v is None or v == 0 for v in y_act]
+        max_real = max((v for v in y_act if v), default=1)
+        ghost_h  = max_real * 0.06
+        y_disp   = [v if (v and not missing[i]) else ghost_h for i, v in enumerate(y_act)]
+        bar_cols = [_hex_rgba(color, 0.88) if not missing[i] else "rgba(224,224,224,0.55)"
+                    for i in range(12)]
+
+        yoy_pcts = []
+        for i in range(12):
+            pa, ya = y_prev[i], y_act[i]
+            yoy_pcts.append((ya - pa) / pa * 100 if (not missing[i] and pa and ya) else None)
+
+        bar_text, text_col = [], []
+        for i, v in enumerate(y_act):
+            if missing[i]:
+                bar_text.append("—"); text_col.append("#aaaaaa"); continue
+            pct = yoy_pcts[i]
+            if pct is not None:
+                sign = "▲" if pct > 0 else "▼"
+                bar_text.append(f"<b>{v}</b><br>{sign}{abs(pct):.0f}%")
+                text_col.append("#27ae60" if pct > 0 else "#e74c3c")
+            else:
+                bar_text.append(f"<b>{v}</b>"); text_col.append(_C_DARK)
+
+        text_pos = ["outside" if not missing[i] else "inside" for i in range(12)]
+
+        fig = go.Figure()
+        if has_p:
+            fig.add_trace(go.Bar(
+                x=_MESES_ES, y=[v or 0 for v in y_prev],
+                marker=dict(color=_hex_rgba(color, 0.15),
+                            line=dict(color=color, width=1), cornerradius=5),
+                hoverinfo='skip', showlegend=False,
+            ))
+        plural = lambda n: "s" if n != 1 else ""
+        fig.add_trace(go.Bar(
+            x=_MESES_ES, y=y_disp,
+            marker=dict(color=bar_cols, cornerradius=5),
+            text=bar_text, textposition=text_pos,
+            textfont=dict(size=9, color=text_col),
+            hovertemplate=[
+                f'{_MESES_ES[i]}: <b>{y_act[i]}</b> {lbl.lower()}{plural(y_act[i])}'
+                '<extra></extra>' if not missing[i]
+                else f'{_MESES_ES[i]}: sin datos<extra></extra>'
+                for i in range(12)
+            ],
+            showlegend=False,
+        ))
+        fig.update_layout(
+            barmode='group', height=220,
+            margin=dict(t=10, b=10, l=10, r=10),
+            plot_bgcolor='white', paper_bgcolor='rgba(0,0,0,0)',
+            xaxis=dict(showgrid=False, tickfont=dict(size=10), fixedrange=True),
+            yaxis=dict(visible=False, fixedrange=True, range=[0, max_real * 1.70]),
+            showlegend=False,
+        )
+
+        dot = lambda op, bdr="": html.Span(style={
+            "display": "inline-block", "width": "8px", "height": "8px",
+            "background": color, "opacity": op,
+            "border": bdr, "borderRadius": "1px", "marginRight": "4px",
+        })
+        leyenda = html.Div([
+            html.Div([dot("0.88"),
+                      html.Span(str(anio_actual),
+                                style={"fontSize": "0.67rem", "color": _C_DARK,
+                                       "marginRight": "10px"})],
+                     className="d-flex align-items-center"),
+            html.Div([dot("0.2", f"1px solid {color}"),
+                      html.Span(str(anio_prev),
+                                style={"fontSize": "0.67rem", "color": _C_MUTED})],
+                     className="d-flex align-items-center"),
+        ] if has_p else [], className="d-flex align-items-center gap-3 mb-1")
+
+        icono = _ICONO_TIPO.get(tipo, 'fas fa-calendar-day')
+        uid8  = location_uuid[:8]
+        charts.append(html.Div([
+            html.Div([
+                html.I(className=f"{icono} me-2",
+                       style={"color": color, "fontSize": "0.9rem"}),
+                html.Span(lbl, className="fw-semibold",
+                          style={"fontSize": "0.9rem", "color": _C_DARK}),
+            ], className="d-flex align-items-center mb-1"),
+            leyenda,
+            dcc.Graph(id=f"ev-{tipo}-{uid8}", figure=fig,
+                      config=_CFG_GRAPH, style={"height": "200px"}),
+        ], className="mb-4"))
+
+    return html.Div(charts) if charts else None
 
 
 def _render_cruceros_section(location_uuid: str, fecha_max,
@@ -2703,10 +2768,11 @@ def _render_senal_contexto_modal(location_uuid: str, uid: str, fecha_max,
             if c:
                 charts.append(c)
 
-    cal_section      = _render_calendario_eventos_clima(location_uuid, fecha_max)
-    cruceros_section = _render_cruceros_section(location_uuid, fecha_max, ventana)
+    cal_section             = _render_calendario_eventos_clima(location_uuid, fecha_max)
+    cruceros_section        = _render_cruceros_section(location_uuid, fecha_max, ventana)
+    eventos_mensual_section = _render_eventos_mensual_section(location_uuid, fecha_max)
 
-    if not charts and not cal_section and not cruceros_section:
+    if not charts and not cal_section and not cruceros_section and not eventos_mensual_section:
         return None
 
     return html.Div([
@@ -2723,6 +2789,8 @@ def _render_senal_contexto_modal(location_uuid: str, uid: str, fecha_max,
         ])] if charts else []),
         *([html.Div([html.Hr(className="my-4"), cruceros_section])]
           if cruceros_section else []),
+        *([html.Div([html.Hr(className="my-4"), eventos_mensual_section])]
+          if eventos_mensual_section else []),
         *([html.Div([html.Hr(className="my-4"), cal_section])]
           if cal_section else []),
     ])
