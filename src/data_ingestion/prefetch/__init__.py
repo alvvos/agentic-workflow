@@ -6,7 +6,4 @@ from src.data_ingestion.prefetch import (  # noqa: F401
     agenda_es,
     cruceros,
     geo,
-    songkick,
-    bandsintown,
-    meetup,
 )

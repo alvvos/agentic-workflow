@@ -24,7 +24,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from src.data_ingestion.prefetch import (
     weather, open_holidays, ticketmaster, thesportsdb, agenda_es, cruceros,
-    songkick, bandsintown, meetup,
 )
 from src.data_ingestion.prefetch._common import (
     get_active_locations, update_ev_rank_total,
@@ -39,12 +38,9 @@ SOURCES: dict[str, object] = {
     'thesportsdb':   thesportsdb,
     'agenda_es':     agenda_es,
     'cruceros':      cruceros,
-    'songkick':      songkick,
-    'bandsintown':   bandsintown,
-    'meetup':        meetup,
 }
 
-_EVENT_SOURCES = {'open_holidays', 'ticketmaster', 'thesportsdb', 'agenda_es', 'songkick', 'bandsintown', 'meetup'}
+_EVENT_SOURCES = {'open_holidays', 'ticketmaster', 'thesportsdb', 'agenda_es'}
 
 
 def run(

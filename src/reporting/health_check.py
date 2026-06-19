@@ -1556,7 +1556,7 @@ def _render_pm_questions(df, zonas_data, fecha_max, uid, ventana="semana", child
 _UNIVERSAL_KEYS = frozenset({
     'ev_festivo_regional', 'ev_vacaciones_escolares',
     'ev_rank_concierto', 'ev_rank_deportivo', 'ev_rank_festival',
-    'ev_rank_municipal', 'ev_rank_comunidad', 'ev_rank_total',
+    'ev_rank_municipal', 'ev_rank_total',
     'llueve', 'temp_max', 'temp_min',
 })
 
@@ -2061,7 +2061,6 @@ _SRC_COLOR: dict = {
     'concierto':              '#e74c3c',
     'festival':               '#f39c12',
     'deportivo':              '#3498db',
-    'comunidad':              '#9b59b6',
     'evento_municipal':       '#e67e22',
     'festivo_regional':       '#27ae60',
     'vacaciones_escolares':   '#8e44ad',
@@ -2081,7 +2080,6 @@ _SRC_LABEL: dict = {
     'concierto':              'Concierto',
     'festival':               'Festival',
     'deportivo':              'Deportivo',
-    'comunidad':              'Comunidad',
     'evento_municipal':       'Municipal',
     'festivo_regional':       'Festivo',
     'vacaciones_escolares':   'Vacaciones',

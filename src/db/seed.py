@@ -332,7 +332,7 @@ def seed_feature_flags() -> dict:
     ev_diaria_keys = [
         'ev_vacaciones_escolares', 'ev_festivo_regional',
         'ev_rank_deportivo', 'ev_rank_concierto', 'ev_rank_festival',
-        'ev_rank_municipal', 'ev_rank_comunidad', 'ev_rank_total',
+        'ev_rank_municipal', 'ev_rank_total',
     ]
     # cruceros: contexto, ingesta mensual (calendario portuario)
     crucero_keys = ['n_pasajeros_crucero_dia']

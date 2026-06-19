@@ -30,7 +30,6 @@ EVENTOS_FEATURE_COLS: list[str] = [
     'ev_rank_concierto',
     'ev_rank_festival',
     'ev_rank_municipal',
-    'ev_rank_comunidad',
     'ev_rank_total',
 ]
 
@@ -175,11 +174,10 @@ def update_ev_rank_total(location_uuid: str, date_from: date, date_to: date) -> 
                     COALESCE(MAX(CASE WHEN feature_key = 'ev_rank_concierto'  THEN value END), 0),
                     COALESCE(MAX(CASE WHEN feature_key = 'ev_rank_festival'   THEN value END), 0),
                     COALESCE(MAX(CASE WHEN feature_key = 'ev_rank_municipal'  THEN value END), 0),
-                    COALESCE(MAX(CASE WHEN feature_key = 'ev_rank_comunidad'  THEN value END), 0)
                 ))
             FROM   store_features_ext
             WHERE  location_uuid = ?
-              AND  feature_key IN ('ev_rank_deportivo','ev_rank_concierto','ev_rank_festival','ev_rank_municipal','ev_rank_comunidad')
+              AND  feature_key IN ('ev_rank_deportivo','ev_rank_concierto','ev_rank_festival','ev_rank_municipal')
               AND  fecha BETWEEN ? AND ?
             GROUP  BY fecha
             ON CONFLICT (fecha, location_uuid, feature_key)
