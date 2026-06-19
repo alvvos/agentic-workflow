@@ -2,6 +2,7 @@
 """
 Orquestador nocturno — ejecutado por systemd timer a las 02:00.
 
+Fase 0: Árbol      — actualiza orgs/ubicaciones/zonas desde Aitanna API
 Fase A: Aitanna    — signals operacionales (sincronizador, incremental)
 Fase B: Contexto   — weather + eventos diarios (excluye cruceros: mensual)
 
@@ -29,6 +30,16 @@ def main() -> int:
     t0 = time.time()
     log.info('── sync_noche START ─────────────────────────────────')
     errores = 0
+
+    # ── Fase 0: Árbol de ubicaciones ─────────────────────────────────
+    log.info('Fase 0 — Actualizar árbol de ubicaciones (Aitanna API)')
+    try:
+        from src.data_ingestion.actualizar_arbol_ubicaciones import descargar_maestro_ubicaciones
+        descargar_maestro_ubicaciones()
+        log.info('Fase 0 OK')
+    except Exception as exc:
+        log.error(f'Fase 0 FAILED: {exc}')
+        errores += 1
 
     # ── Fase A: Aitanna ───────────────────────────────────────────────
     log.info('Fase A — Aitanna sync (incremental)')
