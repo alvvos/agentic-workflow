@@ -5,7 +5,9 @@ Free tier: 5 000 req/día. Set TICKETMASTER_KEY en .env.
 Sin key → degradación graceful (devuelve listas vacías).
 """
 import os
+import re
 import requests
+from collections import Counter
 from datetime import date
 from dotenv import load_dotenv
 
@@ -119,11 +121,27 @@ def events_to_daily_scores(events: list[dict]) -> dict[date, dict]:
     return daily
 
 
+_VIP_RE = re.compile(
+    r'(?:\s*[\|:]\s*|\s+)(VIP|Package[s]?|Paquete[s]?|Upgrade|M&G|Meet\s*&?\s*Greet)\b.*',
+    re.IGNORECASE,
+)
+_ATTRACTION_THRESHOLD = 7  # mismo nombre >= N veces → atracción permanente, descartar
+
+
+def _normalize_title(name: str) -> str:
+    return _VIP_RE.sub('', name).strip()
+
+
 def events_to_raw_rows(events: list[dict], location_uuid: str) -> list[dict]:
     """
     Convierte eventos crudos de Ticketmaster al formato de store_calendario_org.
+
+    Filtros aplicados:
+    - Atracciones permanentes: mismo nombre > _ATTRACTION_THRESHOLD veces → descartado.
+    - Duplicados VIP/paquetes: normaliza el nombre y mantiene una fila por (título, fecha).
     """
-    rows = []
+    # Primera pasada: construir filas con título normalizado
+    pre: list[dict] = []
     for ev in events:
         local_date = ev.get('dates', {}).get('start', {}).get('localDate')
         if not local_date:
@@ -140,7 +158,12 @@ def events_to_raw_rows(events: list[dict], location_uuid: str) -> list[dict]:
             pass
         category = _SEG_TO_CAT.get(segment_id, 'festival')
 
-        rows.append({
+        titulo = _normalize_title(ev.get('name', ''))
+        venue_list = (ev.get('_embedded', {}).get('venues') or [{}])
+        venue = venue_list[0].get('name', '') if venue_list else ''
+
+        pre.append({
+            '_titulo_norm': titulo,
             'location_uuid': location_uuid,
             'evento_key':    f"tm_{category}",
             'fecha_inicio':  ev_date,
@@ -148,10 +171,28 @@ def events_to_raw_rows(events: list[dict], location_uuid: str) -> list[dict]:
             'fuente':        'ticketmaster',
             'source_key':    f"{location_uuid}:tm:{ev.get('id', ev_date)}",
             'metadata': {
-                'nombre':   ev.get('name', ''),
-                'venue':    (ev.get('_embedded', {}).get('venues') or [{}])[0].get('name', ''),
-                'segment':  segment_id,
-                'url':      ev.get('url', ''),
+                'titulo':  titulo,
+                'venue':   venue,
+                'segment': segment_id,
+                'url':     ev.get('url', ''),
             },
         })
+
+    # Detectar atracciones permanentes: mismo nombre aparece más de N veces
+    name_count = Counter(r['_titulo_norm'] for r in pre)
+    attractions = {name for name, n in name_count.items() if n >= _ATTRACTION_THRESHOLD}
+
+    # Segunda pasada: deduplicar VIP y eliminar atracciones
+    seen: set[tuple] = set()
+    rows: list[dict] = []
+    for r in pre:
+        titulo = r.pop('_titulo_norm')
+        if titulo in attractions:
+            continue
+        key = (titulo, r['fecha_inicio'])
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append(r)
+
     return rows
