@@ -2095,6 +2095,32 @@ _SRC_LABEL: dict = {
 }
 
 
+def _meta_extra(src: str, meta: dict) -> str:
+    """Resumen de metadata en una línea, según tipo de fuente."""
+    parts = []
+    if src == 'crucero':
+        pax = meta.get('n_pasajeros') or meta.get('pasajeros')
+        if pax:
+            parts.append(f"{int(pax):,} pax".replace(',', '.'))
+        terminal = meta.get('terminal')
+        if terminal:
+            parts.append(terminal)
+    else:
+        artista = meta.get('artista')
+        if artista:
+            parts.append(', '.join(artista[:2]) if isinstance(artista, list) else str(artista))
+        venue = meta.get('venue_nombre') or meta.get('venue')
+        if venue:
+            parts.append(str(venue))
+        aforo = meta.get('aforo')
+        if aforo and not artista:
+            parts.append(f"{int(aforo):,} aforo".replace(',', '.'))
+        rsvp = meta.get('rsvp_count') or meta.get('going')
+        if rsvp and not aforo:
+            parts.append(f"{int(rsvp):,} asistentes".replace(',', '.'))
+    return ' · '.join(parts)
+
+
 def _render_calendario_eventos_clima(location_uuid: str, fecha_max) -> html.Div | None:
     """
     CSS-grid calendar split by month. Each day cell: climate icons + one tag per
@@ -2326,90 +2352,109 @@ def _render_calendario_eventos_clima(location_uuid: str, fecha_max) -> html.Div 
                style={"color": "#95a5a6", "fontSize": "0.67rem"}),
     ], className="d-flex align-items-center"))
 
-    # ── Event detail list (all non-vacation events sorted by date) ───────
-    MESES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun',
-                   'Jul','Ago','Sep','Oct','Nov','Dic']
+    # ── Timeline Plotly: una línea por tipología de evento ───────────────
+    by_source: dict[str, list] = {}
+    for d, evs in day_events.items():
+        for ev in evs:
+            if not ev['is_vacation']:
+                by_source.setdefault(ev['source'], []).append((d, ev))
 
-    def _meta_extra(src: str, meta: dict) -> str:
-        """One-line metadata summary per source type."""
-        parts = []
-        if src == 'crucero':
-            pax = meta.get('n_pasajeros') or meta.get('pasajeros')
-            if pax:
-                parts.append(f"{int(pax):,} pax".replace(',', '.'))
-            terminal = meta.get('terminal')
-            if terminal:
-                parts.append(terminal)
-        else:
-            artista = meta.get('artista')
-            if artista:
-                if isinstance(artista, list):
-                    parts.append(', '.join(artista[:2]))
-                else:
-                    parts.append(str(artista))
-            venue = meta.get('venue_nombre') or meta.get('venue')
-            if venue:
-                parts.append(str(venue))
-            aforo = meta.get('aforo')
-            if aforo and not artista:
-                parts.append(f"{int(aforo):,} aforo".replace(',', '.'))
-            rsvp = meta.get('rsvp_count') or meta.get('going')
-            if rsvp and not aforo:
-                parts.append(f"{int(rsvp):,} asistentes".replace(',', '.'))
-        return ' · '.join(parts)
+    timeline = None
+    if by_source:
+        # Orden fijo: crucero primero, resto alfabético por label
+        source_order = sorted(
+            by_source.keys(),
+            key=lambda s: (0 if s == 'crucero' else 1, _SRC_LABEL.get(s, s)),
+        )
+        y_labels = [_SRC_LABEL.get(s, s.replace('_', ' ').title()) for s in source_order]
 
-    all_ev_flat = sorted(
-        [(d, ev) for d, evs in day_events.items() for ev in evs if not ev['is_vacation']],
-        key=lambda x: x[0],
-    )
+        traces = []
+        # Lane de fondo (línea punteada) para cada tipología
+        for src, lbl in zip(source_order, y_labels):
+            c = _SRC_COLOR.get(src, '#7f8c8d')
+            traces.append(go.Scatter(
+                x=[desde_d, hasta_d], y=[lbl, lbl],
+                mode='lines',
+                line=dict(color=c, width=1, dash='dot'),
+                opacity=0.18,
+                showlegend=False,
+                hoverinfo='skip',
+            ))
 
-    detail_rows = []
-    for d, ev in all_ev_flat:
-        c = _SRC_COLOR.get(ev['source'], '#7f8c8d')
-        lbl = _SRC_LABEL.get(ev['source'], ev['source'].replace('_', ' ').title())
-        extra = _meta_extra(ev['source'], ev.get('meta', {}))
-        is_past = d < hoy_d
-        opacity = "0.5" if is_past else "1"
-        date_str = f"{d.day:02d} {MESES_CORTO[d.month - 1]}"
+        # Marcadores por evento
+        for src, lbl in zip(source_order, y_labels):
+            events = sorted(by_source[src], key=lambda x: x[0])
+            c = _SRC_COLOR.get(src, '#7f8c8d')
+            xs, ys, sizes, hovers = [], [], [], []
+            for d, ev in events:
+                extra = _meta_extra(src, ev.get('meta', {}))
+                tip = f"<b>{d.strftime('%d %b %Y')}</b><br>{ev['titulo']}"
+                if extra:
+                    tip += f"<br><i style='color:#888'>{extra}</i>"
+                is_past = d < hoy_d
+                xs.append(d)
+                ys.append(lbl)
+                sizes.append(12 if ev['score'] >= 1.5 else 9)
+                hovers.append(tip)
+            traces.append(go.Scatter(
+                x=xs, y=ys,
+                mode='markers',
+                marker=dict(
+                    color=c,
+                    size=sizes,
+                    opacity=[0.45 if d < hoy_d else 1.0 for d, _ in events],
+                    symbol='circle',
+                    line=dict(color='white', width=1.5),
+                ),
+                customdata=hovers,
+                hovertemplate='%{customdata}<extra></extra>',
+                showlegend=False,
+            ))
 
-        detail_rows.append(html.Div([
-            html.Span(date_str, style={
-                "fontSize": "0.63rem", "color": _C_MUTED,
-                "minWidth": "38px", "fontVariantNumeric": "tabular-nums",
-            }),
-            html.Span(style={
-                "display": "inline-block", "width": "7px", "height": "7px",
-                "borderRadius": "50%", "background": c, "flexShrink": "0",
-                "marginTop": "1px",
-            }),
-            html.Span(lbl, style={
-                "fontSize": "0.63rem", "color": c,
-                "fontWeight": "600", "minWidth": "58px",
-            }),
-            html.Span(ev['titulo'], style={
-                "fontSize": "0.67rem", "color": '#2c3e50',
-                "fontWeight": "500", "flex": "1", "overflow": "hidden",
-                "textOverflow": "ellipsis", "whiteSpace": "nowrap",
-            }),
-            *([html.Span(extra, style={
-                "fontSize": "0.62rem", "color": _C_MUTED, "flexShrink": "0",
-            })] if extra else []),
-        ], className="d-flex align-items-center gap-2 py-1",
-           style={
-               "borderBottom": "1px solid #f4f4f4",
-               "opacity": opacity,
-               "minWidth": "0",
-           }))
+        n_lanes = len(source_order)
+        fig = go.Figure(data=traces)
 
-    event_list = None
-    if detail_rows:
-        event_list = html.Div([
-            html.H6("Eventos en el período", className="fw-bold mb-2 mt-3",
+        # Línea vertical "hoy"
+        fig.add_shape(
+            type='line', xref='x', yref='paper',
+            x0=hoy_d, x1=hoy_d, y0=0, y1=1,
+            line=dict(color=_C_PRIMARY, width=2, dash='dash'),
+        )
+        fig.add_annotation(
+            x=hoy_d, yref='paper', y=1.02,
+            text='Hoy', showarrow=False,
+            font=dict(size=10, color=_C_PRIMARY),
+            xanchor='center',
+        )
+
+        fig.update_layout(
+            height=max(100, n_lanes * 46 + 50),
+            margin=dict(l=0, r=4, t=22, b=4),
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(248,249,250,0.6)',
+            xaxis=dict(
+                type='date',
+                range=[str(desde_d), str(hasta_d)],
+                showgrid=True, gridcolor='#e9ecef', gridwidth=1,
+                tickformat='%d %b', tickangle=0,
+                zeroline=False,
+            ),
+            yaxis=dict(
+                categoryorder='array', categoryarray=list(reversed(y_labels)),
+                showgrid=False, tickfont=dict(size=11, color='#555'),
+                automargin=True,
+            ),
+            hoverlabel=dict(bgcolor='white', font_size=12, bordercolor='#dee2e6'),
+        )
+
+        timeline = html.Div([
+            html.H6("Línea de tiempo", className="fw-bold mb-1 mt-3",
                     style={"color": _C_DARK, "fontSize": "0.82rem"}),
-            html.Div(detail_rows, style={
-                "maxHeight": "260px", "overflowY": "auto",
-                "paddingRight": "4px",
-            }),
+            dcc.Graph(
+                figure=fig,
+                config={'displayModeBar': False},
+                style={"borderRadius": "6px"},
+            ),
         ])
 
     active_tab = f"tab-{hoy_d.year}-{hoy_d.month}"
@@ -2421,7 +2466,7 @@ def _render_calendario_eventos_clima(location_uuid: str, fecha_max) -> html.Div 
                 style={"color": _C_DARK, "fontSize": "0.98rem"}),
         html.Div(legend_items, className="d-flex flex-wrap gap-1 mb-3"),
         dbc.Tabs(tabs_meses, active_tab=active_tab),
-        *([event_list] if event_list else []),
+        *([timeline] if timeline else []),
     ])
 
 

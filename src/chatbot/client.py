@@ -17,7 +17,7 @@ from src.chatbot.tools import (
     get_pm_data, get_gis_data, get_weather_holidays,
     get_forecast, get_anomalies, get_hourly_breakdown, compare_locations,
     get_location_info, get_active_features, get_external_features,
-    get_calendar_events, get_cruise_calls, get_model_metrics,
+    get_calendar_events, get_cruise_calls, get_model_metrics, get_ev_ranks,
     _find_location,
 )
 from src.chatbot.cache import get_cached, set_cached
@@ -263,6 +263,27 @@ _TOOL_DEFINITIONS = [
             "required": ["location_uuid"],
         },
     },
+    {
+        "name": "get_ev_ranks",
+        "description": (
+            "Devuelve los scores diarios de presión de eventos externos (ev_rank_*) "
+            "para una ubicación y rango de fechas. "
+            "Los scores van de 0 a 100 e indican el impacto potencial sobre el tráfico: "
+            "ev_rank_concierto, ev_rank_festival, ev_rank_deportivo, ev_rank_municipal "
+            "y ev_rank_total (máximo combinado). "
+            "Úsala para entender qué días tuvieron mayor actividad de eventos y "
+            "correlacionar picos o caídas de tráfico con el contexto externo."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location_uuid": {"type": "string", "description": "UUID de la ubicación."},
+                "fecha_inicio":  {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
+                "fecha_fin":     {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
+            },
+            "required": ["location_uuid", "fecha_inicio", "fecha_fin"],
+        },
+    },
 ]
 
 _TOOL_FN = {
@@ -279,6 +300,7 @@ _TOOL_FN = {
     "get_calendar_events":    lambda args: get_calendar_events(**args),
     "get_cruise_calls":       lambda args: get_cruise_calls(**args),
     "get_model_metrics":      lambda args: get_model_metrics(**args),
+    "get_ev_ranks":           lambda args: get_ev_ranks(**args),
 }
 
 

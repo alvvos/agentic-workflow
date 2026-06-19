@@ -895,29 +895,33 @@ def get_calendar_events(
     except Exception as e:
         return {"error": f"Error al consultar el calendario: {e}"}
 
+    _META_KEYS = ("titulo", "nombre", "barco", "artista", "venue", "venue_nombre",
+                  "aforo", "n_pasajeros", "pasajeros", "operador", "naviera",
+                  "terminal", "rsvp_count", "going", "url", "impacto")
+
     eventos = []
     for key, fi, ff, meta_raw in rows:
         meta = meta_raw if isinstance(meta_raw, dict) else (
             json.loads(meta_raw) if meta_raw else {}
         )
-        titulo = meta.get("titulo") or meta.get("nombre") or key.replace("_", " ").title()
+        titulo = (meta.get("titulo") or meta.get("nombre") or
+                  meta.get("barco") or key.replace("_", " ").title())
         entry: dict = {
             "evento_key":   key,
-            "tipo":         key.split("_")[0].title(),
             "titulo":       titulo,
             "fecha_inicio": str(fi),
             "fecha_fin":    str(ff),
         }
-        if meta.get("impacto"):
-            entry["impacto"] = meta["impacto"]
-        if meta.get("icono_fa"):
-            entry["icono"] = meta["icono_fa"]
+        # Exponer toda la metadata relevante directamente
+        for k in _META_KEYS:
+            if k in meta and meta[k] is not None and k not in ("titulo", "nombre"):
+                entry[k] = meta[k]
         eventos.append(entry)
 
     por_tipo: dict = {}
     for ev in eventos:
-        por_tipo.setdefault(ev["tipo"], 0)
-        por_tipo[ev["tipo"]] += 1
+        por_tipo.setdefault(ev["evento_key"], 0)
+        por_tipo[ev["evento_key"]] += 1
 
     loc = _find_location(location_uuid)
     nombre = loc.get("name", location_uuid) if loc else location_uuid
@@ -1122,4 +1126,87 @@ def get_model_metrics(
         "modelo_mas_reciente": modelos[0] if modelos else None,
         "todos_modelos":      modelos,
         "evaluacion_features": feat_evals,
+    }
+
+
+# ── Herramienta 14: get_ev_ranks ─────────────────────────────────────────────
+
+def get_ev_ranks(
+    location_uuid: str,
+    fecha_inicio: str,
+    fecha_fin: str,
+) -> dict:
+    """
+    Devuelve los scores diarios de presión de eventos externos (ev_rank_*)
+    para una ubicación y rango de fechas.
+
+    Los ev_ranks son señales 0-100 que cuantifican el impacto potencial de
+    eventos sobre el tráfico de visitantes:
+      - ev_rank_concierto:  presión por conciertos en el área
+      - ev_rank_festival:   presión por festivales
+      - ev_rank_deportivo:  presión por eventos deportivos
+      - ev_rank_municipal:  presión por eventos municipales / culturales
+      - ev_rank_total:      máximo de los anteriores (señal combinada)
+
+    Útil para entender qué días tuvieron mayor contexto de eventos y
+    correlacionar con anomalías de tráfico.
+    """
+    try:
+        t0, t1 = pd.Timestamp(fecha_inicio), pd.Timestamp(fecha_fin)
+    except Exception:
+        return {"error": "Formato de fecha no válido. Usa YYYY-MM-DD."}
+    if t1 < t0:
+        return {"error": "fecha_inicio debe ser anterior a fecha_fin."}
+    if (t1 - t0).days > MAX_DAYS_EXT:
+        return {"error": f"Rango máximo: {MAX_DAYS_EXT} días."}
+
+    _EV_KEYS = [
+        "ev_rank_concierto", "ev_rank_festival",
+        "ev_rank_deportivo", "ev_rank_municipal", "ev_rank_total",
+    ]
+
+    try:
+        from src.db.store import get_conn
+        conn = get_conn()
+        placeholders = ",".join(["?"] * len(_EV_KEYS))
+        rows = conn.execute(
+            f"""SELECT feature_key, fecha::text, value
+                FROM store_features_ext
+                WHERE location_uuid = ? AND feature_key IN ({placeholders})
+                  AND fecha >= ? AND fecha <= ? AND value IS NOT NULL
+                ORDER BY fecha, feature_key""",
+            [location_uuid] + _EV_KEYS + [str(t0.date()), str(t1.date())],
+        ).fetchall()
+    except Exception as e:
+        return {"error": f"Error al consultar ev_ranks: {e}"}
+
+    # Agrupar por fecha
+    by_date: dict[str, dict] = {}
+    for fk, fecha, val in rows:
+        by_date.setdefault(fecha, {})[fk] = round(float(val), 1)
+
+    # Días con señal > 0
+    dias_con_senal = [
+        {"fecha": f, **scores}
+        for f, scores in sorted(by_date.items())
+        if any(v > 0 for v in scores.values())
+    ]
+
+    # Pico por tipología
+    picos: dict = {}
+    for fk in _EV_KEYS:
+        vals = [(f, s[fk]) for f, s in by_date.items() if fk in s and s[fk] > 0]
+        if vals:
+            best = max(vals, key=lambda x: x[1])
+            picos[fk] = {"fecha": best[0], "score": best[1]}
+
+    loc = _find_location(location_uuid)
+    nombre = loc.get("name", location_uuid) if loc else location_uuid
+
+    return {
+        "ubicacion":        nombre,
+        "periodo":          {"inicio": fecha_inicio, "fin": fecha_fin},
+        "n_dias_con_senal": len(dias_con_senal),
+        "pico_por_tipo":    picos,
+        "dias":             dias_con_senal,
     }

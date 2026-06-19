@@ -28,7 +28,7 @@ from src.chatbot.tools import (
     get_pm_data, get_gis_data, get_weather_holidays,
     get_forecast, get_anomalies, get_hourly_breakdown, compare_locations,
     get_location_info, get_active_features, get_external_features,
-    get_calendar_events, get_cruise_calls, get_model_metrics,
+    get_calendar_events, get_cruise_calls, get_model_metrics, get_ev_ranks,
 )
 
 _CACHE_DIR = Path(__file__).parent.parent / "data" / ".stream_cache"
@@ -48,6 +48,7 @@ _TOOL_LABELS = {
     "get_calendar_events":   "Consultando calendario de eventos…",
     "get_cruise_calls":      "Consultando escalas de cruceros…",
     "get_model_metrics":     "Consultando métricas del modelo…",
+    "get_ev_ranks":          "Consultando scores de eventos…",
 }
 
 _TOOL_FN = {
@@ -64,6 +65,7 @@ _TOOL_FN = {
     "get_calendar_events":    lambda args: get_calendar_events(**args),
     "get_cruise_calls":       lambda args: get_cruise_calls(**args),
     "get_model_metrics":      lambda args: get_model_metrics(**args),
+    "get_ev_ranks":           lambda args: get_ev_ranks(**args),
 }
 
 
@@ -90,7 +92,7 @@ def _set(sid: str, **kw) -> None:
 _TOOLS_UUID_PARAM = {
     "get_gis_data", "get_forecast", "get_anomalies", "get_hourly_breakdown",
     "get_location_info", "get_active_features", "get_external_features",
-    "get_calendar_events", "get_cruise_calls", "get_model_metrics",
+    "get_calendar_events", "get_cruise_calls", "get_model_metrics", "get_ev_ranks",
 }
 _TOOLS_ID_PARAM    = {"get_pm_data", "get_weather_holidays"}
 _TOOLS_SESSION     = {"get_pm_data", "get_forecast", "get_anomalies", "get_hourly_breakdown", "compare_locations"}
