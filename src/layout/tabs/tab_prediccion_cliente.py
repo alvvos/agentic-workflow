@@ -185,20 +185,40 @@ def build_tab_prediccion_cliente():
                 ], width=12),
             ], className='mb-4'),
 
-            dcc.Loading(
-                html.Div(id='pred-publica-content', children=_empty_state(),
-                         style={"minHeight": "60vh"}),
-                custom_spinner=html.Div(
-                    [
-                        dbc.Spinner(color="primary", size="lg"),
-                        html.H5("Calculando previsión...", className="ms-3 mb-0 text-primary fw-bold"),
-                    ],
-                    className="d-flex align-items-center justify-content-center",
-                    style={"minHeight": "60vh"},
+            html.Div(style={"position": "relative"}, children=[
+                dcc.Loading(
+                    html.Div(id='pred-publica-content', children=_empty_state(),
+                             style={"minHeight": "60vh"}),
+                    custom_spinner=html.Div(
+                        [
+                            dbc.Spinner(color="primary", size="lg"),
+                            html.H5("Calculando previsión...", className="ms-3 mb-0 text-primary fw-bold"),
+                        ],
+                        className="d-flex align-items-center justify-content-center",
+                        style={"minHeight": "60vh"},
+                    ),
+                    delay_show=350,
+                    delay_hide=0,
                 ),
-                delay_show=350,
-                delay_hide=500,
-            ),
+                html.Div(
+                    id="pred-render-overlay",
+                    style={
+                        "display": "none",
+                        "position": "absolute",
+                        "top": 0, "left": 0, "right": 0, "bottom": 0,
+                        "minHeight": "60vh",
+                        "background": "rgba(255,255,255,0.92)",
+                        "zIndex": 100,
+                        "alignItems": "center",
+                        "justifyContent": "center",
+                        "flexDirection": "column",
+                    },
+                    children=[
+                        dbc.Spinner(color="primary", size="lg"),
+                        html.H5("Renderizando...", className="ms-3 mb-0 text-primary fw-bold"),
+                    ],
+                ),
+            ]),
         ], className='p-3')],
     )
 

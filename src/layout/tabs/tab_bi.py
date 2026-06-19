@@ -1,6 +1,22 @@
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 
+_SPINNER = [
+    dbc.Spinner(color="primary", size="lg"),
+    html.H5("Renderizando...", className="ms-3 mb-0 text-primary fw-bold"),
+]
+
+_OVERLAY_STYLE = {
+    "display": "none",
+    "position": "absolute",
+    "top": 0, "left": 0, "right": 0, "bottom": 0,
+    "minHeight": "420px",
+    "background": "rgba(255,255,255,0.92)",
+    "zIndex": 100,
+    "alignItems": "center",
+    "justifyContent": "center",
+    "flexDirection": "column",
+}
 
 def build_tab_bi():
     return dcc.Tab(label='Analítica', value='tab-auditoria', className="fw-bold", children=[
@@ -28,19 +44,22 @@ def build_tab_bi():
             ], xs=12, className="text-end mb-4")
         ]),
 
-        dcc.Loading(
-            html.Div(id="bi-dynamic-content",
-                     style={"minHeight": "420px"}),
-            custom_spinner=html.Div(
-                [
-                    dbc.Spinner(color="primary", size="lg"),
-                    html.H5("Cargando análisis...", className="ms-3 mb-0 text-primary fw-bold"),
-                ],
-                className="d-flex align-items-center justify-content-center loading-spinner-body",
+        html.Div(style={"position": "relative"}, children=[
+            dcc.Loading(
+                html.Div(id="bi-dynamic-content", style={"minHeight": "420px"}),
+                custom_spinner=html.Div(
+                    [
+                        dbc.Spinner(color="primary", size="lg"),
+                        html.H5("Cargando análisis...", className="ms-3 mb-0 text-primary fw-bold"),
+                    ],
+                    className="d-flex align-items-center justify-content-center loading-spinner-body",
+                ),
+                delay_show=350,
+                delay_hide=0,
             ),
-            delay_show=350,
-            delay_hide=500,
-        ),
+            html.Div(id="bi-render-overlay", style=_OVERLAY_STYLE, children=_SPINNER),
+        ]),
+
         html.Hr(className="text-muted my-5"),
         dbc.Row([
             dbc.Col(

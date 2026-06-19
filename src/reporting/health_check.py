@@ -441,13 +441,20 @@ def _eventos_narrativa(location_uuid: str, fecha_ini, fecha_max) -> dict:
         # Impacto explícito (fuentes legacy/mock) o inferido desde señales de cada source
         impacto = meta.get('impacto')
         if not impacto:
-            aforo   = meta.get('aforo') or 0
-            rsvp    = meta.get('rsvp_count') or 0
-            going   = meta.get('going') or 0
-            if aforo > 5_000 or rsvp > 500 or going > 100:
+            # Ticketmaster events are real ticketed events — always notable
+            if key.startswith('tm_') or key in (
+                'concierto_wizink', 'festival_madrid', 'partido_deportivo',
+                'estreno_callao', 'manifestacion_gran_via',
+            ):
                 impacto = 'alto'
-            elif aforo > 1_000 or rsvp > 100 or going > 30:
-                impacto = 'medio'
+            else:
+                aforo = meta.get('aforo') or 0
+                rsvp  = meta.get('rsvp_count') or 0
+                going = meta.get('going') or 0
+                if aforo > 5_000 or rsvp > 500 or going > 100:
+                    impacto = 'alto'
+                elif aforo > 1_000 or rsvp > 100 or going > 30:
+                    impacto = 'medio'
         if impacto != 'alto':
             continue
 
@@ -2395,7 +2402,7 @@ def _render_eventos_mensual_section(location_uuid: str, fecha_max) -> html.Div |
         conn = get_conn()
         desde = fecha_max - timedelta(days=760)
         rows = conn.execute(
-            """SELECT evento_key, fecha_inicio::text
+            """SELECT evento_key, fecha_inicio::text, metadata
                FROM store_calendario_org
                WHERE location_uuid = ? AND fecha_inicio >= ?
                ORDER BY fecha_inicio""",
@@ -2408,7 +2415,7 @@ def _render_eventos_mensual_section(location_uuid: str, fecha_max) -> html.Div |
     if not rows:
         return None
 
-    df = pd.DataFrame(rows, columns=['evento_key', 'fecha'])
+    df = pd.DataFrame(rows, columns=['evento_key', 'fecha', 'metadata'])
     df['fecha']   = pd.to_datetime(df['fecha'])
     df['tipo']    = df['evento_key'].map(lambda k: _NORM_TIPO.get(k, k))
     df['anio']    = df['fecha'].dt.year
@@ -2420,6 +2427,7 @@ def _render_eventos_mensual_section(location_uuid: str, fecha_max) -> html.Div |
 
     anio_actual = fecha_max.year if hasattr(fecha_max, 'year') else pd.Timestamp(fecha_max).year
     anio_prev   = anio_actual - 1
+    mes_hoy     = date.today().month
     _MESES_ES   = ['Ene','Feb','Mar','Abr','May','Jun',
                    'Jul','Ago','Sep','Oct','Nov','Dic']
 
@@ -2445,8 +2453,10 @@ def _render_eventos_mensual_section(location_uuid: str, fecha_max) -> html.Div |
             continue
 
         missing  = [v is None or v == 0 for v in y_act]
-        max_real = max((v for v in y_act if v), default=1)
-        ghost_h  = max_real * 0.06
+        max_act  = max((v for v in y_act  if v), default=1)
+        max_prev = max((v for v in y_prev if v), default=0) if has_p else 0
+        max_all  = max(max_act, max_prev, 1)
+        ghost_h  = max_all * 0.06
         y_disp   = [v if (v and not missing[i]) else ghost_h for i, v in enumerate(y_act)]
         bar_cols = [_hex_rgba(color, 0.88) if not missing[i] else "rgba(224,224,224,0.55)"
                     for i in range(12)]
@@ -2470,17 +2480,27 @@ def _render_eventos_mensual_section(location_uuid: str, fecha_max) -> html.Div |
 
         text_pos = ["outside" if not missing[i] else "inside" for i in range(12)]
 
+        # Hover text for prev-year bars
+        plural = lambda n: "s" if n != 1 else ""
+        prev_hover = [
+            f'{_MESES_ES[i]}: <b>{y_prev[i]}</b> {lbl.lower()}{plural(y_prev[i] or 0)}<extra></extra>'
+            if y_prev[i] else f'{_MESES_ES[i]}: sin datos<extra></extra>'
+            for i in range(12)
+        ]
+
         fig = go.Figure()
         if has_p:
             fig.add_trace(go.Bar(
                 x=_MESES_ES, y=[v or 0 for v in y_prev],
+                name=str(anio_prev),
                 marker=dict(color=_hex_rgba(color, 0.15),
                             line=dict(color=color, width=1), cornerradius=5),
-                hoverinfo='skip', showlegend=False,
+                hovertemplate=prev_hover,
+                showlegend=False,
             ))
-        plural = lambda n: "s" if n != 1 else ""
         fig.add_trace(go.Bar(
             x=_MESES_ES, y=y_disp,
+            name=str(anio_actual),
             marker=dict(color=bar_cols, cornerradius=5),
             text=bar_text, textposition=text_pos,
             textfont=dict(size=9, color=text_col),
@@ -2494,29 +2514,81 @@ def _render_eventos_mensual_section(location_uuid: str, fecha_max) -> html.Div |
         ))
         fig.update_layout(
             barmode='group', height=220,
-            margin=dict(t=10, b=10, l=10, r=10),
+            margin=dict(t=20, b=10, l=10, r=10),
             plot_bgcolor='white', paper_bgcolor='rgba(0,0,0,0)',
             xaxis=dict(showgrid=False, tickfont=dict(size=10), fixedrange=True),
-            yaxis=dict(visible=False, fixedrange=True, range=[0, max_real * 1.70]),
+            yaxis=dict(visible=False, fixedrange=True, range=[0, max_all * 1.60]),
             showlegend=False,
         )
+        _vline_x = _MESES_ES[mes_hoy - 1]
+        fig.add_shape(type="line", x0=_vline_x, x1=_vline_x, y0=0, y1=1,
+                      xref="x", yref="paper",
+                      line=dict(color="rgba(0,82,204,0.45)", width=1.5, dash="dot"))
+        fig.add_annotation(x=_vline_x, y=1.01, xref="x", yref="paper",
+                           text="hoy", showarrow=False, yanchor="bottom",
+                           font=dict(size=8, color="rgba(0,82,204,0.7)"))
+
+        # ── Event metadata lists for both years ────────────────────────────────
+        def _ev_items(yr):
+            rows_yr = sub[sub['anio'] == yr].sort_values('mes_num')
+            items = []
+            seen = set()
+            for _, row in rows_yr.iterrows():
+                meta  = row.get('metadata') or {}
+                title = (meta.get('titulo') or row['evento_key'])[:32]
+                venue = (meta.get('venue') or '')[:22]
+                key   = (title, row['mes_num'])
+                if key in seen:
+                    continue
+                seen.add(key)
+                items.append((row['mes_num'], title, venue))
+            return items
+
+        def _ev_list_els(items, text_color):
+            els = []
+            for mes_n, title, venue in items[:6]:
+                parts = [
+                    html.Span(_MESES_ES[mes_n - 1],
+                              style={"color": _C_MUTED, "fontSize": "0.60rem",
+                                     "minWidth": "22px", "display": "inline-block"}),
+                    html.Span(title, style={"fontSize": "0.62rem", "color": text_color}),
+                ]
+                if venue:
+                    parts.append(html.Span(f" · {venue}",
+                                           style={"fontSize": "0.59rem", "color": _C_MUTED}))
+                els.append(html.Div(parts, className="d-flex align-items-center gap-1"))
+            if len(items) > 6:
+                els.append(html.Span(f"+{len(items)-6} más",
+                                     style={"fontSize": "0.59rem", "color": _C_MUTED}))
+            return els
+
+        act_items  = _ev_items(anio_actual)
+        prev_items = _ev_items(anio_prev) if has_p else []
 
         dot = lambda op, bdr="": html.Span(style={
             "display": "inline-block", "width": "8px", "height": "8px",
-            "background": color, "opacity": op,
+            "background": color, "opacity": op, "flexShrink": 0,
             "border": bdr, "borderRadius": "1px", "marginRight": "4px",
         })
-        leyenda = html.Div([
-            html.Div([dot("0.88"),
-                      html.Span(str(anio_actual),
-                                style={"fontSize": "0.67rem", "color": _C_DARK,
-                                       "marginRight": "10px"})],
-                     className="d-flex align-items-center"),
-            html.Div([dot("0.2", f"1px solid {color}"),
-                      html.Span(str(anio_prev),
-                                style={"fontSize": "0.67rem", "color": _C_MUTED})],
-                     className="d-flex align-items-center"),
-        ] if has_p else [], className="d-flex align-items-center gap-3 mb-1")
+
+        def _year_block(yr_label, dot_el, items, text_color):
+            header = html.Div(
+                [dot_el, html.Span(str(yr_label),
+                                   style={"fontSize": "0.67rem", "color": text_color,
+                                          "fontWeight": "600"})],
+                className="d-flex align-items-center mb-1",
+            )
+            return html.Div([header] + _ev_list_els(items, text_color),
+                            style={"minWidth": "160px"})
+
+        legend_blocks = [
+            _year_block(anio_actual, dot("0.88"), act_items, _C_DARK),
+        ]
+        if has_p and prev_items:
+            legend_blocks.append(
+                _year_block(anio_prev, dot("0.2", f"1px solid {color}"), prev_items, _C_MUTED)
+            )
+        leyenda = html.Div(legend_blocks, className="d-flex flex-wrap gap-4 mb-2")
 
         icono = _ICONO_TIPO.get(tipo, 'fas fa-calendar-day')
         uid8  = location_uuid[:8]
@@ -2561,7 +2633,8 @@ def _render_cruceros_section(location_uuid: str, fecha_max,
 
     _MESES_ES = ['Ene','Feb','Mar','Abr','May','Jun',
                  'Jul','Ago','Sep','Oct','Nov','Dic']
-    color = '#1abc9c'
+    color   = '#1abc9c'
+    mes_hoy = date.today().month
 
     df_y = pd.DataFrame(yoy_rows, columns=['fecha', 'value'])
     df_y['fecha']   = pd.to_datetime(df_y['fecha'])
@@ -2575,6 +2648,31 @@ def _render_cruceros_section(location_uuid: str, fecha_max,
     if df_y[df_y['anio'] == anio_actual].empty:
         return None
 
+    # Load ship metadata from the calendar store
+    cruise_meta: dict[int, list[dict]] = {}  # {anio: [{mes_num, barco, pax}]}
+    try:
+        from src.db.store import get_conn as _gc
+        meta_rows = _gc().execute(
+            """SELECT fecha_inicio::text, metadata
+               FROM store_calendario_org
+               WHERE location_uuid = ? AND evento_key = 'escala_crucero'
+                 AND fecha_inicio >= ?
+               ORDER BY fecha_inicio""",
+            [location_uuid,
+             str(desde_yoy.date() if hasattr(desde_yoy, 'date') else desde_yoy)],
+        ).fetchall()
+        for fecha_str, meta in meta_rows:
+            if not meta:
+                continue
+            dt   = pd.Timestamp(fecha_str)
+            yr   = dt.year
+            mn   = dt.month
+            barco = (meta.get('barco') or '').strip()[:30]
+            pax   = meta.get('n_pasajeros') or meta.get('pasajeros') or 0
+            cruise_meta.setdefault(yr, []).append({'mes_num': mn, 'barco': barco, 'pax': int(pax)})
+    except Exception:
+        pass
+
     mes_pivot = df_y.groupby(['anio', 'mes_num'])['value'].sum().reset_index()
 
     def _gv(yr, m):
@@ -2586,8 +2684,10 @@ def _render_cruceros_section(location_uuid: str, fecha_max,
     has_p  = any(v for v in y_prev)
     missing = [v is None or v == 0 for v in y_act]
 
-    max_real = max((v for v in y_act if v), default=1)
-    ghost_h  = max_real * 0.06
+    max_act  = max((v for v in y_act  if v), default=1)
+    max_prev = max((v for v in y_prev if v), default=0) if has_p else 0
+    max_all  = max(max_act, max_prev, 1)
+    ghost_h  = max_all * 0.06
     y_disp   = [v if (v and not missing[i]) else ghost_h for i, v in enumerate(y_act)]
     bar_cols = [_hex_rgba(color, 0.88) if not missing[i] else "rgba(224,224,224,0.55)"
                 for i in range(12)]
@@ -2625,17 +2725,26 @@ def _render_cruceros_section(location_uuid: str, fecha_max,
             text_col.append(_C_DARK)
     text_pos = ["outside" if not missing[i] else "inside" for i in range(12)]
 
+    prev_hover = [
+        f'{_MESES_ES[i]}: <b>{int(y_prev[i]):,}</b> pax<extra></extra>'
+        if y_prev[i] else f'{_MESES_ES[i]}: sin datos<extra></extra>'
+        for i in range(12)
+    ]
+
     fig = go.Figure()
     if has_p:
         y_prev_d = [v if v else 0.0 for v in y_prev]
         fig.add_trace(go.Bar(
             x=_MESES_ES, y=y_prev_d,
+            name=str(anio_prev),
             marker=dict(color=_hex_rgba(color, 0.15),
                         line=dict(color=color, width=1), cornerradius=5),
-            hoverinfo='skip', showlegend=False,
+            hovertemplate=prev_hover,
+            showlegend=False,
         ))
     fig.add_trace(go.Bar(
         x=_MESES_ES, y=y_disp,
+        name=str(anio_actual),
         marker=dict(color=bar_cols, cornerradius=5),
         text=bar_text, textposition=text_pos,
         textfont=dict(size=9, color=text_col),
@@ -2646,15 +2755,22 @@ def _render_cruceros_section(location_uuid: str, fecha_max,
         ],
         showlegend=False,
     ))
-    max_v = max(max_real, max((v for v in y_prev if v), default=0)) or 1
+    max_v = max_all or 1
     fig.update_layout(
         barmode='group', height=220,
-        margin=dict(t=10, b=10, l=10, r=10),
+        margin=dict(t=20, b=10, l=10, r=10),
         plot_bgcolor='white', paper_bgcolor='rgba(0,0,0,0)',
         xaxis=dict(showgrid=False, tickfont=dict(size=10), fixedrange=True),
-        yaxis=dict(visible=False, fixedrange=True, range=[0, max_v * 1.70]),
+        yaxis=dict(visible=False, fixedrange=True, range=[0, max_v * 1.60]),
         showlegend=False,
     )
+    _vline_x = _MESES_ES[mes_hoy - 1]
+    fig.add_shape(type="line", x0=_vline_x, x1=_vline_x, y0=0, y1=1,
+                  xref="x", yref="paper",
+                  line=dict(color="rgba(0,82,204,0.45)", width=1.5, dash="dot"))
+    fig.add_annotation(x=_vline_x, y=1.01, xref="x", yref="paper",
+                       text="hoy", showarrow=False, yanchor="bottom",
+                       font=dict(size=8, color="rgba(0,82,204,0.7)"))
 
     # % delta período
     kpi_el = html.Span()
@@ -2684,17 +2800,51 @@ def _render_cruceros_section(location_uuid: str, fecha_max,
 
     dot = lambda op, bdr="": html.Span(style={
         "display": "inline-block", "width": "8px", "height": "8px",
-        "background": color, "opacity": op,
+        "background": color, "opacity": op, "flexShrink": 0,
         "border": bdr, "borderRadius": "1px", "marginRight": "4px",
     })
-    leyenda = html.Div([
-        html.Div([dot("0.88"), html.Span(str(anio_actual),
-                  style={"fontSize": "0.67rem", "color": _C_DARK, "marginRight": "10px"})],
-                 className="d-flex align-items-center"),
-        html.Div([dot("0.2", f"1px solid {color}"),
-                  html.Span(str(anio_prev), style={"fontSize": "0.67rem", "color": _C_MUTED})],
-                 className="d-flex align-items-center"),
-    ] if has_p else [], className="d-flex align-items-center gap-3 mb-1")
+
+    def _cruise_list_els(yr, text_color):
+        ships = sorted(cruise_meta.get(yr, []), key=lambda x: x['mes_num'])
+        seen  = set()
+        els   = []
+        for s in ships[:6]:
+            key = (s['barco'], s['mes_num'])
+            if key in seen or not s['barco']:
+                continue
+            seen.add(key)
+            pax_txt = f"{s['pax']:,}".replace(',', '.') if s['pax'] else ''
+            parts = [
+                html.Span(_MESES_ES[s['mes_num'] - 1],
+                          style={"color": _C_MUTED, "fontSize": "0.60rem",
+                                 "minWidth": "22px", "display": "inline-block"}),
+                html.Span(s['barco'], style={"fontSize": "0.62rem", "color": text_color}),
+            ]
+            if pax_txt:
+                parts.append(html.Span(f" · {pax_txt} pax",
+                                       style={"fontSize": "0.59rem", "color": _C_MUTED}))
+            els.append(html.Div(parts, className="d-flex align-items-center gap-1"))
+        remainder = len(set((s['barco'], s['mes_num']) for s in ships if s['barco'])) - len(seen)
+        if remainder > 0:
+            els.append(html.Span(f"+{remainder} más",
+                                 style={"fontSize": "0.59rem", "color": _C_MUTED}))
+        return els
+
+    def _year_block(yr_label, dot_el, text_color):
+        header = html.Div(
+            [dot_el, html.Span(str(yr_label),
+                               style={"fontSize": "0.67rem", "color": text_color,
+                                      "fontWeight": "600"})],
+            className="d-flex align-items-center mb-1",
+        )
+        return html.Div([header] + _cruise_list_els(yr_label, text_color),
+                        style={"minWidth": "160px"})
+
+    legend_blocks = [_year_block(anio_actual, dot("0.88"), _C_DARK)]
+    if has_p and cruise_meta.get(anio_prev):
+        legend_blocks.append(_year_block(anio_prev, dot("0.2", f"1px solid {color}"), _C_MUTED))
+
+    leyenda = html.Div(legend_blocks, className="d-flex flex-wrap gap-4 mb-2")
 
     return html.Div([
         html.Div([
