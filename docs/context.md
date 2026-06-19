@@ -181,8 +181,7 @@ app.py
 │   └── ingesta_geo.py          — ingestar_snapshot_esri()
 ├── src/data_processing/
 │   ├── geo_enrichment.py       — get_geo_vals(), enriquecer_con_geo()
-│   ├── constructor_master.py   — weather + holidays join
-│   └── feature_engineering.py — lags, rolling, day-of-week
+│   └── constructor_master.py   — weather + holidays join
 ├── src/reporting/
 │   ├── health_check.py         — Panel PM completo
 │   └── geo_panel.py            — Sección geo (tarjetas + 4 charts)
@@ -190,7 +189,7 @@ app.py
     └── ml_predictivo.py        — XGBoost con temporal join geo
 ```
 
-**Data flow:** `todas_las_ubicaciones.json` → Aitanna API sync → `data/raw/dataset_*.csv` → constructor_master → feature_engineering → health_check / ml_predictivo
+**Data flow:** `todas_las_ubicaciones.json` → Aitanna API sync → `data/raw/dataset_*.csv` → constructor_master → health_check / ml_predictivo
 
 **Geo flow:** Esri GeoEnrichment → `esri_client.py` → `ingesta_geo.py` → `geo_features.json` → `geo_enrichment.py` → `enriquecer_con_geo(df)` en training / `generar_panel_geo_visual()` en UI
 

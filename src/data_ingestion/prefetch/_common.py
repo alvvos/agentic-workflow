@@ -30,6 +30,7 @@ EVENTOS_FEATURE_COLS: list[str] = [
     'ev_rank_concierto',
     'ev_rank_festival',
     'ev_rank_municipal',
+    'ev_rank_comunidad',
     'ev_rank_total',
 ]
 
@@ -119,7 +120,7 @@ def write_ev_features(location_uuid: str, daily: dict[date, dict]) -> None:
         get_conn().executemany(
             "INSERT INTO store_features_ext (fecha, location_uuid, feature_key, value) "
             "VALUES (?,?,?,?) ON CONFLICT (fecha, location_uuid, feature_key) "
-            "DO UPDATE SET value = excluded.value, ingested_at = NOW()",
+            "DO UPDATE SET value = GREATEST(store_features_ext.value, excluded.value), ingested_at = NOW()",
             rows,
         )
     except Exception:
@@ -170,14 +171,15 @@ def update_ev_rank_total(location_uuid: str, date_from: date, date_to: date) -> 
                 ?,
                 'ev_rank_total',
                 LEAST(100, GREATEST(
-                    COALESCE(MAX(CASE WHEN feature_key = 'ev_rank_deportivo' THEN value END), 0),
-                    COALESCE(MAX(CASE WHEN feature_key = 'ev_rank_concierto' THEN value END), 0),
-                    COALESCE(MAX(CASE WHEN feature_key = 'ev_rank_festival'  THEN value END), 0),
-                    COALESCE(MAX(CASE WHEN feature_key = 'ev_rank_municipal' THEN value END), 0)
+                    COALESCE(MAX(CASE WHEN feature_key = 'ev_rank_deportivo'  THEN value END), 0),
+                    COALESCE(MAX(CASE WHEN feature_key = 'ev_rank_concierto'  THEN value END), 0),
+                    COALESCE(MAX(CASE WHEN feature_key = 'ev_rank_festival'   THEN value END), 0),
+                    COALESCE(MAX(CASE WHEN feature_key = 'ev_rank_municipal'  THEN value END), 0),
+                    COALESCE(MAX(CASE WHEN feature_key = 'ev_rank_comunidad'  THEN value END), 0)
                 ))
             FROM   store_features_ext
             WHERE  location_uuid = ?
-              AND  feature_key IN ('ev_rank_deportivo','ev_rank_concierto','ev_rank_festival','ev_rank_municipal')
+              AND  feature_key IN ('ev_rank_deportivo','ev_rank_concierto','ev_rank_festival','ev_rank_municipal','ev_rank_comunidad')
               AND  fecha BETWEEN ? AND ?
             GROUP  BY fecha
             ON CONFLICT (fecha, location_uuid, feature_key)

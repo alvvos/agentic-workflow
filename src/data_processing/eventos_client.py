@@ -21,6 +21,7 @@ EVENTOS_FEATURE_COLS: list[str] = [
     'ev_rank_concierto',
     'ev_rank_festival',
     'ev_rank_municipal',
+    'ev_rank_comunidad',
     'ev_rank_total',
 ]
 

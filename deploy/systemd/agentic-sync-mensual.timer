@@ -1,0 +1,9 @@
+[Unit]
+Description=Agentic Workflow — timer sync mensual (día 1 a las 03:00)
+
+[Timer]
+OnCalendar=*-*-01 03:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

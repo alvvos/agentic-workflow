@@ -1,0 +1,12 @@
+[Unit]
+Description=Agentic Workflow — sync mensual (cruceros + geo estado)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=alvaro.salis
+WorkingDirectory=/home/alvaro.salis/agentic-workflow
+ExecStart=/home/alvaro.salis/agentic-workflow/venv/bin/python scripts/sync_mensual.py
+StandardOutput=journal
+StandardError=journal

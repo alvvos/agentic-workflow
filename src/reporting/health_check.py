@@ -437,29 +437,45 @@ def _eventos_narrativa(location_uuid: str, fecha_ini, fecha_max) -> dict:
     for key, fi, meta_json in rows:
         fi_d = pd.to_datetime(fi).date()
         meta = meta_json if isinstance(meta_json, dict) else (json.loads(meta_json) if meta_json else {})
-        if meta.get('impacto') != 'alto':
+
+        # Impacto explícito (fuentes legacy/mock) o inferido desde señales de cada source
+        impacto = meta.get('impacto')
+        if not impacto:
+            aforo   = meta.get('aforo') or 0
+            rsvp    = meta.get('rsvp_count') or 0
+            going   = meta.get('going') or 0
+            if aforo > 5_000 or rsvp > 500 or going > 100:
+                impacto = 'alto'
+            elif aforo > 1_000 or rsvp > 100 or going > 30:
+                impacto = 'medio'
+        if impacto != 'alto':
             continue
-        titulo = meta.get('titulo', key.replace('_', ' ').title())
+
+        nombre = (meta.get('nombre') or meta.get('titulo') or key.replace('_', ' ').title())
+        artista = meta.get('artista') or ''
+        titulo = f"{nombre} — {artista}" if artista else nombre
         ev = {'titulo': titulo, 'fecha': fi_d}
         (pasados if fi_d <= hoy else proximos).append(ev)
 
-    # Cruceros: query store_crucero_llamadas directly (seed may not write to store_calendario_org)
+    # Cruceros desde store_calendario_org (evento_key = 'escala_crucero')
     cruceros: list[dict] = []
     try:
         fi_str    = str(fecha_ini.date() if hasattr(fecha_ini, 'date') else fecha_ini)
         hasta_str = str(hasta.date()     if hasattr(hasta,     'date') else hasta)
         cr_rows = conn.execute(
-            """SELECT fecha::text, nombre_barco, n_pasajeros
-               FROM store_crucero_llamadas
-               WHERE location_uuid = ? AND fecha >= ? AND fecha <= ?
-               ORDER BY fecha""",
+            """SELECT fecha_inicio::text, metadata
+               FROM store_calendario_org
+               WHERE location_uuid = ? AND evento_key = 'escala_crucero'
+                 AND fecha_inicio >= ? AND fecha_inicio <= ?
+               ORDER BY fecha_inicio""",
             [location_uuid, fi_str, hasta_str],
         ).fetchall()
-        for fecha_s, barco, pax in cr_rows:
+        for fecha_s, meta_json in cr_rows:
+            meta = meta_json if isinstance(meta_json, dict) else (json.loads(meta_json) if meta_json else {})
             cruceros.append({
                 'fecha':        pd.to_datetime(fecha_s).date(),
-                'nombre_barco': barco or '—',
-                'n_pasajeros':  int(pax) if pax else 0,
+                'nombre_barco': meta.get('barco') or '—',
+                'n_pasajeros':  int(meta.get('n_pasajeros') or 0),
             })
     except Exception:
         pass
@@ -1538,8 +1554,9 @@ def _render_pm_questions(df, zonas_data, fecha_max, uid, ventana="semana", child
 # ── Eventos externos ─────────────────────────────────────────────────────────
 
 _UNIVERSAL_KEYS = frozenset({
-    'ev_festivo_regional', 'ev_rank_concierto', 'ev_rank_deportivo',
-    'ev_rank_festival', 'ev_rank_municipal', 'ev_rank_total',
+    'ev_festivo_regional', 'ev_vacaciones_escolares',
+    'ev_rank_concierto', 'ev_rank_deportivo', 'ev_rank_festival',
+    'ev_rank_municipal', 'ev_rank_comunidad', 'ev_rank_total',
     'llueve', 'temp_max', 'temp_min',
 })
 
@@ -2040,24 +2057,43 @@ def _render_signal_yoy_chart(df_k, fk, label, sublabel, color, uid,
 
 
 _SRC_COLOR: dict = {
+    # Keys genéricos usados por los sources reales (evento_key en store_calendario_org)
+    'concierto':              '#e74c3c',
+    'festival':               '#f39c12',
+    'deportivo':              '#3498db',
+    'comunidad':              '#9b59b6',
+    'evento_municipal':       '#e67e22',
+    'festivo_regional':       '#27ae60',
+    'vacaciones_escolares':   '#8e44ad',
+    'crucero':                '#1abc9c',
+    # Keys de Ticketmaster (prefijo tm_)
+    'tm_concierto':           '#e74c3c',
+    'tm_festival':            '#f39c12',
+    'tm_deportivo':           '#3498db',
+    # Keys legacy del mock Showroom (mantener para datos históricos)
     'concierto_wizink':       '#e74c3c',
     'estreno_callao':         '#8e44ad',
     'festival_madrid':        '#f39c12',
     'manifestacion_gran_via': '#e67e22',
     'partido_deportivo':      '#3498db',
-    'festivo_regional':       '#27ae60',
-    'vacaciones_escolares':   '#9b59b6',
-    'crucero':                '#1abc9c',
 }
 _SRC_LABEL: dict = {
+    'concierto':              'Concierto',
+    'festival':               'Festival',
+    'deportivo':              'Deportivo',
+    'comunidad':              'Comunidad',
+    'evento_municipal':       'Municipal',
+    'festivo_regional':       'Festivo',
+    'vacaciones_escolares':   'Vacaciones',
+    'crucero':                'Crucero',
+    'tm_concierto':           'Concierto',
+    'tm_festival':            'Festival',
+    'tm_deportivo':           'Deportivo',
     'concierto_wizink':       'Concierto',
     'estreno_callao':         'Estreno',
     'festival_madrid':        'Festival',
     'manifestacion_gran_via': 'Manifestación',
     'partido_deportivo':      'Deportivo',
-    'festivo_regional':       'Festivo',
-    'vacaciones_escolares':   'Vacaciones',
-    'crucero':                'Crucero',
 }
 
 
@@ -2087,25 +2123,13 @@ def _render_calendario_eventos_clima(location_uuid: str, fecha_max) -> html.Div 
                  AND fecha >= ? AND fecha <= ?""",
             [location_uuid, str(desde_d), str(hasta_d)],
         ).fetchall()
-        # Cruise calls
-        crucero_rows: list = []
-        try:
-            crucero_rows = conn.execute(
-                """SELECT fecha::text, nombre_barco, operador
-                   FROM store_crucero_llamadas
-                   WHERE location_uuid = ? AND fecha >= ? AND fecha <= ?
-                   ORDER BY fecha""",
-                [location_uuid, str(desde_d), str(hasta_d)],
-            ).fetchall()
-        except Exception:
-            pass
     except Exception:
         return None
 
     _IMPACT = {'alto': 3, 'medio': 2, 'bajo': 1}
     _CLEAN  = str.maketrans({'—': ' ', '–': ' '})
 
-    # day_events: date → list of {source, titulo, icono_fa, score}
+    # day_events: date → list of {source, titulo, icono_fa, score, meta, fecha}
     day_events: dict = {}
     for key, fi, meta_json in ev_rows:
         fi_d = pd.to_datetime(fi).date()
@@ -2113,25 +2137,21 @@ def _render_calendario_eventos_clima(location_uuid: str, fecha_max) -> html.Div 
         is_vac = 'vacaciones' in key.lower()
         # Normalize source for color lookup — any crucero-like key maps to 'crucero'
         src_key = 'crucero' if 'crucero' in key.lower() else key
-        titulo_raw = meta.get('titulo', meta.get('nombre', key.replace('_', ' ').title()))
+        titulo_raw = (
+            meta.get('titulo') or meta.get('nombre') or
+            meta.get('barco') or
+            key.replace('_', ' ').title()
+        )
+        icono = 'fas fa-ship' if 'crucero' in key.lower() else meta.get('icono_fa', 'fas fa-calendar-day')
+        score_base = 1.5 if 'crucero' in key.lower() else float(_IMPACT.get(meta.get('impacto', ''), 1))
         day_events.setdefault(fi_d, []).append(dict(
             source=src_key,
             titulo=titulo_raw.translate(_CLEAN).strip(),
-            icono_fa=meta.get('icono_fa', 'fas fa-calendar-day'),
+            icono_fa=icono,
             is_vacation=is_vac,
-            score=0.5 if is_vac else float(_IMPACT.get(meta.get('impacto', ''), 1)),
-        ))
-
-    # Inject cruise calls as calendar events (source='crucero')
-    _CLEAN_T = str.maketrans({'—': ' ', '–': ' '})
-    for fecha_s, nombre, operador in crucero_rows:
-        fi_d = pd.to_datetime(fecha_s).date()
-        day_events.setdefault(fi_d, []).append(dict(
-            source='crucero',
-            titulo=(nombre or operador or 'Crucero').translate(_CLEAN_T).strip(),
-            icono_fa='fas fa-ship',
-            is_vacation=False,
-            score=1.5,
+            score=0.5 if is_vac else score_base,
+            meta=meta,
+            fecha=fi_d,
         ))
 
     clima: dict = {}
@@ -2271,24 +2291,32 @@ def _render_calendario_eventos_clima(location_uuid: str, fecha_max) -> html.Div 
             label=tab_lbl, tab_id=tab_id, className="fw-bold",
         ))
 
-    # Legend by source (only sources present in the current window)
+    # ── Dynamic legend: only sources actually present in the window ─────
     present_sources = {e['source']
                        for evs in day_events.values()
                        for e in evs}
-    present_sources.discard('vacaciones_escolares')  # shown via icon
+    present_sources.discard('vacaciones_escolares')  # shown via icon only
+
+    # Deduplicate: tm_concierto/tm_festival/tm_deportivo collapse to their generic form
+    _ALIAS = {'tm_concierto': 'concierto', 'tm_festival': 'festival', 'tm_deportivo': 'deportivo',
+              'concierto_wizink': 'concierto', 'festival_madrid': 'festival',
+              'partido_deportivo': 'deportivo', 'manifestacion_gran_via': 'evento_municipal',
+              'estreno_callao': 'concierto'}
+    display_sources: dict[str, str] = {}   # canonical_key → display_label
+    for src in present_sources:
+        canon = _ALIAS.get(src, src)
+        display_sources[canon] = _SRC_LABEL.get(src, src.replace('_', ' ').title())
+
     legend_items = []
-    for src in ['crucero','concierto_wizink','estreno_callao','festival_madrid',
-                'partido_deportivo','manifestacion_gran_via','festivo_regional']:
-        if src not in present_sources:
-            continue
-        c = _SRC_COLOR[src]
+    for canon, lbl in sorted(display_sources.items(), key=lambda x: x[1]):
+        c = _SRC_COLOR.get(canon, '#7f8c8d')
         legend_items.append(html.Div([
             html.Span(style={"display": "inline-block", "width": "8px", "height": "8px",
-                             "borderRadius": "50%", "background": c, "marginRight": "4px"}),
-            html.Span(_SRC_LABEL[src], style={"fontSize": "0.67rem", "color": _C_MUTED}),
+                             "borderRadius": "50%", "background": c, "marginRight": "4px",
+                             "flexShrink": "0"}),
+            html.Span(lbl, style={"fontSize": "0.67rem", "color": _C_MUTED}),
         ], className="d-flex align-items-center me-3"))
 
-    # Always show clima icons in legend
     legend_items.append(html.Div([
         html.I(className="fas fa-cloud-showers-heavy me-1",
                style={"color": "#3498db", "fontSize": "0.67rem"}),
@@ -2300,6 +2328,92 @@ def _render_calendario_eventos_clima(location_uuid: str, fecha_max) -> html.Div 
                style={"color": "#95a5a6", "fontSize": "0.67rem"}),
     ], className="d-flex align-items-center"))
 
+    # ── Event detail list (all non-vacation events sorted by date) ───────
+    MESES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun',
+                   'Jul','Ago','Sep','Oct','Nov','Dic']
+
+    def _meta_extra(src: str, meta: dict) -> str:
+        """One-line metadata summary per source type."""
+        parts = []
+        if src == 'crucero':
+            pax = meta.get('n_pasajeros') or meta.get('pasajeros')
+            if pax:
+                parts.append(f"{int(pax):,} pax".replace(',', '.'))
+            terminal = meta.get('terminal')
+            if terminal:
+                parts.append(terminal)
+        else:
+            artista = meta.get('artista')
+            if artista:
+                if isinstance(artista, list):
+                    parts.append(', '.join(artista[:2]))
+                else:
+                    parts.append(str(artista))
+            venue = meta.get('venue_nombre') or meta.get('venue')
+            if venue:
+                parts.append(str(venue))
+            aforo = meta.get('aforo')
+            if aforo and not artista:
+                parts.append(f"{int(aforo):,} aforo".replace(',', '.'))
+            rsvp = meta.get('rsvp_count') or meta.get('going')
+            if rsvp and not aforo:
+                parts.append(f"{int(rsvp):,} asistentes".replace(',', '.'))
+        return ' · '.join(parts)
+
+    all_ev_flat = sorted(
+        [(d, ev) for d, evs in day_events.items() for ev in evs if not ev['is_vacation']],
+        key=lambda x: x[0],
+    )
+
+    detail_rows = []
+    for d, ev in all_ev_flat:
+        c = _SRC_COLOR.get(ev['source'], '#7f8c8d')
+        lbl = _SRC_LABEL.get(ev['source'], ev['source'].replace('_', ' ').title())
+        extra = _meta_extra(ev['source'], ev.get('meta', {}))
+        is_past = d < hoy_d
+        opacity = "0.5" if is_past else "1"
+        date_str = f"{d.day:02d} {MESES_CORTO[d.month - 1]}"
+
+        detail_rows.append(html.Div([
+            html.Span(date_str, style={
+                "fontSize": "0.63rem", "color": _C_MUTED,
+                "minWidth": "38px", "fontVariantNumeric": "tabular-nums",
+            }),
+            html.Span(style={
+                "display": "inline-block", "width": "7px", "height": "7px",
+                "borderRadius": "50%", "background": c, "flexShrink": "0",
+                "marginTop": "1px",
+            }),
+            html.Span(lbl, style={
+                "fontSize": "0.63rem", "color": c,
+                "fontWeight": "600", "minWidth": "58px",
+            }),
+            html.Span(ev['titulo'], style={
+                "fontSize": "0.67rem", "color": '#2c3e50',
+                "fontWeight": "500", "flex": "1", "overflow": "hidden",
+                "textOverflow": "ellipsis", "whiteSpace": "nowrap",
+            }),
+            *([html.Span(extra, style={
+                "fontSize": "0.62rem", "color": _C_MUTED, "flexShrink": "0",
+            })] if extra else []),
+        ], className="d-flex align-items-center gap-2 py-1",
+           style={
+               "borderBottom": "1px solid #f4f4f4",
+               "opacity": opacity,
+               "minWidth": "0",
+           }))
+
+    event_list = None
+    if detail_rows:
+        event_list = html.Div([
+            html.H6("Eventos en el período", className="fw-bold mb-2 mt-3",
+                    style={"color": _C_DARK, "fontSize": "0.82rem"}),
+            html.Div(detail_rows, style={
+                "maxHeight": "260px", "overflowY": "auto",
+                "paddingRight": "4px",
+            }),
+        ])
+
     active_tab = f"tab-{hoy_d.year}-{hoy_d.month}"
     if tabs_meses and active_tab not in {t.tab_id for t in tabs_meses}:
         active_tab = tabs_meses[-1].tab_id
@@ -2309,6 +2423,7 @@ def _render_calendario_eventos_clima(location_uuid: str, fecha_max) -> html.Div 
                 style={"color": _C_DARK, "fontSize": "0.98rem"}),
         html.Div(legend_items, className="d-flex flex-wrap gap-1 mb-3"),
         dbc.Tabs(tabs_meses, active_tab=active_tab),
+        *([event_list] if event_list else []),
     ])
 
 

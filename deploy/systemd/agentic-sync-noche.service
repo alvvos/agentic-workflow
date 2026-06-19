@@ -1,0 +1,13 @@
+[Unit]
+Description=Agentic Workflow — sync nocturno (Aitanna + contexto)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=alvaro.salis
+WorkingDirectory=/home/alvaro.salis/agentic-workflow
+ExecStart=/home/alvaro.salis/agentic-workflow/venv/bin/python scripts/sync_noche.py
+StandardOutput=journal
+StandardError=journal
+# Si el proceso falla (exit != 0) systemd lo registra pero no reinicia (oneshot)

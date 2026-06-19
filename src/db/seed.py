@@ -321,20 +321,36 @@ def seed_feature_flags() -> dict:
     ).fetchall()]
 
     sql = """
-        INSERT INTO feature_flags (feature_key, location_uuid, status)
-        VALUES (?, ?, ?)
+        INSERT INTO feature_flags (feature_key, location_uuid, status, periodicidad)
+        VALUES (?, ?, ?, ?)
         ON CONFLICT (feature_key, location_uuid) DO UPDATE
-            SET status = EXCLUDED.status
+            SET status       = EXCLUDED.status,
+                periodicidad = EXCLUDED.periodicidad
     """
-    active_rows   = [(fk, loc, 'active')   for fk in climate_keys for loc in locs]
-    inactive_rows = [(fk, loc, 'inactive') for fk in geo_keys      for loc in locs]
 
-    if active_rows:
-        conn.executemany(sql, active_rows)
-    if inactive_rows:
-        conn.executemany(sql, inactive_rows)
+    # clima: activas en ML, ingesta diaria
+    ev_diaria_keys = [
+        'ev_vacaciones_escolares', 'ev_festivo_regional',
+        'ev_rank_deportivo', 'ev_rank_concierto', 'ev_rank_festival',
+        'ev_rank_municipal', 'ev_rank_comunidad', 'ev_rank_total',
+    ]
+    # cruceros: contexto, ingesta mensual (calendario portuario)
+    crucero_keys = ['n_pasajeros_crucero_dia']
 
-    return {'active': len(active_rows), 'inactive': len(inactive_rows)}
+    active_rows   = [(fk, loc, 'active',   'diaria')     for fk in climate_keys   for loc in locs]
+    inactive_rows = [(fk, loc, 'inactive', 'trimestral') for fk in geo_keys        for loc in locs]
+    contexto_diaria_rows  = [(fk, loc, 'contexto', 'diaria')   for fk in ev_diaria_keys for loc in locs]
+    contexto_mensual_rows = [(fk, loc, 'contexto', 'mensual')  for fk in crucero_keys   for loc in locs]
+
+    for batch in (active_rows, inactive_rows, contexto_diaria_rows, contexto_mensual_rows):
+        if batch:
+            conn.executemany(sql, batch)
+
+    return {
+        'active':   len(active_rows),
+        'inactive': len(inactive_rows),
+        'contexto': len(contexto_diaria_rows) + len(contexto_mensual_rows),
+    }
 
 
 # ── CSV ingestion ─────────────────────────────────────────────────────────────

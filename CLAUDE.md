@@ -18,7 +18,7 @@ python app.py         # dev server at http://localhost:8052
 gunicorn --workers 4 --bind 0.0.0.0:8000 app:server  # production
 ```
 
-No test suite exists beyond a placeholder at `src/services/test.py`. Use `src/lab/laboratorio_ml.ipynb` for interactive ML experimentation.
+No test suite. Use `src/lab/laboratorio_ml.ipynb` for interactive ML experimentation.
 
 ## Architecture
 
@@ -28,13 +28,11 @@ No test suite exists beyond a placeholder at `src/services/test.py`. Use `src/la
 
 2. **Enrichment** (`src/data_processing/constructor_master.py`): Attaches Spanish holiday flags and historical weather (Open-Meteo API) per date.
 
-3. **Feature Engineering** (`src/data_processing/feature_engineering.py`): Day-of-week, is-weekend, is-holiday, lag-1/7/14d visitor counts, 7/14d rolling averages, weather interaction flags.
+3. **Feature Engineering**: computed inline in `src/services/ml_predictivo.py` (lag-1/7/14d, rolling averages, calendar and weather interaction flags).
 
 4. **Reporting** — multiple output paths from the enriched dataset:
    - `src/reporting/health_check.py`: Executive multi-zone summary with period deltas
    - `src/data_processing/data_radar.py`: Calendar grid with anomaly coloring
-   - `src/reporting/generador_operativo.py`: Excel export per location
-   - `src/reporting/generador_pptx.py`: PowerPoint export
 
 5. **Forecasting** (`src/services/ml_predictivo.py`): XGBoost trained on 85/15 train/val split with early stopping (20 rounds). Predicts N days forward for a selected zone.
 
@@ -46,7 +44,7 @@ No test suite exists beyond a placeholder at `src/services/test.py`. Use `src/la
 
 ### Known Issue
 
-`app.py` line 17 imports `from src.models.anomalys import generar_panel_bi_completo` but `src/models/` does not exist. This causes a runtime error if the BI panel callback is reached. The module is WIP.
+`src/models/anomalys.py` (`generar_panel_bi_completo`) is imported by `src/callbacks/analytics.py` but is WIP — reaching that callback path causes a runtime error.
 
 ## Conventions
 

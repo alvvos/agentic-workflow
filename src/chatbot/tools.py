@@ -950,18 +950,20 @@ def get_cruise_calls(
 
     try:
         from src.db.store import get_conn
+        import json as _json
         conn = get_conn()
-        rows = conn.execute(
-            """SELECT fecha::text, nombre_barco, operador, n_pasajeros, terminal
-               FROM store_crucero_llamadas
-               WHERE location_uuid = ? AND fecha >= ? AND fecha <= ?
-               ORDER BY fecha""",
+        raw_rows = conn.execute(
+            """SELECT fecha_inicio::text, metadata
+               FROM store_calendario_org
+               WHERE location_uuid = ? AND evento_key = 'escala_crucero'
+                 AND fecha_inicio >= ? AND fecha_inicio <= ?
+               ORDER BY fecha_inicio""",
             [location_uuid, str(t0.date()), str(t1.date())],
         ).fetchall()
     except Exception as e:
         return {"error": f"No hay datos de cruceros para esta ubicación: {e}"}
 
-    if not rows:
+    if not raw_rows:
         return {
             "ubicacion": (_find_location(location_uuid) or {}).get("name", location_uuid),
             "periodo":   {"inicio": fecha_inicio, "fin": fecha_fin},
@@ -970,16 +972,16 @@ def get_cruise_calls(
             "nota":      "No se registran escalas de cruceros en este periodo.",
         }
 
-    escalas = [
-        {
-            "fecha":       r[0],
-            "barco":       r[1],
-            "operador":    r[2],
-            "pasajeros":   r[3],
-            "terminal":    r[4],
-        }
-        for r in rows
-    ]
+    escalas = []
+    for fecha_s, meta_json in raw_rows:
+        meta = meta_json if isinstance(meta_json, dict) else (_json.loads(meta_json) if meta_json else {})
+        escalas.append({
+            "fecha":     fecha_s,
+            "barco":     meta.get('barco', '—'),
+            "operador":  meta.get('operador') or meta.get('naviera', ''),
+            "pasajeros": meta.get('n_pasajeros'),
+            "terminal":  meta.get('terminal', ''),
+        })
 
     # Resumen mensual
     df_e = pd.DataFrame(escalas)
