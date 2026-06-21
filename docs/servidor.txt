@@ -1,6 +1,0 @@
-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC/S3Q/v4DJfRyis7yVIZ13xcsNOR556DByJUG2G91p+ alvaro.salis@69summer.com
-
-IP SSH: 34.175.22.17
-Autenticación: <se gestiona a través de clave pública>
-
-Tiene los puertos 80 y 443 abiertos. Si necesitas usar otros puertos concretos me dices para que los abra en el firewall de Google Cloud ya que con el ufw solo no basta
