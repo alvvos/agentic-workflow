@@ -24,6 +24,8 @@ from src.onboarding.context_scout import ScoutResult, descubrir_fuentes, registr
 from src.onboarding.feature_eval import FeatureEvalResult, evaluar
 from src.onboarding.feature_router import RoutingResult, enrutar
 from src.onboarding.quality_gate import QualityResult, validar
+from src.onboarding.smoke_test import SmokeTestResult
+from src.onboarding.smoke_test import ejecutar as smoke_ejecutar
 
 # ── Agente 1: Quality Gate ─────────────────────────────────────────────────────
 
@@ -79,6 +81,14 @@ def feature_eval_task(location_uuid: str) -> FeatureEvalResult:
     return evaluar(location_uuid)
 
 
+# ── Agente 5: Smoke Test ──────────────────────────────────────────────────────
+
+
+@task(name="smoke-test")
+def smoke_test_task(location_uuid: str) -> SmokeTestResult:
+    return smoke_ejecutar(location_uuid)
+
+
 # ── Flow por ubicación ─────────────────────────────────────────────────────────
 
 
@@ -129,9 +139,19 @@ def onboarding_ubicacion(location_uuid: str) -> bool:
         )
 
     # Fase 5 — Smoke Test
-    # smoke_test_task(location_uuid)
+    smoke = smoke_test_task(location_uuid)
+    if smoke.ok:
+        logger.info("ONBOARDING COMPLETO ✓ — %s lista para producción", smoke.nombre)
+    else:
+        for c in smoke.fallidos:
+            logger.error("  [✗] %s — %s", c.nombre, c.detalle)
+        logger.error(
+            "ONBOARDING INCOMPLETO — %s: %d check(s) fallido(s)",
+            smoke.nombre,
+            len(smoke.fallidos),
+        )
 
-    return True
+    return smoke.ok
 
 
 # ── Flow de entrada (trigger desde sync) ──────────────────────────────────────
