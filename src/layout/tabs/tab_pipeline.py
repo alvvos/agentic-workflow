@@ -21,49 +21,28 @@ _NODES = [
         "classes": "implementado",
     },
     {
-        "data": {"id": "ingesta-weather", "label": "Agente 3a", "sub": "Meteo"},
-        "position": {"x": 75, "y": 360},
-        "classes": "pendiente",
-    },
-    {
-        "data": {"id": "ingesta-eventos", "label": "Agente 3b", "sub": "Eventos"},
-        "position": {"x": 200, "y": 360},
-        "classes": "pendiente",
-    },
-    {
-        "data": {"id": "ingesta-esri", "label": "Agente 3c", "sub": "Esri"},
-        "position": {"x": 325, "y": 360},
-        "classes": "pendiente",
-    },
-    {
-        "data": {"id": "ingesta-cruceros", "label": "Agente 3d", "sub": "Cruceros"},
-        "position": {"x": 450, "y": 360},
-        "classes": "pendiente",
+        "data": {"id": "context-scout", "label": "Agente 3", "sub": "Context Scout"},
+        "position": {"x": 300, "y": 340},
+        "classes": "implementado",
     },
     {
         "data": {"id": "feature-eval", "label": "Agente 4", "sub": "Feature Eval"},
-        "position": {"x": 300, "y": 475},
-        "classes": "pendiente",
+        "position": {"x": 300, "y": 440},
+        "classes": "implementado",
     },
     {
         "data": {"id": "smoke-test", "label": "Agente 5", "sub": "Smoke Test"},
-        "position": {"x": 300, "y": 570},
-        "classes": "pendiente",
+        "position": {"x": 300, "y": 540},
+        "classes": "implementado",
     },
 ]
 
 _EDGES = [
     {"data": {"source": "trigger", "target": "quality-gate"}, "classes": "implementado"},
     {"data": {"source": "quality-gate", "target": "feature-router"}, "classes": "implementado"},
-    {"data": {"source": "feature-router", "target": "ingesta-weather"}, "classes": "implementado"},
-    {"data": {"source": "feature-router", "target": "ingesta-eventos"}, "classes": "pendiente"},
-    {"data": {"source": "feature-router", "target": "ingesta-esri"}, "classes": "pendiente"},
-    {"data": {"source": "feature-router", "target": "ingesta-cruceros"}, "classes": "pendiente"},
-    {"data": {"source": "ingesta-weather", "target": "feature-eval"}, "classes": "pendiente"},
-    {"data": {"source": "ingesta-eventos", "target": "feature-eval"}, "classes": "pendiente"},
-    {"data": {"source": "ingesta-esri", "target": "feature-eval"}, "classes": "pendiente"},
-    {"data": {"source": "ingesta-cruceros", "target": "feature-eval"}, "classes": "pendiente"},
-    {"data": {"source": "feature-eval", "target": "smoke-test"}, "classes": "pendiente"},
+    {"data": {"source": "feature-router", "target": "context-scout"}, "classes": "implementado"},
+    {"data": {"source": "context-scout", "target": "feature-eval"}, "classes": "implementado"},
+    {"data": {"source": "feature-eval", "target": "smoke-test"}, "classes": "implementado"},
 ]
 
 _STYLESHEET = [
@@ -178,44 +157,26 @@ NODE_INFO = {
     "feature-router": {
         "titulo": "Agente 2 — Feature Router",
         "archivo": "src/onboarding/feature_router.py",
-        "desc": "Decide qué fuentes aplican según país, ciudad y tenant. Reglas: weather (lat/lon), festivos (por país), TM (ES/MX/US/FR/DE/GB), agenda_es (ES), thesportsdb (todos), cruceros (Málaga), Esri (ESRI_KEY + coords).",
+        "desc": "Decide qué fuentes de datos aplican según país, ciudad y tenant: weather (lat/lon), festivos (por país), Ticketmaster (ES/MX/US/FR/DE/GB), agenda_es (ES), cruceros (Málaga), Esri (ESRI_KEY + coords).",
         "pendiente": False,
     },
-    "ingesta-weather": {
-        "titulo": "Agente 3a — Ingesta Meteo",
-        "archivo": "src/data_ingestion/prefetch/weather.py",
-        "desc": "Descarga histórico de clima (Open-Meteo) para la nueva ubicación: temp_max, temp_min, llueve.",
-        "pendiente": True,
-    },
-    "ingesta-eventos": {
-        "titulo": "Agente 3b — Ingesta Eventos",
-        "archivo": "src/data_ingestion/prefetch/ticketmaster.py · open_holidays.py · agenda_es.py",
-        "desc": "Ingesta de eventos culturales, festivos y deportivos para el país y ciudad de la ubicación.",
-        "pendiente": True,
-    },
-    "ingesta-esri": {
-        "titulo": "Agente 3c — Ingesta Esri",
-        "archivo": "src/data_ingestion/ingesta_geo.py",
-        "desc": "Enriquecimiento geoespacial con ArcGIS GeoEnrichment: población, renta, densidad comercial, movilidad peatonal.",
-        "pendiente": True,
-    },
-    "ingesta-cruceros": {
-        "titulo": "Agente 3d — Ingesta Cruceros",
-        "archivo": "src/data_ingestion/prefetch/cruceros.py",
-        "desc": "Solo activo para ubicaciones en Málaga. Descarga previsión de escalas del Puerto de Málaga.",
-        "pendiente": True,
+    "context-scout": {
+        "titulo": "Agente 3 — Context Scout",
+        "archivo": "src/onboarding/context_scout.py",
+        "desc": "Evalúa un catálogo curado de fuentes de datos abiertas (INE, SEPE, INEGI, ONS…) usando Claude para decidir cuáles aplican a la isócrona de la ubicación. Registra las seleccionadas en feature_registry (status='incompleto') y feature_flags (status='contexto'). El timer mensual las rellena automáticamente cuando el ingestor esté disponible.",
+        "pendiente": False,
     },
     "feature-eval": {
         "titulo": "Agente 4 — Feature Evaluator",
-        "archivo": "src/lab/eval_features.py",
-        "desc": "Walk-forward WMAPE automático por ubicación. Activa features en feature_flags si wmape_delta supera el umbral. Elimina el proceso manual del notebook.",
-        "pendiente": True,
+        "archivo": "src/onboarding/feature_eval.py",
+        "desc": "Walk-forward WMAPE automático (horizonte 21d, 3 splits) sobre features con status='con_cobertura' que aún no tienen decisión para esta ubicación. Auto-activa (status='active') las que mejoran WMAPE en ≥ 0.5 pp. Si la ubicación tiene menos de 50 días de historial, aplaza la evaluación sin bloquear el pipeline.",
+        "pendiente": False,
     },
     "smoke-test": {
         "titulo": "Agente 5 — Smoke Test",
-        "archivo": "src/services/ml_predictivo.py",
-        "desc": 'Verifica cobertura en store_features_ext, lanza ejecutar_auditoria_predictiva() y comprueba que devuelve status="success".',
-        "pendiente": True,
+        "archivo": "src/onboarding/smoke_test.py",
+        "desc": "4 checks de solo lectura antes de declarar la ubicación operativa: (1) activa=TRUE y lat/lon presentes, (2) ≥30 días en fact_visitas, (3) features activas con cobertura en store_features_ext, (4) al menos una zona visible en dim_zonas.",
+        "pendiente": False,
     },
 }
 
