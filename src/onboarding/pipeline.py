@@ -7,9 +7,10 @@ este pipeline. Cada agente es un @task visible en la UI de Prefect.
 Fases implementadas:
   1. Quality Gate   — validación, geocodificación, bounding box
   2. Feature Router — qué fuentes aplican por país/ciudad/tenant
+  3. Context Scout  — descubre fuentes de datos abiertas para la isócrona y las
+                      registra en feature_registry + feature_flags (status='contexto')
 
 En cola:
-  3. Ingesta paralela — weather, eventos, Esri, festivos, cruceros (ThreadPoolTaskRunner)
   4. Feature Evaluator — walk-forward WMAPE → activa feature_flags automáticamente
   5. Smoke Test       — cobertura en DB + llamada a ml_predictivo
 """
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 from prefect import flow, get_run_logger, task
 
+from src.onboarding.context_scout import ScoutResult, descubrir_fuentes, registrar_fuentes
 from src.onboarding.feature_router import RoutingResult, enrutar
 from src.onboarding.quality_gate import QualityResult, validar
 
@@ -56,6 +58,17 @@ def feature_router_task(location_uuid: str) -> RoutingResult:
     return routing
 
 
+# ── Agente 3: Context Scout ───────────────────────────────────────────────────
+
+
+@task(name="context-scout", retries=1, retry_delay_seconds=30)
+def context_scout_task(location_uuid: str) -> ScoutResult:
+    result = descubrir_fuentes(location_uuid)
+    if result.error:
+        return result
+    return registrar_fuentes(result)
+
+
 # ── Flow por ubicación ─────────────────────────────────────────────────────────
 
 
@@ -74,9 +87,20 @@ def onboarding_ubicacion(location_uuid: str) -> bool:
     routing = feature_router_task(location_uuid)
     logger.info("Routing OK — %d fuentes para %s", len(routing.fuentes), routing.nombre)
 
-    # Fase 3 — Ingesta paralela (ThreadPoolTaskRunner)
-    # futures = [ingesta_task.submit(location_uuid, src) for src in routing.fuentes]
-    # wait(futures)
+    # Fase 3 — Context Scout
+    scout = context_scout_task(location_uuid)
+    if scout.error:
+        logger.warning("Context Scout warning — %s: %s", scout.nombre, scout.error)
+    else:
+        logger.info(
+            "Context Scout OK — %d fuente(s) registrada(s) para %s",
+            scout.n_registradas,
+            scout.nombre,
+        )
+        for src in scout.seleccionadas:
+            logger.info("  + %s (%s/%s)", src.feature_key, src.source, src.periodicidad)
+        for desc in scout.descartadas:
+            logger.info("  ✗ %s — %s", desc.get("feature_key", "?"), desc.get("razon_descarte", ""))
 
     # Fase 4 — Feature Evaluator
     # feature_eval_task(location_uuid)
