@@ -1,0 +1,39 @@
+services:
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: "Echegaray1@#2026"
+      POSTGRES_DB: reporting
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  adminer:
+    image: adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+
+  prefect-server:
+    image: prefecthq/prefect:3-latest
+    restart: unless-stopped
+    command: prefect server start --host 0.0.0.0 --port 4200
+    ports:
+      - "127.0.0.1:4200:4200"
+    volumes:
+      - prefect_data:/root/.prefect
+    environment:
+      PREFECT_UI_ENABLED: "true"
+      PREFECT_SERVER_ANALYTICS_ENABLED: "false"
+    depends_on:
+      - db
+
+volumes:
+  pgdata:
+  prefect_data:

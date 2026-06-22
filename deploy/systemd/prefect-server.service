@@ -1,0 +1,17 @@
+[Unit]
+Description=Prefect Server — API + UI (puerto 4200)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=alvaro.salis
+WorkingDirectory=/home/alvaro.salis/agentic-workflow
+ExecStart=/home/alvaro.salis/agentic-workflow/venv/bin/prefect server start --host 127.0.0.1 --port 4200
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

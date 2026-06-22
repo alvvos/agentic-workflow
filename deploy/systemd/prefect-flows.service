@@ -1,0 +1,19 @@
+[Unit]
+Description=Prefect Flows — worker que sirve y ejecuta los flows registrados
+After=network-online.target prefect-server.service
+Wants=network-online.target
+Requires=prefect-server.service
+
+[Service]
+Type=simple
+User=alvaro.salis
+WorkingDirectory=/home/alvaro.salis/agentic-workflow
+Environment=PREFECT_API_URL=http://127.0.0.1:4200/api
+ExecStart=/home/alvaro.salis/agentic-workflow/venv/bin/python scripts/serve_flows.py
+Restart=on-failure
+RestartSec=15
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

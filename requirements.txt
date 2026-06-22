@@ -19,3 +19,5 @@ mcp
 diskcache
 psycopg[binary]>=3.1
 psycopg-pool>=3.1
+prefect>=3.0,<4.0
+dash-cytoscape>=1.0
