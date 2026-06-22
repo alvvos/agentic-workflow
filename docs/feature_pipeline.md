@@ -86,14 +86,21 @@ La promoción ocurre automáticamente al final de cada script de ingesta (`_prom
 
 ```
 (no existe)  ──(seed global o decisión manual)──▶  inactive / active
+             ──(Context Scout en onboarding)────▶  contexto
+             ──(Feature Eval auto-activación)───▶  active / inactive
 ```
 
-Los flags se crean via `seed.seed_feature_flags()` o mediante el notebook tras la evaluación WMAPE.
+Los flags se crean via `seed.seed_feature_flags()`, el Agente 3 (Context Scout) o el Agente 4 (Feature Evaluator).
+
+**Statuses:**
+- `active` → la feature entra al modelo ML y al pipeline de enriquecimiento
+- `contexto` → registrada por Context Scout; el timer mensual rellena datos cuando el ingestor esté implementado. No entra al modelo aún.
+- `inactive` → evaluada por WMAPE, no mejora el modelo; se omite
 
 **Decisiones globales aplicadas en el seed:**
 - `open_meteo` (clima): `active` en todas las ubicaciones — cobertura histórica completa desde el primer día, correlación probada.
 - `esri` (geo): `inactive` en todas las ubicaciones — pendiente de primera entrega de datos de Esri.
-- El resto: sin flag hasta evaluación individual por ubicación.
+- El resto: sin flag hasta evaluación individual por ubicación (manual o automática en onboarding).
 
 ---
 
@@ -133,7 +140,28 @@ Feature generada: `n_pasajeros_crucero_dia`. Solo se escriben filas para días c
 
 ---
 
-## 4. Evaluación en el notebook (`feature_lab.ipynb`)
+## 4a. Descubrimiento automático — Agente 3 (Context Scout)
+
+Cuando llega una ubicación nueva, `src/onboarding/context_scout.py` usa Claude (claude-sonnet-4-6) para evaluar un catálogo curado de fuentes abiertas (INE, SEPE, INSEE, Destatis, ONS, INEGI…) y decidir cuáles aplican a la isócrona de la ubicación.
+
+Criterios de selección: granularidad ≤ provincial, cobertura desde ≥ 2024, frecuencia mensual, acceso programático, causalidad demostrable, sin redundancia con fuentes ya activas.
+
+Las fuentes seleccionadas se registran en:
+- `feature_registry` — `status='incompleto'`
+- `feature_flags` — `status='contexto'` para esa ubicación
+
+El timer mensual (`sync_mensual.py`) las rellena automáticamente cuando el ingestor correspondiente esté implementado y añadido a `_build_ingestores()`.
+
+## 4b. Evaluación automática en onboarding — Agente 4 (Feature Evaluator)
+
+`src/onboarding/feature_eval.py` evalúa las features con `status='con_cobertura'` que aún no tienen decisión para la ubicación.
+
+Umbral de activación automática: `WMAPE_DELTA_THRESHOLD = -0.005` (mejora ≥ 0.5pp).
+Si la ubicación tiene menos de 50 días en `fact_visitas`, la evaluación se aplaza sin bloquear el pipeline.
+
+Reutiliza `_evaluate_feature()` y `_write_results()` de `src/lab/eval_features.py` — sin duplicar lógica.
+
+## 4c. Evaluación manual en el notebook (`feature_lab.ipynb`)
 
 El notebook hace walk-forward WMAPE: entrena el modelo base, luego lo entrena añadiendo la feature candidata, y compara el error medio sobre múltiples ventanas de evaluación.
 
@@ -144,6 +172,8 @@ Flujo de uso:
 4. Marcar como `active` o `inactive` en `feature_flags` según el resultado.
 
 La consulta de features disponibles excluye automáticamente las que ya tienen flag para **todas** las ubicaciones seleccionadas, para evitar re-evaluar lo ya decidido.
+
+> Para ubicaciones nuevas, el Agente 4 ya habrá hecho esta evaluación automáticamente durante el onboarding. El notebook sirve para revisión manual o para reubicar decisiones de activación.
 
 ---
 
@@ -174,9 +204,18 @@ La razón: `ffill` propaga el valor del último crucero a todos los días siguie
 
 ## 7. Añadir una feature nueva
 
-1. Crear el ingestor en `src/data_ingestion/prefetch/` o `src/lab/`.
+### Ruta A — feature con ingestor ya implementado
+
+1. Crear el ingestor en `src/data_ingestion/prefetch/<source>.py` con firma `sync(jobs: list[SyncJob], fecha: date) -> int`.
 2. Escribir en `store_features_ext` con la política correcta (expandir si mensual, raw si evento).
 3. Registrar en `feature_registry` con `status = 'incompleto'`.
 4. Ejecutar el ingestor. Si `_promote_if_covered()` pasa, el status cambia a `con_cobertura`.
-5. Abrir `feature_lab.ipynb`, seleccionar ubicaciones, evaluar WMAPE.
-6. Actualizar `feature_flags` con la decisión.
+5. Añadir el import + entrada en `_build_ingestores()` de `scripts/sync_mensual.py`.
+6. La evaluación WMAPE la hará el Agente 4 en el próximo onboarding (o el notebook para ubicaciones existentes).
+
+### Ruta B — feature descubierta por Context Scout (sin ingestor aún)
+
+1. Context Scout registra la feature en `feature_registry` (`status='incompleto'`) y en `feature_flags` (`status='contexto'`) durante el onboarding de una ubicación nueva.
+2. Implementar el ingestor `src/data_ingestion/prefetch/<source>.py`.
+3. Descomentar/añadir la entrada en `_build_ingestores()` — el timer mensual empezará a rellenarla en el siguiente ciclo.
+4. Cuando `_promote_if_covered()` promueva a `con_cobertura`, el Agente 4 la evaluará en el próximo onboarding (o notebook para las existentes).

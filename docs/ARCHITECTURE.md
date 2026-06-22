@@ -1,7 +1,7 @@
 # ARCHITECTURE — Agentic Workflow
 
-**Stack:** Python 3.12 · Dash/Plotly · PostgreSQL 16 (Docker) · XGBoost · gunicorn  
-**Última revisión:** 2026-06-21 · Versión en producción: v2.2.18
+**Stack:** Python 3.12 · Dash/Plotly · PostgreSQL 16 (Docker) · XGBoost · Prefect 3 · gunicorn
+**Última revisión:** 2026-06-22 · Versión en producción: v2.2.21
 
 ---
 
@@ -107,10 +107,41 @@ Fase B: prefetch/run_all.py              → store_features_ext, store_calendari
 
 ### `scripts/sync_mensual.py` — ejecución día 1 @ 03:00
 
+Loop data-driven: lee `feature_flags JOIN feature_registry`, agrupa por `source` y llama a cada ingestor UNA vez con el lote de jobs asignados (`SyncJob(feature_key, location_uuid, periodicidad)`). Añadir una fuente nueva = 1 import + 1 entrada en `_build_ingestores()`. Geo/Esri se audita al final por separado (escribe en `store_geo_snapshots`, no en `store_features_ext`).
+
 ```
-Fase A: cruceros.py  → store_features_ext (n_pasajeros_crucero_dia, Málaga)
-Fase B: geo.py       → listar_estado (Esri — pendiente de contrato)
+_cargar_jobs("mensual")  → {source: [SyncJob, ...]}
+_build_ingestores()       → {source: fn(jobs, fecha) → int}
+loop source in jobs:
+    if source in ingestores → ingestor(jobs, fecha)  # n filas escritas
+    else → log "sin ingestor — N jobs pendientes"
+Geo/Esri: listar_estado() (audit only)
 ```
+
+---
+
+## Pipeline de onboarding de ubicaciones
+
+Cada UUID nuevo detectado por `actualizar_arbol_ubicaciones.py` lanza un subflow Prefect visible en la UI.
+
+```
+sync_noche.py → Fase 0: actualizar_arbol_ubicaciones
+                    │ nuevos UUIDs detectados
+                    ▼
+            onboard_nuevas_ubicaciones (flow Prefect)
+                    │
+                    ▼ por cada UUID
+            onboarding_ubicacion (subflow)
+                ├── Agente 1: quality-gate    (validar lat/lon, geocodificar, bbox)
+                ├── Agente 2: feature-router  (qué fuentes aplican por país/ciudad)
+                ├── Agente 3: context-scout   (Claude descubre fuentes abiertas → feature_registry)
+                ├── Agente 4: feature-eval    (walk-forward WMAPE → auto-activa features)
+                └── Agente 5: smoke-test      (4 checks lectura: activa, visitas, cobertura, zonas)
+```
+
+**Archivos:** `src/onboarding/pipeline.py` (orquestador Prefect), `src/onboarding/quality_gate.py`, `feature_router.py`, `context_scout.py`, `feature_eval.py`, `smoke_test.py`.
+
+**Despliegue del servidor Prefect:** `scripts/serve_flows.py` — sirve `onboard_nuevas_ubicaciones` como deployment en `http://127.0.0.1:4200`. Gestionado por systemd `prefect-flows.service`.
 
 ---
 
@@ -126,7 +157,11 @@ store_features_ext / store_calendario_org
 feature_registry (status: incompleto → con_cobertura)
     │   _promote_if_covered() al final de cada ingesta
     ▼
-feature_lab.ipynb  →  walk-forward WMAPE evaluation
+┌──────────────────────────────────────────┐
+│ Ruta A (manual): feature_lab.ipynb       │
+│ Ruta B (auto):   Agente 4 feature-eval   │
+│   walk-forward WMAPE, umbral -0.5pp      │
+└──────────────────────────────────────────┘
     │
     ▼
 feature_flags (status: inactive → active / contexto)
@@ -140,8 +175,8 @@ ml_predictivo.py → vector de training XGBoost
 
 **Estados `feature_flags.status`:**
 - `active` → entra al modelo ML
-- `contexto` → se muestra en el panel (ej. ev_rank), nunca al modelo
-- `inactive` → oculto
+- `contexto` → registrada por Context Scout, aún sin ingestor implementado; timer mensual la rellena cuando esté disponible
+- `inactive` → evaluada, no mejora el modelo
 
 ---
 
@@ -239,10 +274,11 @@ ingestar_snapshot_esri(location_uuid, valores_dict, fecha_entrega='YYYY-MM-DD')
 | Script | Propósito |
 |---|---|
 | `scripts/sync_noche.py` | Orquestador nocturno (Fase 0 árbol + Fase A Aitanna + Fase B contexto) |
-| `scripts/sync_mensual.py` | Orquestador mensual (cruceros + estado geo) |
-| `scripts/enriquecer_esri.py` | Enriquecimiento one-shot con Esri |
+| `scripts/sync_mensual.py` | Loop data-driven mensual — un ingestor por source (cruceros + otros cuando estén listos) |
+| `scripts/serve_flows.py` | Sirve flows Prefect como deployments (onboarding-lote → UI Prefect) |
+| `scripts/enriquecer_esri.py` | Enriquecimiento Esri one-shot |
 | `scripts/mock_showroom_features.py` | Genera datos mock para demo/showroom |
 | `scripts/seed_crucero_llamadas.py` | Seed de escalas de crucero históricas |
 | `src/lab/ingest_features.py` | Ingesta ICM (INE) + calendario escolar |
-| `src/lab/eval_features.py` | Evaluación WMAPE walk-forward de features |
-| `src.data_ingestion.actualizar_arbol_ubicaciones` | Sync árbol Aitanna → PostgreSQL |
+| `src/lab/eval_features.py` | Evaluación WMAPE walk-forward de features (también usada por Agente 4) |
+| `src.data_ingestion.actualizar_arbol_ubicaciones` | Sync árbol Aitanna → PostgreSQL + trigger onboarding |

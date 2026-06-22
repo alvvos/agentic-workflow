@@ -1,7 +1,7 @@
 # FILE_TREE — Agentic Workflow
 
-Árbol anotado del repositorio. Solo archivos relevantes (excluye `__pycache__`, `venv`, `.git`).  
-**Última revisión:** 2026-06-21
+Árbol anotado del repositorio. Solo archivos relevantes (excluye `__pycache__`, `venv`, `.git`).
+**Última revisión:** 2026-06-22
 
 ---
 
@@ -13,6 +13,8 @@ agentic-workflow/
 ├── requirements.txt
 ├── pytest.ini
 ├── CLAUDE.md                       Instrucciones para Claude Code.
+├── .pre-commit-config.yaml         Hooks: trailing-whitespace, end-of-file-fixer, black (100 chars), ruff (E/F/I/W/UP)
+├── docker-compose.yml              Levanta PostgreSQL 16 + Adminer + prefect-server
 │
 ├── assets/
 │   ├── render_guard.js             MutationObserver + plotly_afterplot overlay (anti-flash loader).
@@ -30,9 +32,18 @@ agentic-workflow/
 │   ├── HANDOFF_esri_peticiones_y_piloto_miniso.md  Decisiones del piloto Esri, anatomía peticiones
 │   └── servidor.txt                IP/clave SSH del servidor de producción
 │
+├── deploy/
+│   └── systemd/
+│       ├── agentic-workflow.service     Servicio gunicorn (app principal)
+│       ├── agentic-sync-noche.service   Timer nocturno sync_noche.py
+│       ├── agentic-sync-mensual.service Timer mensual sync_mensual.py
+│       ├── prefect-server.service       Servidor Prefect (UI + API en :4200)
+│       └── prefect-flows.service        Serve deployments Prefect (onboarding)
+│
 ├── scripts/                        Orquestadores y scripts one-shot.
 │   ├── sync_noche.py               Timer nocturno: Fase 0 árbol + Fase A Aitanna + Fase B contexto
-│   ├── sync_mensual.py             Timer mensual: cruceros + estado geo Esri
+│   ├── sync_mensual.py             Loop data-driven mensual — un ingestor por source
+│   ├── serve_flows.py              Sirve onboarding-lote como deployment Prefect
 │   ├── enriquecer_esri.py          Enriquecimiento Esri one-shot (4 ubicaciones prod)
 │   ├── mock_showroom_features.py   Datos mock para demo/showroom
 │   ├── seed_crucero_llamadas.py    Seed histórico de escalas de crucero
@@ -69,7 +80,8 @@ agentic-workflow/
     │       ├── tab_ml.py           Forecasting XGBoost — solo admin
     │       ├── tab_prediccion_cliente.py  Predicción 7 días — vista cliente
     │       ├── tab_reportes.py     Exportación Excel + PDF
-    │       └── tab_admin.py        Gestión usuarios/org
+    │       ├── tab_admin.py        Gestión usuarios/org
+    │       └── tab_pipeline.py     Grafo Cytoscape 5 agentes — estado onboarding
     │
     ├── callbacks/
     │   ├── analytics.py            master_reactive_analytics() — callback maestro
@@ -114,6 +126,14 @@ agentic-workflow/
     │   ├── geo_panel.py            Panel visual geo: tarjetas AIS + mapa + gráficos Esri
     │   ├── ml_dashboard.py         Dashboard de forecasting XGBoost
     │   └── generador_html.py       HTML exportable para PDF
+    │
+    ├── onboarding/                 Pipeline de onboarding de ubicaciones nuevas (Prefect tasks)
+    │   ├── pipeline.py             Orquestador: onboarding_ubicacion() + onboard_nuevas_ubicaciones()
+    │   ├── quality_gate.py         Agente 1 — validación, geocodificación Nominatim, bbox por país
+    │   ├── feature_router.py       Agente 2 — qué fuentes aplican por país/ciudad/tenant
+    │   ├── context_scout.py        Agente 3 — Claude descubre fuentes abiertas para la isócrona
+    │   ├── feature_eval.py         Agente 4 — walk-forward WMAPE + auto-activación (umbral -0.5pp)
+    │   └── smoke_test.py           Agente 5 — 4 checks lectura: activa, visitas, cobertura, zonas
     │
     ├── services/
     │   └── ml_predictivo.py        ejecutar_auditoria_predictiva(): features + XGBoost + métricas

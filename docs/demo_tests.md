@@ -43,3 +43,6 @@ Executed by `/demo-prepare` before demos.
 | ONB-1 | quality_gate importable sin errores | `cd /home/alvaro.salis/agentic-workflow && venv/bin/python -c "from src.onboarding.quality_gate import validar; print('ok')"` |
 | ONB-2 | feature_router importable sin errores | `cd /home/alvaro.salis/agentic-workflow && venv/bin/python -c "from src.onboarding.feature_router import enrutar; print('ok')"` |
 | ONB-3 | pipeline.py importable (Prefect tasks ok) | `cd /home/alvaro.salis/agentic-workflow && venv/bin/python -c "from src.onboarding.pipeline import onboarding_ubicacion; print('ok')"` |
+| ONB-4 | context_scout importable sin errores | `cd /home/alvaro.salis/agentic-workflow && venv/bin/python -c "from src.onboarding.context_scout import descubrir_fuentes; print('ok')"` |
+| ONB-5 | feature_eval importable sin errores | `cd /home/alvaro.salis/agentic-workflow && venv/bin/python -c "from src.onboarding.feature_eval import evaluar; print('ok')"` |
+| ONB-6 | smoke_test importable sin errores | `cd /home/alvaro.salis/agentic-workflow && venv/bin/python -c "from src.onboarding.smoke_test import ejecutar; print('ok')"` |
