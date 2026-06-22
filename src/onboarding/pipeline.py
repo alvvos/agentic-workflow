@@ -5,14 +5,15 @@ Cada nueva ubicación detectada por descargar_maestro_ubicaciones() pasa por
 este pipeline. Cada agente es un @task visible en la UI de Prefect.
 
 Fases implementadas:
-  1. Quality Gate   — validación, geocodificación, bounding box
-  2. Feature Router — qué fuentes aplican por país/ciudad/tenant
-  3. Context Scout  — descubre fuentes de datos abiertas para la isócrona y las
-                      registra en feature_registry + feature_flags (status='contexto')
+  1. Quality Gate      — validación, geocodificación, bounding box
+  2. Feature Router    — qué fuentes aplican por país/ciudad/tenant
+  3. Context Scout     — descubre fuentes abiertas para la isócrona y las registra
+                         en feature_registry + feature_flags (status='contexto')
+  4. Feature Evaluator — walk-forward WMAPE sobre features con cobertura;
+                         auto-activa las que mejoran ≥ 0.5 pp
 
 En cola:
-  4. Feature Evaluator — walk-forward WMAPE → activa feature_flags automáticamente
-  5. Smoke Test       — cobertura en DB + llamada a ml_predictivo
+  5. Smoke Test — cobertura en DB + llamada a ml_predictivo
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from __future__ import annotations
 from prefect import flow, get_run_logger, task
 
 from src.onboarding.context_scout import ScoutResult, descubrir_fuentes, registrar_fuentes
+from src.onboarding.feature_eval import FeatureEvalResult, evaluar
 from src.onboarding.feature_router import RoutingResult, enrutar
 from src.onboarding.quality_gate import QualityResult, validar
 
@@ -69,6 +71,14 @@ def context_scout_task(location_uuid: str) -> ScoutResult:
     return registrar_fuentes(result)
 
 
+# ── Agente 4: Feature Evaluator ───────────────────────────────────────────────
+
+
+@task(name="feature-evaluator", retries=1, retry_delay_seconds=30)
+def feature_eval_task(location_uuid: str) -> FeatureEvalResult:
+    return evaluar(location_uuid)
+
+
 # ── Flow por ubicación ─────────────────────────────────────────────────────────
 
 
@@ -103,7 +113,20 @@ def onboarding_ubicacion(location_uuid: str) -> bool:
             logger.info("  ✗ %s — %s", desc.get("feature_key", "?"), desc.get("razon_descarte", ""))
 
     # Fase 4 — Feature Evaluator
-    # feature_eval_task(location_uuid)
+    eval_result = feature_eval_task(location_uuid)
+    if eval_result.sin_historial:
+        logger.info(
+            "Feature Eval aplazada — %s aún no tiene suficiente historial en fact_visitas",
+            eval_result.nombre,
+        )
+    else:
+        logger.info(
+            "Feature Eval OK — %s: %d evaluada(s), %d activada(s), %d inactiva(s)",
+            eval_result.nombre,
+            len(eval_result.evaluadas),
+            len(eval_result.activadas),
+            len(eval_result.inactivas),
+        )
 
     # Fase 5 — Smoke Test
     # smoke_test_task(location_uuid)
