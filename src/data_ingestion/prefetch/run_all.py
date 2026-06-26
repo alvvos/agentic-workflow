@@ -23,14 +23,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from src.data_ingestion.prefetch import (
-    agenda_es,
-    cruceros,
-    open_holidays,
-    thesportsdb,
-    ticketmaster,
-    weather,
-)
+from src.data_ingestion.diaria import cargar_modulos
+from src.data_ingestion.prefetch import cruceros
 from src.data_ingestion.prefetch._common import (
     EVENTS_DATE_FROM,
     EVENTS_HORIZON,
@@ -39,12 +33,11 @@ from src.data_ingestion.prefetch._common import (
 )
 
 # geo no se incluye: requiere entrega manual de datos Esri (sin fetch HTTP).
+# cruceros no está en diaria/: se gestiona en sync_mensual.
+_DIARIOS = cargar_modulos()  # {source: module} — descubierto automáticamente
+
 SOURCES: dict[str, object] = {
-    "weather": weather,
-    "open_holidays": open_holidays,
-    "ticketmaster": ticketmaster,
-    "thesportsdb": thesportsdb,
-    "agenda_es": agenda_es,
+    **_DIARIOS,
     "cruceros": cruceros,
 }
 
