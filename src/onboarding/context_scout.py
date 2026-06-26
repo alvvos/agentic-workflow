@@ -368,9 +368,9 @@ Documenta el motivo en 'fuentes_descartadas' para que el equipo pueda revisarlo.
 
 Responde ÚNICAMENTE con JSON válido. Sin markdown, sin texto antes ni después del JSON.
 
-{
+{{
   "fuentes_seleccionadas": [
-    {
+    {{
       "feature_key": "ine_icm_minorista_zaragoza",
       "source": "ine",
       "categoria": "macroeconomia",
@@ -378,15 +378,15 @@ Responde ÚNICAMENTE con JSON válido. Sin markdown, sin texto antes ni después
       "url": "https://servicios.ine.es/wstempus/js/ES/DATOS_TABLA/2688?tip=AM",
       "notas": "Índice de Comercio Minorista INE a nivel provincial (Zaragoza). Mide directamente el volumen de ventas en comercio al por menor. Publicado ~45 días después del mes de referencia. Usar serie IRA (ajustada estacionalmente). API JSON sin autenticación.",
       "razon_inclusion": "Zaragoza tiene dato ICM provincial propio. Alta correlación esperada con afluencia en retail — cuando el índice cae, el gasto en tiendas físicas de la provincia cae con él."
-    }
+    }}
   ],
   "fuentes_descartadas": [
-    {
+    {{
       "feature_key": "ine_turismo_hotelero_zaragoza",
       "razon_descarte": "Zaragoza no es destino turístico de primer orden. La ocupación hotelera no está causalmente vinculada a la afluencia en retail de conveniencia/moda en esta ciudad."
-    }
+    }}
   ]
-}
+}}
 """
 
 
