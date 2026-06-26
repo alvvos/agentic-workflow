@@ -509,6 +509,12 @@ def descubrir_fuentes(location_uuid: str) -> ScoutResult:
             messages=[{"role": "user", "content": prompt}],
         )
         raw = msg.content[0].text.strip()
+        # Claude occasionally wraps the JSON in markdown code fences
+        if raw.startswith("```"):
+            raw = raw.split("```", 2)[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+            raw = raw.strip()
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
         return ScoutResult(
