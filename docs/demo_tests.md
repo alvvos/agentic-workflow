@@ -46,3 +46,5 @@ Executed by `/demo-prepare` before demos.
 | ONB-4 | context_scout importable sin errores | `cd /home/alvaro.salis/agentic-workflow && venv/bin/python -c "from src.onboarding.context_scout import descubrir_fuentes; print('ok')"` |
 | ONB-5 | feature_eval importable sin errores | `cd /home/alvaro.salis/agentic-workflow && venv/bin/python -c "from src.onboarding.feature_eval import evaluar; print('ok')"` |
 | ONB-6 | smoke_test importable sin errores | `cd /home/alvaro.salis/agentic-workflow && venv/bin/python -c "from src.onboarding.smoke_test import ejecutar; print('ok')"` |
+| ONB-7 | _eval_core importable sin depender de src/lab/ | `cd /home/alvaro.salis/agentic-workflow && venv/bin/python -c "from src.onboarding._eval_core import _evaluate_feature, MIN_TRAIN_ROWS; print('ok')"` |
+| ONB-8 | puertos_estado importable y parsea XLSX | `cd /home/alvaro.salis/agentic-workflow && venv/bin/python -c "from src.data_ingestion.prefetch.puertos_estado import parse_xlsx, _get_configured_locations; print('ok')"` |

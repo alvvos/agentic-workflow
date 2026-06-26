@@ -1,7 +1,7 @@
 # FILE_TREE — Agentic Workflow
 
 Árbol anotado del repositorio. Solo archivos relevantes (excluye `__pycache__`, `venv`, `.git`).
-**Última revisión:** 2026-06-22
+**Última revisión:** 2026-06-26
 
 ---
 
@@ -26,7 +26,7 @@ agentic-workflow/
 │   ├── DB_SCHEMA.md                ← schema PostgreSQL completo
 │   ├── FILE_TREE.md                ← este archivo
 │   ├── feature_pipeline.md         Ciclo de vida de features: ingesta → evaluación → activación
-│   ├── context.md                  Handoff de sesión 2026-05-27 (estado Esri, geo panel, chatbot)
+│   ├── source_params_contract.md   Contrato JSONB de params por fuente en location_source_config
 │   ├── arquitectura_datos.md       Contexto histórico del paso de CSV/DuckDB a PostgreSQL
 │   ├── handoff_supercalendario.md  Fuentes de datos externas planificadas (PredictHQ, INE, DGT)
 │   ├── HANDOFF_esri_peticiones_y_piloto_miniso.md  Decisiones del piloto Esri, anatomía peticiones
@@ -106,7 +106,9 @@ agentic-workflow/
     │       ├── open_holidays.py    OpenHolidays API → store_calendario_org (festivos)
     │       ├── agenda_es.py        Agenda cultural ES → store_calendario_org
     │       ├── thesportsdb.py      TheSportsDB → store_calendario_org (eventos deportivos)
-    │       └── cruceros.py         Puerto de Málaga → store_features_ext (n_pasajeros_crucero_dia)
+    │       ├── cruceros.py         Puerto de Málaga → store_features_ext (n_pasajeros_crucero_dia)
+    │       └── puertos_estado.py   Puertos del Estado XLSX oficial → store_features_ext (n_pasajeros_crucero_oficial)
+    │                               Data-driven: lee port_authority de location_source_config
     │
     ├── data_processing/
     │   ├── constructor_master.py   Weather + holidays join (ojo: bug `lat` vs `latitude`)
@@ -131,8 +133,12 @@ agentic-workflow/
     │   ├── pipeline.py             Orquestador: onboarding_ubicacion() + onboard_nuevas_ubicaciones()
     │   ├── quality_gate.py         Agente 1 — validación, geocodificación Nominatim, bbox por país
     │   ├── feature_router.py       Agente 2 — qué fuentes aplican por país/ciudad/tenant
-    │   ├── context_scout.py        Agente 3 — Claude descubre fuentes abiertas para la isócrona
+    │   ├── context_scout.py        Agente 3 — Claude descubre fuentes abiertas (escala directitud A→D)
+    │   │                           Prioriza señales A (AENA, INE pernoctaciones) sobre C/D
+    │   │                           Strip defensivo de markdown code fences antes de json.loads()
     │   ├── feature_eval.py         Agente 4 — walk-forward WMAPE + auto-activación (umbral -0.5pp)
+    │   ├── _eval_core.py           Núcleo de evaluación walk-forward (extraído de lab/ para producción)
+    │   │                           Importable sin depender de src/lab/ (.gitignore)
     │   └── smoke_test.py           Agente 5 — 4 checks lectura: activa, visitas, cobertura, zonas
     │
     ├── services/

@@ -1,7 +1,7 @@
 # ARCHITECTURE — Agentic Workflow
 
 **Stack:** Python 3.12 · Dash/Plotly · PostgreSQL 16 (Docker) · XGBoost · Prefect 3 · gunicorn
-**Última revisión:** 2026-06-22 · Versión en producción: v2.2.21
+**Última revisión:** 2026-06-26 · Versión en producción: v2.2.38
 
 ---
 
@@ -109,6 +109,8 @@ Fase B: prefetch/run_all.py              → store_features_ext, store_calendari
 
 Loop data-driven: lee `feature_flags JOIN feature_registry`, agrupa por `source` y llama a cada ingestor UNA vez con el lote de jobs asignados (`SyncJob(feature_key, location_uuid, periodicidad)`). Añadir una fuente nueva = 1 import + 1 entrada en `_build_ingestores()`. Geo/Esri se audita al final por separado (escribe en `store_geo_snapshots`, no en `store_features_ext`).
 
+Los parámetros específicos por fuente/ubicación (e.g., `port_authority` para Puertos del Estado, `iata` para AENA) se leen de `location_source_config` (PK: `location_uuid, source`; columna `params JSONB`). Ver `docs/source_params_contract.md`.
+
 ```
 _cargar_jobs("mensual")  → {source: [SyncJob, ...]}
 _build_ingestores()       → {source: fn(jobs, fecha) → int}
@@ -117,6 +119,8 @@ loop source in jobs:
     else → log "sin ingestor — N jobs pendientes"
 Geo/Esri: listar_estado() (audit only)
 ```
+
+Fuentes mensuales actualmente registradas: `puertos_estado` (n_pasajeros_crucero_oficial via Puertos del Estado XLSX oficial).
 
 ---
 
@@ -139,7 +143,9 @@ sync_noche.py → Fase 0: actualizar_arbol_ubicaciones
                 └── Agente 5: smoke-test      (4 checks lectura: activa, visitas, cobertura, zonas)
 ```
 
-**Archivos:** `src/onboarding/pipeline.py` (orquestador Prefect), `src/onboarding/quality_gate.py`, `feature_router.py`, `context_scout.py`, `feature_eval.py`, `smoke_test.py`.
+**Archivos:** `src/onboarding/pipeline.py` (orquestador Prefect), `src/onboarding/quality_gate.py`, `feature_router.py`, `context_scout.py`, `feature_eval.py`, `smoke_test.py`, `_eval_core.py` (núcleo walk-forward, importable en producción sin depender de `src/lab/`).
+
+**Context Scout (Agente 3):** evalúa un catálogo curado usando escala de directitud A→D (A=cuenta personas reales, B=actividad observable, C=índice sectorial, D=macro). No incluye señales D si ya hay una A o B. Prioriza AENA (pasajeros aeropuerto) e INE pernoctaciones hoteleras sobre ICM y SEPE. Devuelve JSON; incluye strip defensivo de markdown code fences antes de `json.loads()`.
 
 **Despliegue del servidor Prefect:** `scripts/serve_flows.py` — sirve `onboard_nuevas_ubicaciones` como deployment en `http://127.0.0.1:4200`. Gestionado por systemd `prefect-flows.service`.
 

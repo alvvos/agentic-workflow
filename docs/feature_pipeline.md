@@ -133,6 +133,22 @@ Endpoint: `POST https://www.puertomalaga.com/wp-admin/admin-ajax.php`
 
 Feature generada: `n_pasajeros_crucero_dia`. Solo se escriben filas para días con escala — los días sin crucero no tienen fila (valor implícito 0 en la lectura).
 
+### `src/data_ingestion/prefetch/puertos_estado.py`
+
+Estadística oficial mensual de pasajeros de crucero desde Puertos del Estado (fuente gubernamental, ~4-6 semanas de retraso).
+
+```bash
+python -m src.data_ingestion.prefetch.puertos_estado        # año anterior + actual
+python -m src.data_ingestion.prefetch.puertos_estado --desde 2024-01 --hasta 2026-05
+python -m src.data_ingestion.prefetch.puertos_estado --force  # ignora caché semanal
+```
+
+- **Data-driven:** lee `port_authority` de `location_source_config` (source=`puertos_estado`). No hay hardcoding de ubicaciones.
+- Descarga XLSX de `https://www.puertos.es/en/data/statistics/monthly` con parámetro `date_value = 2027 - year`.
+- Cada fichero aporta datos del mes propio + mismo mes del año anterior (2 años con 12 descargas).
+- Feature: `n_pasajeros_crucero_oficial` — total mensual distribuido uniformemente en días del mes.
+- Idempotente via `ON CONFLICT DO UPDATE`.
+
 ### `src/data_ingestion/prefetch/` (otros)
 
 - `open_meteo.py`: clima histórico y forecast para todas las ubicaciones activas.
@@ -142,9 +158,19 @@ Feature generada: `n_pasajeros_crucero_dia`. Solo se escriben filas para días c
 
 ## 4a. Descubrimiento automático — Agente 3 (Context Scout)
 
-Cuando llega una ubicación nueva, `src/onboarding/context_scout.py` usa Claude (claude-sonnet-4-6) para evaluar un catálogo curado de fuentes abiertas (INE, SEPE, INSEE, Destatis, ONS, INEGI…) y decidir cuáles aplican a la isócrona de la ubicación.
+Cuando llega una ubicación nueva, `src/onboarding/context_scout.py` usa Claude (claude-sonnet-4-6) para evaluar un catálogo curado de fuentes abiertas y decidir cuáles aplican a la isócrona de la ubicación.
 
-Criterios de selección: granularidad ≤ provincial, cobertura desde ≥ 2024, frecuencia mensual, acceso programático, causalidad demostrable, sin redundancia con fuentes ya activas.
+**Escala de directitud** (criterio 7 en el prompt):
+- **A** — cuenta personas reales: AENA pasajeros aeropuerto, INE pernoctaciones hoteleras
+- **B** — actividad observable: validaciones metro, uso Bicing
+- **C** — índice sectorial derivado: ICM (INE), SEPE afiliaciones
+- **D** — macro index: IPC, PIB regional
+
+Regla: no incluir señales D si ya hay una A o B disponible.
+
+Otros criterios: granularidad ≤ provincial, cobertura desde ≥ 2024, frecuencia mensual, acceso programático, causalidad demostrable, sin redundancia con fuentes ya activas.
+
+El agente devuelve JSON; el código aplica strip defensivo de markdown code fences antes de `json.loads()` (Claude a veces envuelve la respuesta en ` ```json ``` ` aunque el prompt lo prohíba).
 
 Las fuentes seleccionadas se registran en:
 - `feature_registry` — `status='incompleto'`
@@ -157,6 +183,8 @@ El timer mensual (`sync_mensual.py`) las rellena automáticamente cuando el inge
 `src/onboarding/feature_eval.py` evalúa las features con `status='con_cobertura'` que aún no tienen decisión para la ubicación.
 
 Umbral de activación automática: `WMAPE_DELTA_THRESHOLD = -0.005` (mejora ≥ 0.5pp).
+
+El núcleo de evaluación walk-forward está en `src/onboarding/_eval_core.py` (extraído de `src/lab/eval_features.py`, que está en `.gitignore` y no existe en producción). `feature_eval.py` importa de `_eval_core`, no de `src.lab`.
 Si la ubicación tiene menos de 50 días en `fact_visitas`, la evaluación se aplaza sin bloquear el pipeline.
 
 Reutiliza `_evaluate_feature()` y `_write_results()` de `src/lab/eval_features.py` — sin duplicar lógica.
