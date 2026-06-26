@@ -9,7 +9,6 @@ Estructura del XLSX (hoja "Pasajeros crucero", 36 filas x 14 cols):
   R5:  ["Autoridad Portuaria", "<Mes> ", "", "Acumulado desde Enero", ...]
   R6:  ["", año_anterior, año_actual, año_anterior, año_actual, "Var. (%)", ...]
   R7+: [nombre_AP, pax_mes_ant, pax_mes_act, pax_ytd_ant, pax_ytd_act, var]
-  Málaga → fila 23, string exacto "Málaga" (con tilde).
 
 Cada fichero contiene datos del mes propio (cols B/C) y su acumulado YTD (cols D/E),
 más el mismo dato del año anterior en columna B/D.
@@ -18,7 +17,8 @@ Esto permite extraer dos años de datos descargando solo los ficheros del año a
 Escribe en store_features_ext:
   n_pasajeros_crucero_oficial — total mensual distribuido uniformemente en días
 
-Solo aplica a Málaga Muelle 1.
+Las ubicaciones activas y su AP se leen de location_source_config (source='puertos_estado').
+El campo params debe contener: {"port_authority": "<nombre exacto en la hoja XLSX>"}
 
 CLI:
     python -m src.data_ingestion.prefetch.puertos_estado
@@ -44,16 +44,31 @@ from src.data_ingestion.prefetch._common import is_fresh, write_sync_marker
 from src.db.store import get_conn
 
 _SOURCE = "puertos_estado"
-_MALAGA_LOCATION_UUID = "67034276-0d01-4c90-a363-fa75699a19a4"
 _FEATURE_KEY = "n_pasajeros_crucero_oficial"
 _TIMEOUT = 30
 _BASE_URL = "https://www.puertos.es"
 _LISTING_URL = _BASE_URL + "/en/data/statistics/monthly"
 _SHEET = "Pasajeros crucero"
-_ROW_AP = "Málaga"  # texto exacto en la hoja (sin "A.P. de")
 
 # date_value parameter: 2027 - year (2026→1, 2025→2, 2024→3, ...)
 _MIN_YEAR = 2012  # primer año disponible en el portal
+
+
+# ── Config desde location_source_config ──────────────────────────────────────
+
+
+def _get_configured_locations() -> list[tuple[str, str]]:
+    """Returns [(location_uuid, port_authority), ...] for all active puertos_estado configs."""
+    rows = (
+        get_conn()
+        .execute(
+            "SELECT location_uuid, params->>'port_authority' "
+            "FROM location_source_config "
+            "WHERE source = 'puertos_estado' AND activo = TRUE"
+        )
+        .fetchall()
+    )
+    return [(r[0], r[1]) for r in rows if r[1]]
 
 
 # ── Descubrimiento de IDs ──────────────────────────────────────────────────────
@@ -104,17 +119,17 @@ def _download_xlsx(file_id: int) -> bytes | None:
         return None
 
 
-def parse_xlsx(xlsx_bytes: bytes) -> dict | None:
+def parse_xlsx(xlsx_bytes: bytes, port_authority: str) -> dict | None:
     """
     Parsea la hoja "Pasajeros crucero" y devuelve:
     {
-        'month'      : int,  # número de mes (1-12)
-        'year_act'   : int,  # año del dato actual (col C)
-        'year_prev'  : int,  # año del dato anterior (col B)
-        'malaga_act' : int,  # pasajeros Málaga mes año actual
-        'malaga_prev': int,  # pasajeros Málaga mes año anterior
+        'month'    : int,  # número de mes (1-12)
+        'year_act' : int,  # año del dato actual (col C)
+        'year_prev': int,  # año del dato anterior (col B)
+        'pax_act'  : int,  # pasajeros mes año actual para port_authority
+        'pax_prev' : int,  # pasajeros mes año anterior para port_authority
     }
-    Retorna None si el fichero no tiene el formato esperado.
+    Retorna None si el fichero no tiene el formato esperado o no encuentra la AP.
     """
     try:
         import openpyxl
@@ -173,15 +188,15 @@ def parse_xlsx(xlsx_bytes: bytes) -> dict | None:
     if month_num is None or year_act is None or year_prev is None:
         return None
 
-    # Buscar fila de Málaga (habitualmente fila 23, pero se escanea por seguridad)
-    malaga_row: int | None = None
+    # Buscar fila de la AP (escaneo completo por robustez)
+    ap_row: int | None = None
     for r in range(7, ws.max_row + 1):
         v = ws.cell(r, 1).value
-        if v and _ROW_AP.lower() == str(v).strip().lower():
-            malaga_row = r
+        if v and port_authority.lower() == str(v).strip().lower():
+            ap_row = r
             break
 
-    if malaga_row is None:
+    if ap_row is None:
         return None
 
     def _int(v) -> int:
@@ -194,15 +209,17 @@ def parse_xlsx(xlsx_bytes: bytes) -> dict | None:
         "month": month_num,
         "year_act": year_act,
         "year_prev": year_prev,
-        "malaga_act": _int(ws.cell(malaga_row, 3).value),  # col C = año actual
-        "malaga_prev": _int(ws.cell(malaga_row, 2).value),  # col B = año anterior
+        "pax_act": _int(ws.cell(ap_row, 3).value),  # col C = año actual
+        "pax_prev": _int(ws.cell(ap_row, 2).value),  # col B = año anterior
     }
 
 
 # ── Escritura en DB ───────────────────────────────────────────────────────────
 
 
-def _write_month(year: int, month: int, total_pax: int, verbose: bool = False) -> int:
+def _write_month(
+    year: int, month: int, total_pax: int, location_uuid: str, verbose: bool = False
+) -> int:
     """
     Distribuye el total mensual uniformemente en los días del mes y escribe
     en store_features_ext. Solo escribe meses ya cerrados (último día < hoy).
@@ -215,7 +232,7 @@ def _write_month(year: int, month: int, total_pax: int, verbose: bool = False) -
 
     pax_per_day = total_pax / last_day
     rows = [
-        (str(date(year, month, d)), _MALAGA_LOCATION_UUID, _FEATURE_KEY, pax_per_day)
+        (str(date(year, month, d)), location_uuid, _FEATURE_KEY, pax_per_day)
         for d in range(1, last_day + 1)
     ]
 
@@ -233,9 +250,9 @@ def _write_month(year: int, month: int, total_pax: int, verbose: bool = False) -
 # ── Sync por año ──────────────────────────────────────────────────────────────
 
 
-def sync_year(year: int, verbose: bool = True) -> int:
+def sync_year(year: int, location_uuid: str, port_authority: str, verbose: bool = True) -> int:
     """
-    Descarga todos los ficheros disponibles para el año y persiste datos de Málaga.
+    Descarga todos los ficheros disponibles para el año y persiste datos de la AP.
     Cada fichero aporta datos del mes propio (year_act) y del mismo mes del año
     anterior (year_prev), maximizando cobertura histórica con el mínimo de descargas.
     Retorna total de días escritos.
@@ -243,7 +260,7 @@ def sync_year(year: int, verbose: bool = True) -> int:
     ids = _fetch_listing_ids(year)
     if not ids:
         if verbose:
-            print(f"  [puertos_estado] {year}: no se encontraron ficheros")
+            print(f"  [puertos_estado] {port_authority} {year}: no se encontraron ficheros")
         return 0
 
     total = 0
@@ -251,32 +268,40 @@ def sync_year(year: int, verbose: bool = True) -> int:
         raw = _download_xlsx(fid)
         if raw is None:
             if verbose:
-                print(f"  [puertos_estado] {mes:02d}/{year}: descarga fallida (ID {fid})")
+                print(
+                    f"  [puertos_estado] {port_authority} {mes:02d}/{year}: "
+                    f"descarga fallida (ID {fid})"
+                )
             continue
 
-        parsed = parse_xlsx(raw)
+        parsed = parse_xlsx(raw, port_authority)
         if parsed is None:
             if verbose:
-                print(f"  [puertos_estado] {mes:02d}/{year}: formato inesperado (ID {fid})")
+                print(
+                    f"  [puertos_estado] {port_authority} {mes:02d}/{year}: "
+                    f"formato inesperado o AP no encontrada (ID {fid})"
+                )
             continue
 
-        n = _write_month(parsed["year_act"], parsed["month"], parsed["malaga_act"])
+        n = _write_month(parsed["year_act"], parsed["month"], parsed["pax_act"], location_uuid)
         if n > 0:
             total += n
             if verbose:
                 print(
-                    f"  [puertos_estado] {parsed['month']:02d}/{parsed['year_act']}: "
-                    f"{parsed['malaga_act']:,} pax"
+                    f"  [puertos_estado] {port_authority} {parsed['month']:02d}/{parsed['year_act']}: "
+                    f"{parsed['pax_act']:,} pax"
                 )
 
         # El fichero también contiene el mismo mes del año anterior
-        n_prev = _write_month(parsed["year_prev"], parsed["month"], parsed["malaga_prev"])
+        n_prev = _write_month(
+            parsed["year_prev"], parsed["month"], parsed["pax_prev"], location_uuid
+        )
         if n_prev > 0:
             total += n_prev
             if verbose:
                 print(
-                    f"  [puertos_estado] {parsed['month']:02d}/{parsed['year_prev']}: "
-                    f"{parsed['malaga_prev']:,} pax (año ant.)"
+                    f"  [puertos_estado] {port_authority} {parsed['month']:02d}/{parsed['year_prev']}: "
+                    f"{parsed['pax_prev']:,} pax (año ant.)"
                 )
 
     return total
@@ -286,9 +311,12 @@ def sync_year(year: int, verbose: bool = True) -> int:
 
 
 def sync(jobs: list, fecha: date) -> int:
-    """Interfaz estándar para sync_mensual. Cubre año anterior y año actual."""
-    total = sync_year(fecha.year - 1, verbose=True)
-    total += sync_year(fecha.year, verbose=True)
+    """Interfaz estándar para sync_mensual. Itera todas las ubicaciones configuradas."""
+    locations = _get_configured_locations()
+    total = 0
+    for location_uuid, port_authority in locations:
+        total += sync_year(fecha.year - 1, location_uuid, port_authority, verbose=True)
+        total += sync_year(fecha.year, location_uuid, port_authority, verbose=True)
     return total
 
 
@@ -300,26 +328,33 @@ def run(
     max_age_hours: float = 168,  # semanal por defecto: el dato es mensual
     verbose: bool = True,
 ) -> dict[str, int]:
-    if location_uuid is not None and location_uuid != _MALAGA_LOCATION_UUID:
-        return {}
+    locations = _get_configured_locations()
+    if location_uuid is not None:
+        locations = [(lu, pa) for lu, pa in locations if lu == location_uuid]
 
-    if is_fresh(_MALAGA_LOCATION_UUID, _SOURCE, max_age_hours):
-        if verbose:
-            print(f"  [puertos_estado] omitido (datos < {max_age_hours:.0f}h)")
-        return {_MALAGA_LOCATION_UUID: 0}
+    result: dict[str, int] = {}
+    today = date.today()
 
-    try:
-        today = date.today()
-        n = sync_year(today.year - 1, verbose=verbose)
-        n += sync_year(today.year, verbose=verbose)
-        write_sync_marker(_MALAGA_LOCATION_UUID, _SOURCE)
-        if verbose:
-            print(f"  [puertos_estado] Málaga: {n} días escritos")
-        return {_MALAGA_LOCATION_UUID: n}
-    except Exception as e:
-        if verbose:
-            print(f"  [puertos_estado] ERROR — {e}")
-        return {_MALAGA_LOCATION_UUID: 0}
+    for loc_uuid, port_authority in locations:
+        if is_fresh(loc_uuid, _SOURCE, max_age_hours):
+            if verbose:
+                print(f"  [puertos_estado] {port_authority} omitido (datos < {max_age_hours:.0f}h)")
+            result[loc_uuid] = 0
+            continue
+
+        try:
+            n = sync_year(today.year - 1, loc_uuid, port_authority, verbose=verbose)
+            n += sync_year(today.year, loc_uuid, port_authority, verbose=verbose)
+            write_sync_marker(loc_uuid, _SOURCE)
+            if verbose:
+                print(f"  [puertos_estado] {port_authority}: {n} días escritos")
+            result[loc_uuid] = n
+        except Exception as e:
+            if verbose:
+                print(f"  [puertos_estado] {port_authority} ERROR — {e}")
+            result[loc_uuid] = 0
+
+    return result
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
@@ -351,10 +386,16 @@ if __name__ == "__main__":
         return d.month, d.year
 
     today = date.today()
+    locations = _get_configured_locations()
+    if not locations:
+        print("[puertos_estado] No hay ubicaciones configuradas en location_source_config.")
+        sys.exit(0)
+
     if args.desde or args.hasta:
         d_from = _ym(args.desde) if args.desde else (1, today.year - 1)
         d_to = _ym(args.hasta) if args.hasta else (today.month, today.year)
         for yr in range(d_from[1], d_to[1] + 1):
-            sync_year(yr)
+            for loc_uuid, port_authority in locations:
+                sync_year(yr, loc_uuid, port_authority)
     else:
         run(max_age_hours=0 if args.force else args.max_age)
