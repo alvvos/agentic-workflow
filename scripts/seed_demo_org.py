@@ -31,11 +31,11 @@ LOC_UUID = "demo-loc-madrid-0001"
 ZONE_UUID = "demo-zone-entrada-0001"
 
 ORG_NOMBRE = "Demo Retail ES"
-LOC_NOMBRE = "Demo Madrid Gran Vía (ficticia)"
+LOC_NOMBRE = "Demo Madrid La Vaguada (ficticia)"
 
-# Coordenadas reales de Gran Vía Madrid — bbox ES pasa sin problema
-LAT = 40.4200
-LON = -3.7025
+# Coordenadas reales de CC La Vaguada — bbox ES pasa sin problema
+LAT = 40.4655
+LON = -3.7104
 
 N_DIAS = 90  # suficiente para 3 splits en el walk-forward
 
@@ -151,8 +151,8 @@ def seed(conn) -> None:
             "ES",
             "MD",
             "ES",
-            "28013",
-            "Gran Vía 1, Madrid",
+            "28029",
+            "Av. de Monforte de Lemos, 36, Madrid",
             True,
         ],
     )
