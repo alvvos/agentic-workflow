@@ -21,6 +21,8 @@ from datetime import date
 from pathlib import Path
 from typing import Callable, NamedTuple
 
+from prefect import flow, get_run_logger, task
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 logging.basicConfig(
@@ -94,11 +96,52 @@ def _build_ingestores(hoy: date) -> dict[str, Callable]:
     return ingestores
 
 
-def main() -> int:
+# ── Tasks Prefect ─────────────────────────────────────────────────────────────
+
+
+@task(name="ingestar-source", retries=1, retry_delay_seconds=60)
+def _ingestar_source(source: str, jobs: list[SyncJob], hoy: date) -> int:
+    logger = get_run_logger()
+    ingestores = _build_ingestores(hoy)
+    n = ingestores[source](jobs=jobs, fecha=hoy)
+    logger.info("%-20s — %d fila(s) escritas (%d job(s))", source, n, len(jobs))
+    return n
+
+
+@task(name="geo-audit")
+def _geo_audit() -> list[str]:
+    logger = get_run_logger()
+    try:
+        from src.data_ingestion.prefetch.geo import listar_estado
+
+        estado = listar_estado(verbose=False)
+        sin_datos = [e["nombre"] for e in estado if not e.get("tiene_datos")]
+        if sin_datos:
+            logger.warning(
+                "Geo: %d location(s) sin snapshot Esri: %s%s",
+                len(sin_datos),
+                ", ".join(sin_datos[:5]),
+                "..." if len(sin_datos) > 5 else "",
+            )
+        else:
+            logger.info("Geo: todas las locations tienen snapshot Esri activo")
+        return sin_datos
+    except Exception as exc:
+        logger.warning("Geo audit omitido: %s", exc)
+        return []
+
+
+# ── Flow principal ─────────────────────────────────────────────────────────────
+
+
+@flow(name="sync-mensual")
+def sync_mensual_flow() -> int:
+    logger = get_run_logger()
     t0 = time.time()
     hoy = date.today()
-    log.info("── sync_mensual START %s ─────────────────────────", hoy)
     errores = 0
+
+    logger.info("── sync_mensual START %s ─────────────────────────", hoy)
 
     ingestores = _build_ingestores(hoy)
 
@@ -106,7 +149,7 @@ def main() -> int:
     try:
         jobs_por_source = _cargar_jobs("mensual")
         total = sum(len(v) for v in jobs_por_source.values())
-        log.info(
+        logger.info(
             "%d job(s) mensuales en %d fuente(s): %s",
             total,
             len(jobs_por_source),
@@ -116,7 +159,7 @@ def main() -> int:
         for source, jobs in jobs_por_source.items():
             if source not in ingestores:
                 claves = ", ".join(j.feature_key for j in jobs[:3])
-                log.info(
+                logger.info(
                     "  %-20s sin ingestor — %d job(s) pendiente(s): %s%s",
                     source,
                     len(jobs),
@@ -126,37 +169,24 @@ def main() -> int:
                 continue
 
             try:
-                n = ingestores[source](jobs=jobs, fecha=hoy)
-                log.info("  %-20s OK — %d fila(s) escritas (%d job(s))", source, n, len(jobs))
+                _ingestar_source(source, jobs, hoy)
             except Exception as exc:
-                log.error("  %-20s FAIL — %s", source, exc)
+                logger.error("  %-20s FAIL — %s", source, exc)
                 errores += 1
 
     except Exception as exc:
-        log.error("Loop mensual FAIL: %s", exc)
+        logger.error("Loop mensual FAIL: %s", exc)
         errores += 1
 
     # ── Geo/Esri: audit de snapshots ──────────────────────────────────────────
-    # No entra en el loop porque escribe en store_geo_snapshots, no store_features_ext.
-    try:
-        from src.data_ingestion.prefetch.geo import listar_estado
+    _geo_audit()
 
-        estado = listar_estado(verbose=False)
-        sin_datos = [e["nombre"] for e in estado if not e.get("tiene_datos")]
-        if sin_datos:
-            log.warning(
-                "Geo: %d location(s) sin snapshot Esri: %s%s",
-                len(sin_datos),
-                ", ".join(sin_datos[:5]),
-                "..." if len(sin_datos) > 5 else "",
-            )
-        else:
-            log.info("Geo: todas las locations tienen snapshot Esri activo")
-    except Exception as exc:
-        log.warning("Geo audit omitido: %s", exc)
-
-    log.info("── sync_mensual DONE (%.0fs) errores=%d ─", time.time() - t0, errores)
+    logger.info("── sync_mensual DONE (%.0fs) errores=%d ─", time.time() - t0, errores)
     return errores
+
+
+def main() -> int:
+    return sync_mensual_flow()
 
 
 if __name__ == "__main__":

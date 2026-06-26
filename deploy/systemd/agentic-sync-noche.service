@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=oneshot
 User=alvaro.salis
 WorkingDirectory=/home/alvaro.salis/agentic-workflow
+Environment=PREFECT_API_URL=http://127.0.0.1:4200/api
 ExecStart=/home/alvaro.salis/agentic-workflow/venv/bin/python scripts/sync_noche.py
 StandardOutput=journal
 StandardError=journal

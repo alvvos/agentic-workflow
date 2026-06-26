@@ -132,7 +132,7 @@ def mostrar_detalle_nodo(node_data):
                 [
                     html.H6(info["titulo"], className="fw-bold text-dark mb-1"),
                     badge,
-                    html.P(info["desc"], className="small text-muted mb-2"),
+                    info["desc"],
                     html.Hr(className="my-2"),
                     html.Div(
                         [

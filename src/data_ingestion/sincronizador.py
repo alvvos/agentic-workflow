@@ -1,10 +1,10 @@
 import os
-import json
-import requests
-import pandas as pd
-from datetime import datetime, timedelta
-from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta
+
+import pandas as pd
+import requests
+from dotenv import load_dotenv
 
 load_dotenv()
 AITANNA_API_KEY = os.getenv("AITANNA_API_KEY")
@@ -13,6 +13,7 @@ AITANNA_API_KEY = os.getenv("AITANNA_API_KEY")
 def _get_location_ids(ubicaciones_seleccionadas=None):
     try:
         from src.db.queries import get_locations_with_coords
+
         uuids = get_locations_with_coords()
         if uuids:
             return uuids
@@ -38,6 +39,7 @@ def peticion_dia(loc_id, fecha_str):
 
 def _upsert_visitas(rows: list) -> None:
     from src.db.store import get_conn
+
     if not rows:
         return
     get_conn().executemany(
@@ -65,20 +67,21 @@ def _upsert_visitas(rows: list) -> None:
     )
 
 
-def actualizar_datos(ubicaciones_seleccionadas=None, stop_event=None, progress_cb=None):
+def actualizar_datos(
+    ubicaciones_seleccionadas=None, stop_event=None, progress_cb=None, desde=None, hasta=None
+):
     """
     Descarga datos de Aitanna y los persiste directamente en fact_visitas (PostgreSQL).
     Incremental: solo descarga desde la última fecha registrada por location.
+    desde/hasta (YYYY-MM-DD): fuerzan el rango ignorando ultima_fecha_db — útil para backfill de huecos.
     """
-    from src.db.store import get_conn
     from src.db.queries import get_ultima_fecha_por_location
+    from src.db.store import get_conn
 
     conn = get_conn()
 
     # org_uuid map para el INSERT
-    org_map = dict(conn.execute(
-        "SELECT location_uuid, org_uuid FROM dim_ubicaciones"
-    ).fetchall())
+    org_map = dict(conn.execute("SELECT location_uuid, org_uuid FROM dim_ubicaciones").fetchall())
 
     ultima_fecha_db = get_ultima_fecha_por_location()
 
@@ -87,7 +90,7 @@ def actualizar_datos(ubicaciones_seleccionadas=None, stop_event=None, progress_c
         print("No hay ubicaciones para sincronizar.")
         return
 
-    fecha_hoy = datetime.today()
+    fecha_fin = datetime.strptime(hasta, "%Y-%m-%d") if hasta else datetime.today()
     total_locs = len(location_ids)
     registros_nuevos_totales = 0
 
@@ -99,25 +102,28 @@ def actualizar_datos(ubicaciones_seleccionadas=None, stop_event=None, progress_c
         if progress_cb:
             progress_cb(idx, total_locs)
 
-        ultima = ultima_fecha_db.get(loc_id)
-        if ultima:
-            ultima_dt = pd.to_datetime(ultima)
+        if desde:
+            ultima_dt = datetime.strptime(desde, "%Y-%m-%d")
         else:
-            ultima_dt = datetime.strptime("2024-01-01", "%Y-%m-%d")
+            ultima = ultima_fecha_db.get(loc_id)
+            ultima_dt = (
+                pd.to_datetime(ultima) if ultima else datetime.strptime("2024-01-01", "%Y-%m-%d")
+            )
 
-        dias_diferencia = (fecha_hoy - ultima_dt).days
+        dias_diferencia = (fecha_fin - ultima_dt).days
         if dias_diferencia <= 0:
             continue
 
         fechas_a_descargar = [
-            (fecha_hoy - timedelta(days=i)).strftime("%Y-%m-%d")
-            for i in range(dias_diferencia + 1)
+            (fecha_fin - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(dias_diferencia + 1)
         ]
 
-        print(f"[{idx:02d}/{total_locs}] {loc_id[:8]}... | {len(fechas_a_descargar)} días", end="\r")
+        print(
+            f"[{idx:02d}/{total_locs}] {loc_id[:8]}... | {len(fechas_a_descargar)} días", end="\r"
+        )
 
         filas_buffer = []
-        org_uuid = org_map.get(loc_id, '')
+        org_uuid = org_map.get(loc_id, "")
 
         with ThreadPoolExecutor(max_workers=5) as executor:
             futuros = [executor.submit(peticion_dia, loc_id, f) for f in fechas_a_descargar]
@@ -128,34 +134,42 @@ def actualizar_datos(ubicaciones_seleccionadas=None, stop_event=None, progress_c
                 for zona in datos:
                     hours_data = zona.get("visitorsHour", [])
                     hourly_array = (
-                        [h.get("value", 0) for h in sorted(hours_data, key=lambda x: x.get("hour", 0))]
-                        if isinstance(hours_data, list) else [0] * 24
+                        [
+                            h.get("value", 0)
+                            for h in sorted(hours_data, key=lambda x: x.get("hour", 0))
+                        ]
+                        if isinstance(hours_data, list)
+                        else [0] * 24
                     )
-                    filas_buffer.append((
-                        fecha_str,
-                        zona.get("zoneUUID", ""),
-                        loc_id,
-                        org_uuid,
-                        int(zona.get("totalVisits", 0) or 0),
-                        int(zona.get("uniqueVisitor", 0) or 0),
-                        int(zona.get("newVisitor", 0) or 0),
-                        float(zona.get("uniqueVisitorLast7days", 0) or 0),
-                        float(zona.get("uniqueVisitorLast28days", 0) or 0),
-                        float(zona.get("uniqueVisitorCurrentMonth", 0) or 0),
-                        float(zona.get("uniqueVisitorCurrentYear", 0) or 0),
-                        float(zona.get("frequencyLast7days", 0.0) or 0),
-                        float(zona.get("frequencyLast28days", 0.0) or 0),
-                        float(zona.get("frequencyCurrentMonth", 0.0) or 0),
-                        float(zona.get("frequencyCurrentYear", 0.0) or 0),
-                        float(zona.get("dwellTime", 0.0) or 0),
-                        str(zona.get("dwellTimeHistogram", [])),
-                        str(hourly_array),
-                    ))
+                    filas_buffer.append(
+                        (
+                            fecha_str,
+                            zona.get("zoneUUID", ""),
+                            loc_id,
+                            org_uuid,
+                            int(zona.get("totalVisits", 0) or 0),
+                            int(zona.get("uniqueVisitor", 0) or 0),
+                            int(zona.get("newVisitor", 0) or 0),
+                            float(zona.get("uniqueVisitorLast7days", 0) or 0),
+                            float(zona.get("uniqueVisitorLast28days", 0) or 0),
+                            float(zona.get("uniqueVisitorCurrentMonth", 0) or 0),
+                            float(zona.get("uniqueVisitorCurrentYear", 0) or 0),
+                            float(zona.get("frequencyLast7days", 0.0) or 0),
+                            float(zona.get("frequencyLast28days", 0.0) or 0),
+                            float(zona.get("frequencyCurrentMonth", 0.0) or 0),
+                            float(zona.get("frequencyCurrentYear", 0.0) or 0),
+                            float(zona.get("dwellTime", 0.0) or 0),
+                            str(zona.get("dwellTimeHistogram", [])),
+                            str(hourly_array),
+                        )
+                    )
 
         if filas_buffer:
             _upsert_visitas(filas_buffer)
             registros_nuevos_totales += len(filas_buffer)
-            print(f"[{idx:02d}/{total_locs}] {loc_id[:8]}... | +{len(filas_buffer)} registros guardados.")
+            print(
+                f"[{idx:02d}/{total_locs}] {loc_id[:8]}... | +{len(filas_buffer)} registros guardados."
+            )
         else:
             print(f"[{idx:02d}/{total_locs}] {loc_id[:8]}... | Sin datos.              ")
 
@@ -163,4 +177,19 @@ def actualizar_datos(ubicaciones_seleccionadas=None, stop_event=None, progress_c
 
 
 if __name__ == "__main__":
-    actualizar_datos()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Sincronizador Aitanna → fact_visitas")
+    parser.add_argument("--loc", nargs="+", metavar="UUID", help="location_uuid(s) a sincronizar")
+    parser.add_argument(
+        "--desde",
+        metavar="YYYY-MM-DD",
+        help="Fecha inicio (fuerza backfill ignorando ultima_fecha)",
+    )
+    parser.add_argument("--hasta", metavar="YYYY-MM-DD", help="Fecha fin (por defecto: hoy)")
+    args = parser.parse_args()
+    actualizar_datos(
+        ubicaciones_seleccionadas=args.loc,
+        desde=args.desde,
+        hasta=args.hasta,
+    )

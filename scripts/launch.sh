@@ -17,18 +17,21 @@ APP_PORT=8051
 
 TUNNEL_PID=""
 APP_PID=""
+MONITOR_PID=""
 
 cleanup() {
     echo ""
     echo "Parando..."
-    [ -n "$APP_PID" ]    && kill "$APP_PID"    2>/dev/null || true
-    [ -n "$TUNNEL_PID" ] && kill "$TUNNEL_PID" 2>/dev/null || true
-    wait "$APP_PID"    2>/dev/null || true
-    wait "$TUNNEL_PID" 2>/dev/null || true
+    [ -n "$MONITOR_PID" ] && kill "$MONITOR_PID" 2>/dev/null || true
+    [ -n "$APP_PID" ]     && kill "$APP_PID"     2>/dev/null || true
+    [ -n "$TUNNEL_PID" ]  && kill "$TUNNEL_PID"  2>/dev/null || true
+    wait "$MONITOR_PID" 2>/dev/null || true
+    wait "$APP_PID"     2>/dev/null || true
+    wait "$TUNNEL_PID"  2>/dev/null || true
     echo "Listo."
     exit 0
 }
-trap cleanup INT TERM
+trap cleanup INT TERM EXIT
 
 # ── Verificar puerto libre ────────────────────────────────────────────────────
 if ss -tlnp 2>/dev/null | grep -q ":${LOCAL_PORT} "; then
@@ -75,6 +78,16 @@ echo "→ App arrancada (PID $APP_PID)"
 echo "  Ctrl+C para parar todo."
 echo ""
 
-# Mantener vivo hasta Ctrl+C o muerte natural de la app
-wait "$APP_PID"
+# Monitor: si cualquiera de los dos cae, mata al otro y limpia
+_monitor() {
+    while kill -0 "$APP_PID" 2>/dev/null && kill -0 "$TUNNEL_PID" 2>/dev/null; do
+        sleep 2
+    done
+    kill "$APP_PID"    2>/dev/null || true
+    kill "$TUNNEL_PID" 2>/dev/null || true
+}
+_monitor &
+MONITOR_PID=$!
+
+wait "$APP_PID" 2>/dev/null || true
 cleanup

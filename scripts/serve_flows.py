@@ -15,8 +15,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # scripts/ para importar siblings
 
 from prefect import serve
+from sync_mensual import sync_mensual_flow
 
 from src.onboarding.pipeline import onboard_nuevas_ubicaciones, onboarding_ubicacion
 
@@ -29,5 +31,9 @@ if __name__ == "__main__":
         onboard_nuevas_ubicaciones.to_deployment(
             name="onboarding-lote-trigger",
             description="Disparado automáticamente por descargar_maestro_ubicaciones()",
+        ),
+        sync_mensual_flow.to_deployment(
+            name="sync-mensual-timer",
+            description="Ingesta mensual data-driven: cruceros + fuentes Context Scout + audit geo",
         ),
     )
