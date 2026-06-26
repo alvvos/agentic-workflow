@@ -120,7 +120,7 @@ def evaluar(
     Reutiliza _evaluate_feature() de src/lab/eval_features.py sin duplicar lógica.
     """
     from src.db.store import get_conn
-    from src.lab.eval_features import MIN_TRAIN_ROWS, _evaluate_feature, _write_results
+    from src.onboarding._eval_core import MIN_TRAIN_ROWS, _evaluate_feature, _write_results
 
     conn = get_conn()
 
