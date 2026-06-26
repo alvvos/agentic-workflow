@@ -2,16 +2,17 @@
 Mapas de dimensiones en memoria, alimentados desde DuckDB.
 La API exportada es idéntica a la versión JSON para que los callbacks no necesiten cambios.
 """
+
 import time
 
 # Los módulos externos importan estas variables directamente.
 # Se mutan en lugar de reasignarse para que los módulos ya importados vean los cambios.
-opciones_orgs:       list = []
-mapa_locs_por_org:   dict = {}
-mapa_tiendas:        dict = {}
-mapa_zonas:          dict = {}
-mapa_zonas_por_loc:  dict = {}
-mapa_orgs:           dict = {}
+opciones_orgs: list = []
+mapa_locs_por_org: dict = {}
+mapa_tiendas: dict = {}
+mapa_zonas: dict = {}
+mapa_zonas_por_loc: dict = {}
+mapa_orgs: dict = {}
 mapa_hijos_por_zona: dict = {}  # {loc_uuid: {parent_zone_name: [child_zone_dicts]}}
 
 _last_load: float = 0.0
@@ -20,6 +21,7 @@ _TTL = 5.0  # segundos mínimos entre recargas
 
 def _load_from_db() -> None:
     from src.db.store import get_conn
+
     conn = get_conn()
 
     opciones_orgs.clear()
@@ -39,17 +41,20 @@ def _load_from_db() -> None:
         _org_order.append((org_uuid, nombre))
 
     for loc_uuid, org_uuid, nombre in conn.execute(
-        "SELECT location_uuid, org_uuid, nombre FROM dim_ubicaciones WHERE activa = TRUE ORDER BY nombre"
+        "SELECT location_uuid, org_uuid, nombre FROM dim_ubicaciones"
+        " WHERE activa = TRUE"
+        "   AND EXISTS (SELECT 1 FROM fact_visitas fv WHERE fv.location_uuid = dim_ubicaciones.location_uuid)"
+        " ORDER BY nombre"
     ).fetchall():
         mapa_tiendas[loc_uuid] = nombre
-        mapa_locs_por_org.setdefault(org_uuid, []).append({'label': nombre, 'value': loc_uuid})
+        mapa_locs_por_org.setdefault(org_uuid, []).append({"label": nombre, "value": loc_uuid})
         mapa_zonas_por_loc[loc_uuid] = []
 
     # Solo orgs con al menos 1 ubicación activa — evita que admins seleccionen
     # orgs vacías y vean el dropdown de ubicaciones en blanco.
     for org_uuid, nombre in _org_order:
         if mapa_locs_por_org.get(org_uuid):
-            opciones_orgs.append({'label': nombre, 'value': org_uuid})
+            opciones_orgs.append({"label": nombre, "value": org_uuid})
 
     all_zones = conn.execute(
         "SELECT zone_uuid, location_uuid, nombre, zone_type, parent_zone_uuid"
@@ -63,10 +68,10 @@ def _load_from_db() -> None:
     # Second pass: classify parent vs child
     for zone_uuid, loc_uuid, nombre, zone_type, parent_uuid in all_zones:
         z = {
-            'label':      nombre,
-            'value':      nombre,
-            'tipo':       zone_type or '',
-            'padre_uuid': parent_uuid,
+            "label": nombre,
+            "value": nombre,
+            "tipo": zone_type or "",
+            "padre_uuid": parent_uuid,
         }
         mapa_zonas_por_loc.setdefault(loc_uuid, []).append(z)
         if parent_uuid:
@@ -82,7 +87,7 @@ def get_opciones_orgs_for_user(org_access: list | None) -> list:
     if not org_access:  # None o lista vacía
         return list(opciones_orgs)
     allowed = set(org_access)
-    return [o for o in opciones_orgs if o['value'] in allowed]
+    return [o for o in opciones_orgs if o["value"] in allowed]
 
 
 def reload_if_changed() -> bool:
