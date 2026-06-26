@@ -62,6 +62,41 @@ def feature_router_task(location_uuid: str) -> RoutingResult:
     return routing
 
 
+# ── Activación de clima ───────────────────────────────────────────────────────
+
+
+@task(name="activar-clima")
+def activar_clima_task(location_uuid: str, routing: RoutingResult) -> int:
+    """Crea feature_flags activos para clima y lanza prefetch si weather fue asignado."""
+    if "weather" not in routing.fuentes:
+        return 0
+
+    from src.db.store import get_conn
+
+    conn = get_conn()
+
+    climate_keys = [
+        r[0]
+        for r in conn.execute(
+            "SELECT feature_key FROM feature_registry WHERE source = 'open_meteo'"
+        ).fetchall()
+    ]
+    if not climate_keys:
+        return 0
+
+    conn.executemany(
+        "INSERT INTO feature_flags (feature_key, location_uuid, status, periodicidad) "
+        "VALUES (?, ?, 'active', 'diaria') "
+        "ON CONFLICT (feature_key, location_uuid) DO UPDATE SET status = 'active'",
+        [(fk, location_uuid) for fk in climate_keys],
+    )
+
+    from src.data_ingestion.prefetch.weather import run as weather_run
+
+    result = weather_run(location_uuid=location_uuid, max_age_hours=0, verbose=False)
+    return result.get(location_uuid, 0)
+
+
 # ── Agente 3: Context Scout ───────────────────────────────────────────────────
 
 
@@ -106,6 +141,13 @@ def onboarding_ubicacion(location_uuid: str) -> bool:
     # Fase 2 — Feature Router
     routing = feature_router_task(location_uuid)
     logger.info("Routing OK — %d fuentes para %s", len(routing.fuentes), routing.nombre)
+
+    # Fase 2b — Activar clima (flags + prefetch histórico)
+    dias_clima = activar_clima_task(location_uuid, routing)
+    if "weather" in routing.fuentes:
+        logger.info(
+            "Clima activado — %d días históricos escritos para %s", dias_clima, routing.nombre
+        )
 
     # Fase 3 — Context Scout
     scout = context_scout_task(location_uuid)

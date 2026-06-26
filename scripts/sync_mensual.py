@@ -64,31 +64,15 @@ def _cargar_jobs(periodicidad: str) -> dict[str, list[SyncJob]]:
 
 def _build_ingestores(hoy: date) -> dict[str, Callable]:
     """
-    Registra los ingestores disponibles.
-    Interfaz: sync(jobs: list[SyncJob], fecha: date) -> int  (filas escritas)
+    Auto-descubre ingestores desde src/data_ingestion/mensual/.
 
-    Para añadir una fuente nueva:
-      1. Implementar src/data_ingestion/prefetch/<source>.py con sync(jobs, fecha) -> int
-      2. Añadir el import + entrada al dict aquí. Nada más.
+    Para añadir una señal nueva:
+      1. Crear src/data_ingestion/mensual/<source>.py con SOURCE, sync() y CATALOG_ENTRY.
+      2. Nada más — el scanner lo registra automáticamente aquí y en Context Scout.
     """
-    ingestores: dict[str, Callable] = {}
+    from src.data_ingestion.mensual import cargar_ingestores
 
-    # ── Puertos del Estado — pasajeros crucero oficiales (mensual) ────────────
-    try:
-        from src.data_ingestion.prefetch.puertos_estado import sync as puertos_sync
-
-        ingestores["puertos_estado"] = puertos_sync
-    except ImportError:
-        pass
-
-    # ── Fuentes Context Scout — descomentar cuando el ingestor esté implementado ─
-    # from src.data_ingestion.prefetch.ine   import sync as ine_sync;   ingestores["ine"]   = ine_sync
-    # from src.data_ingestion.prefetch.sepe  import sync as sepe_sync;  ingestores["sepe"]  = sepe_sync
-    # from src.data_ingestion.prefetch.inegi import sync as inegi_sync; ingestores["inegi"] = inegi_sync
-    # from src.data_ingestion.prefetch.ons   import sync as ons_sync;   ingestores["ons"]   = ons_sync
-    # from src.data_ingestion.prefetch.insee import sync as insee_sync; ingestores["insee"] = insee_sync
-
-    return ingestores
+    return cargar_ingestores()
 
 
 # ── Tasks Prefect ─────────────────────────────────────────────────────────────

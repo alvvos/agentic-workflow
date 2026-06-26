@@ -26,7 +26,23 @@ log = logging.getLogger(__name__)
 # actualización mensual o trimestral, y mecanismo causal documentado.
 # Añadir nuevos países o fuentes aquí — context_scout los evaluará automáticamente.
 
-_CATALOG: dict[str, list[dict]] = {
+
+def _cargar_catalog(pais: str) -> list[dict]:
+    """
+    Carga el catálogo de señales para el país desde src/data_ingestion/mensual/.
+    Solo señales con ingestor implementado son descubribles.
+    """
+    try:
+        from src.data_ingestion.mensual import cargar_catalog
+
+        return cargar_catalog(pais)
+    except Exception:
+        return []
+
+
+# Legado — conservado solo para referencia de qué señales implementar a futuro.
+# Cuando se escriba el ingestor en mensual/, el entry pasa al CATALOG_ENTRY del script.
+_CATALOG_PENDIENTE: dict[str, list[dict]] = {
     "ES": [
         # ── Señales directas (cuentan personas reales) ─────────────────────────
         # Prioridad máxima: el dato mide presencia física de personas en o cerca
@@ -477,7 +493,7 @@ def _build_location_block(row: tuple) -> str:
 
 
 def _build_catalog_block(pais: str) -> str:
-    entries = _CATALOG.get(pais, [])
+    entries = _cargar_catalog(pais)
     if not entries:
         return f"  (No hay fuentes curadas para pais_codigo='{pais}'. Responde con listas vacías.)"
     lines = []
@@ -526,8 +542,10 @@ def descubrir_fuentes(location_uuid: str) -> ScoutResult:
     pais = (row[3] or "").upper()
     nombre = row[0] or location_uuid
 
-    if pais not in _CATALOG:
-        log.info("Context Scout: pais_codigo='%s' sin catálogo curado — omitiendo", pais)
+    if not _cargar_catalog(pais):
+        log.info(
+            "Context Scout: pais_codigo='%s' sin ingestores mensual/ disponibles — omitiendo", pais
+        )
         return ScoutResult(location_uuid=location_uuid, nombre=nombre)
 
     prompt = _SYSTEM_PROMPT.format(
