@@ -169,13 +169,18 @@ def ingestar_escalas(escalas: list[dict]) -> int:
         [_MALAGA_LOCATION_UUID] + fechas,
     ).fetchall()
 
-    if totales:
+    # Solo fechas pasadas (<=hoy): n_pasajeros_crucero_dia representa llegadas reales,
+    # no previsiones. Las escalas futuras viven en store_calendario_org para el feed
+    # de eventos pero no contaminan el feature store con estimaciones.
+    hoy = str(date.today())
+    totales_confirmados = [(f, t) for f, t in totales if f <= hoy]
+    if totales_confirmados:
         conn.executemany(
             "INSERT INTO store_features_ext (fecha, location_uuid, feature_key, value) "
             "VALUES (?,?,?,?) "
             "ON CONFLICT (fecha, location_uuid, feature_key) "
             "DO UPDATE SET value = excluded.value, ingested_at = NOW()",
-            [(f, _MALAGA_LOCATION_UUID, _FEATURE_KEY, float(t)) for f, t in totales],
+            [(f, _MALAGA_LOCATION_UUID, _FEATURE_KEY, float(t)) for f, t in totales_confirmados],
         )
 
     return len(cal_rows)
