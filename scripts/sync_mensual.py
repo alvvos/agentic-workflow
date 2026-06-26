@@ -80,7 +80,11 @@ def _build_ingestores(hoy: date) -> dict[str, Callable]:
         def _cruceros_sync(jobs: list[SyncJob], fecha: date) -> int:
             # jobs filtra las ubicaciones con cruceros activo (solo Málaga);
             # sync_months ya sabe internamente a qué locations aplicar.
-            return sync_months(desde=(1, fecha.year - 1), hasta=(fecha.month, fecha.year))
+            # Cubre enero del año anterior hasta diciembre del año actual para mantener
+            # frescos los meses futuros: el API del puerto publica previsión contractual
+            # que se completa progresivamente — sin refresco, los meses pasados lejanos
+            # conservan la previsión parcial del momento en que se sincronizaron por primera vez.
+            return sync_months(desde=(1, fecha.year - 1), hasta=(12, fecha.year))
 
         ingestores["cruceros"] = _cruceros_sync
     except ImportError:

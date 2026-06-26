@@ -3846,6 +3846,31 @@ def _render_cruceros_section(
 
     leyenda = html.Div(legend_blocks, className="d-flex flex-wrap gap-4 mb-2")
 
+    has_prev_tier = any(t == "prev" for t in tiers)
+    nota_fuente = html.Div(
+        [
+            html.I(className="fas fa-circle-info me-1", style={"fontSize": "0.65rem"}),
+            html.Span(
+                "Fuente: Puerto de Málaga · previsión contractual. "
+                "Los barras reflejan las escalas publicadas por el puerto en el momento "
+                "de la sincronización"
+                + (
+                    ", no los pasajeros reales contabilizados al cierre del mes. "
+                    "Los meses futuros (más claros) muestran la previsión disponible hoy."
+                    if has_prev_tier
+                    else ". Los datos históricos pueden diferir de las estadísticas oficiales "
+                    "si la previsión se capturó antes de que el mes estuviera completo."
+                ),
+            ),
+        ],
+        style={
+            "fontSize": "0.62rem",
+            "color": _C_MUTED,
+            "marginTop": "4px",
+            "lineHeight": "1.4",
+        },
+    )
+
     return html.Div(
         [
             html.Div(
@@ -3869,6 +3894,7 @@ def _render_cruceros_section(
                 config=_CFG_GRAPH,
                 style={"height": "200px"},
             ),
+            nota_fuente,
         ],
         className="mb-4",
     )
