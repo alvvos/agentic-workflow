@@ -3597,12 +3597,10 @@ def _render_cruceros_section(
 
     # ── Build per-month arrays (12 months, Ene-Dic) ───────────────────────────
     meses = list(range(1, 13))
-    y_prev: list[float] = []
     y_act: list[float] = []
     act_tiers: list[str] = []
     act_text: list[str] = []
     act_hover: list[str] = []
-    prev_hover: list[str] = []
 
     for m in meses:
         ym_p = f"{anio_prev}-{m:02d}"
@@ -3611,14 +3609,7 @@ def _render_cruceros_section(
         last_day_num = calendar.monthrange(anio_actual, m)[1]
         last_of_month = date(anio_actual, m, last_day_num)
 
-        # Previous year bar
-        vp = pax_by_month.get(ym_p, 0)
-        y_prev.append(vp)
-        prev_hover.append(
-            f"{mes_label} {anio_prev}: <b>{int(vp):,}</b> pax<extra></extra>"
-            if vp > 0
-            else f"{mes_label} {anio_prev}: sin datos<extra></extra>"
-        )
+        vp = pax_by_month.get(ym_p, 0)  # año anterior (solo para delta texto)
 
         # Current year bar
         va = pax_by_month.get(ym_a, 0)
@@ -3637,7 +3628,7 @@ def _render_cruceros_section(
             else f"{mes_label} {anio_actual}: sin datos<extra></extra>"
         )
 
-        # Bar text for current year
+        # Bar text
         if tier == "miss":
             act_text.append("")
         elif tier == "prev":
@@ -3655,45 +3646,24 @@ def _render_cruceros_section(
             else:
                 act_text.append(val_str)
 
-    max_v = max(max(y_prev, default=0), max(y_act, default=0), 1)
+    max_v = max((v for v in y_act if v > 0), default=1)
     ghost_h = max_v * 0.04
 
     act_colors = [_tier_color[t] for t in act_tiers]
     y_act_disp = [v if v > 0 else ghost_h for v in y_act]
-    y_prev_disp = [v if v > 0 else ghost_h for v in y_prev]
     act_text_pos = ["outside" if t != "miss" else "inside" for t in act_tiers]
 
     fig = go.Figure()
-
-    # Previous year — ghost bars (outline only)
-    fig.add_trace(
-        go.Bar(
-            x=_MESES_ES,
-            y=y_prev_disp,
-            name=str(anio_prev),
-            marker=dict(
-                color=_hex_rgba(color, 0.15),
-                line=dict(color=_hex_rgba(color, 0.4), width=1),
-                cornerradius=4,
-            ),
-            text=[""] * 12,
-            hovertemplate=prev_hover,
-            showlegend=True,
-        )
-    )
-
-    # Current year — tier-colored bars
     fig.add_trace(
         go.Bar(
             x=_MESES_ES,
             y=y_act_disp,
-            name=str(anio_actual),
             marker=dict(color=act_colors, cornerradius=4),
             text=act_text,
             textposition=act_text_pos,
             textfont=dict(size=8),
             hovertemplate=act_hover,
-            showlegend=True,
+            showlegend=False,
         )
     )
 
@@ -3725,16 +3695,9 @@ def _render_cruceros_section(
         margin=dict(t=20, b=30, l=10, r=10),
         plot_bgcolor="white",
         paper_bgcolor="rgba(0,0,0,0)",
-        barmode="group",
         xaxis=dict(showgrid=False, tickfont=dict(size=9), fixedrange=True),
         yaxis=dict(visible=False, fixedrange=True, range=[0, max_v * 1.55]),
-        legend=dict(
-            orientation="h",
-            x=0,
-            y=1.08,
-            font=dict(size=9),
-            bgcolor="rgba(0,0,0,0)",
-        ),
+        showlegend=False,
     )
 
     # ── KPI del período ────────────────────────────────────────────────────────
@@ -3839,31 +3802,7 @@ def _render_cruceros_section(
                 break
         return html.Div(els)
 
-    ships_block = html.Div(
-        [
-            html.Div(
-                [
-                    html.Span(
-                        str(anio_prev),
-                        style={"fontSize": "0.62rem", "color": _C_MUTED, "fontWeight": "600"},
-                    ),
-                    _ship_list(anio_prev),
-                ],
-                style={"flex": "1"},
-            ),
-            html.Div(
-                [
-                    html.Span(
-                        str(anio_actual),
-                        style={"fontSize": "0.62rem", "color": _C_DARK, "fontWeight": "600"},
-                    ),
-                    _ship_list(anio_actual),
-                ],
-                style={"flex": "1"},
-            ),
-        ],
-        className="d-flex gap-3",
-    )
+    ships_block = _ship_list(anio_actual)
 
     leyenda = html.Div([tier_legend, ships_block], className="mb-1")
 

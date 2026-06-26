@@ -31,11 +31,11 @@ LOC_UUID = "demo-loc-madrid-0001"
 ZONE_UUID = "demo-zone-entrada-0001"
 
 ORG_NOMBRE = "Demo Retail ES"
-LOC_NOMBRE = "Demo Madrid Gran Vía (ficticia)"
+LOC_NOMBRE = "Demo Madrid La Vaguada (ficticia)"
 
-# Coordenadas reales de Gran Vía 48, Madrid
-LAT = 40.420797
-LON = -3.706425
+# Coordenadas C.C. La Vaguada, Madrid
+LAT = 40.4783
+LON = -3.7108
 
 N_DIAS = 90  # suficiente para 3 splits en el walk-forward
 
@@ -45,7 +45,7 @@ N_DIAS = 90  # suficiente para 3 splits en el walk-forward
 
 def _generar_visitas(hoy: date) -> list[tuple]:
     """
-    90 días de visitas diarias para una tienda de moda en Gran Vía.
+    90 días de visitas diarias para una tienda de moda en La Vaguada.
     Patrón semanal realista: pico viernes/sábado, valle domingo/lunes.
     """
     rng = random.Random(42)
@@ -151,8 +151,8 @@ def seed(conn) -> None:
             "ES",
             "MD",
             "ES",
-            "28013",
-            "Gran Vía 48, Madrid",
+            "28029",
+            "Av. Monforte de Lemos 36, Madrid",
             True,
         ],
     )
