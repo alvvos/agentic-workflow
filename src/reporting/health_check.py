@@ -3516,7 +3516,7 @@ def _render_cruceros_section(
                FROM store_features_ext e
                JOIN feature_flags f ON f.feature_key = e.feature_key
                  AND f.location_uuid = e.location_uuid AND f.status = 'active'
-               WHERE e.location_uuid = ? AND e.feature_key = 'n_pasajeros_crucero_dia'
+               WHERE e.location_uuid = ? AND e.feature_key = 'n_pasajeros_crucero_oficial'
                  AND e.value IS NOT NULL AND e.fecha >= ?
                ORDER BY e.fecha""",
             [location_uuid, str(desde_yoy.date() if hasattr(desde_yoy, "date") else desde_yoy)],
@@ -3851,15 +3851,12 @@ def _render_cruceros_section(
         [
             html.I(className="fas fa-circle-info me-1", style={"fontSize": "0.65rem"}),
             html.Span(
-                "Fuente: Puerto de Málaga · previsión contractual. "
-                "Los barras reflejan las escalas publicadas por el puerto en el momento "
-                "de la sincronización"
+                "Fuente: Puertos del Estado · estadística oficial mensual. "
                 + (
-                    ", no los pasajeros reales contabilizados al cierre del mes. "
-                    "Los meses futuros (más claros) muestran la previsión disponible hoy."
+                    "Los meses futuros (más claros) muestran la previsión contractual "
+                    "del Puerto de Málaga, disponible antes del cierre oficial."
                     if has_prev_tier
-                    else ". Los datos históricos pueden diferir de las estadísticas oficiales "
-                    "si la previsión se capturó antes de que el mes estuviera completo."
+                    else "Datos publicados con aprox. 4-6 semanas de retraso sobre el cierre del mes."
                 ),
             ),
         ],

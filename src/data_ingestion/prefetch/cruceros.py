@@ -34,7 +34,6 @@ _SOURCE = "cruceros"
 _MALAGA_LOCATION_UUID = "67034276-0d01-4c90-a363-fa75699a19a4"
 _MALAGA_ORG_UUID = "5c13b57d-782d-4458-911b-64cd40eebb55"
 _PAIS_CODIGO = "ES"
-_FEATURE_KEY = "n_pasajeros_crucero_dia"
 _AJAX_URL = "https://www.puertomalaga.com/wp-admin/admin-ajax.php"
 
 
@@ -112,8 +111,10 @@ def _parse_int(s: str) -> int | None:
 
 def ingestar_escalas(escalas: list[dict]) -> int:
     """
-    Inserta escalas en store_calendario_org y agrega el total diario en store_features_ext.
+    Inserta escalas en store_calendario_org.
     Idempotente. Devuelve el número de filas de calendario insertadas.
+    Los totales de pasajeros confirmados los escribe puertos_estado.py
+    desde las estadísticas oficiales de Puertos del Estado.
     """
     if not escalas:
         return 0
@@ -151,37 +152,6 @@ def ingestar_escalas(escalas: list[dict]) -> int:
                metadata = excluded.metadata""",
         cal_rows,
     )
-
-    # Reagrega totales diarios para los días afectados (evita acumulación en re-runs)
-    fechas = list({e["fecha"] for e in escalas})
-    ph = ",".join(["?"] * len(fechas))
-    totales = conn.execute(
-        f"""SELECT fecha_inicio::text,
-                   COALESCE(SUM(
-                       CASE WHEN (metadata->>'n_pasajeros') ~ '^[0-9]+$'
-                            THEN (metadata->>'n_pasajeros')::int ELSE 0 END
-                   ), 0)
-            FROM   store_calendario_org
-            WHERE  location_uuid = ?
-              AND  evento_key    = 'escala_crucero'
-              AND  fecha_inicio::text IN ({ph})
-            GROUP  BY fecha_inicio""",
-        [_MALAGA_LOCATION_UUID] + fechas,
-    ).fetchall()
-
-    # Solo fechas pasadas (<=hoy): n_pasajeros_crucero_dia representa llegadas reales,
-    # no previsiones. Las escalas futuras viven en store_calendario_org para el feed
-    # de eventos pero no contaminan el feature store con estimaciones.
-    hoy = str(date.today())
-    totales_confirmados = [(f, t) for f, t in totales if f <= hoy]
-    if totales_confirmados:
-        conn.executemany(
-            "INSERT INTO store_features_ext (fecha, location_uuid, feature_key, value) "
-            "VALUES (?,?,?,?) "
-            "ON CONFLICT (fecha, location_uuid, feature_key) "
-            "DO UPDATE SET value = excluded.value, ingested_at = NOW()",
-            [(f, _MALAGA_LOCATION_UUID, _FEATURE_KEY, float(t)) for f, t in totales_confirmados],
-        )
 
     return len(cal_rows)
 
@@ -222,30 +192,6 @@ def sync_months(
     return total
 
 
-# ── Cobertura ─────────────────────────────────────────────────────────────────
-
-
-def get_coverage(year: int | None = None) -> dict:
-    where = f"AND EXTRACT(YEAR FROM fecha::date)::int = {year}" if year else ""
-    row = (
-        get_conn()
-        .execute(
-            f"""SELECT COUNT(*), MIN(fecha), MAX(fecha), SUM(value), AVG(value)
-            FROM   store_features_ext
-            WHERE  location_uuid = ? AND feature_key = ? {where}""",
-            [_MALAGA_LOCATION_UUID, _FEATURE_KEY],
-        )
-        .fetchone()
-    )
-    return {
-        "n_dias": row[0] or 0,
-        "fecha_min": str(row[1]) if row[1] else None,
-        "fecha_max": str(row[2]) if row[2] else None,
-        "total_pasajeros": int(row[3] or 0),
-        "media_diaria": round(float(row[4] or 0), 0),
-    }
-
-
 # ── run() — interfaz estándar prefetch ───────────────────────────────────────
 
 
@@ -264,17 +210,13 @@ def run(
 
     try:
         today = date.today()
-        # Sync mes anterior, actual y siguiente (cubre histórico reciente + previsión)
+        # Sync mes anterior, actual y siguiente (previsión contractual del puerto)
         prev = (today.month - 1 or 12, today.year if today.month > 1 else today.year - 1)
         nxt = (today.month % 12 + 1, today.year if today.month < 12 else today.year + 1)
         n = sync_months(desde=prev, hasta=nxt)
         write_sync_marker(_MALAGA_LOCATION_UUID, _SOURCE)
         if verbose:
-            cov = get_coverage(year=today.year)
-            print(
-                f"  [cruceros] Málaga Muelle 1: {n} escalas  "
-                f'({cov["n_dias"]}d en DB, {cov["total_pasajeros"]} pax {today.year})'
-            )
+            print(f"  [cruceros] Málaga Muelle 1: {n} escalas en calendario")
         return {_MALAGA_LOCATION_UUID: n}
     except Exception as e:
         if verbose:

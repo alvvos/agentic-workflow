@@ -73,20 +73,11 @@ def _build_ingestores(hoy: date) -> dict[str, Callable]:
     """
     ingestores: dict[str, Callable] = {}
 
-    # ── Cruceros ──────────────────────────────────────────────────────────────
+    # ── Puertos del Estado — pasajeros crucero oficiales (mensual) ────────────
     try:
-        from src.data_ingestion.prefetch.cruceros import sync_months
+        from src.data_ingestion.prefetch.puertos_estado import sync as puertos_sync
 
-        def _cruceros_sync(jobs: list[SyncJob], fecha: date) -> int:
-            # jobs filtra las ubicaciones con cruceros activo (solo Málaga);
-            # sync_months ya sabe internamente a qué locations aplicar.
-            # Cubre enero del año anterior hasta diciembre del año actual para mantener
-            # frescos los meses futuros: el API del puerto publica previsión contractual
-            # que se completa progresivamente — sin refresco, los meses pasados lejanos
-            # conservan la previsión parcial del momento en que se sincronizaron por primera vez.
-            return sync_months(desde=(1, fecha.year - 1), hasta=(12, fecha.year))
-
-        ingestores["cruceros"] = _cruceros_sync
+        ingestores["puertos_estado"] = puertos_sync
     except ImportError:
         pass
 
@@ -110,6 +101,21 @@ def _ingestar_source(source: str, jobs: list[SyncJob], hoy: date) -> int:
     n = ingestores[source](jobs=jobs, fecha=hoy)
     logger.info("%-20s — %d fila(s) escritas (%d job(s))", source, n, len(jobs))
     return n
+
+
+@task(name="cruceros-calendario")
+def _cruceros_calendario(hoy: date) -> int:
+    """Refresca el calendario completo de escalas (ene año-anterior → dic año-actual)."""
+    logger = get_run_logger()
+    try:
+        from src.data_ingestion.prefetch.cruceros import sync_months
+
+        n = sync_months(desde=(1, hoy.year - 1), hasta=(12, hoy.year))
+        logger.info("cruceros-calendario — %d escalas", n)
+        return n
+    except Exception as exc:
+        logger.warning("cruceros-calendario FAIL — %s", exc)
+        return 0
 
 
 @task(name="geo-audit")
@@ -181,6 +187,9 @@ def sync_mensual_flow() -> int:
     except Exception as exc:
         logger.error("Loop mensual FAIL: %s", exc)
         errores += 1
+
+    # ── Calendario cruceros: refresco anual independiente del feature loop ────
+    _cruceros_calendario(hoy)
 
     # ── Geo/Esri: audit de snapshots ──────────────────────────────────────────
     _geo_audit()
