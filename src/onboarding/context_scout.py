@@ -28,15 +28,71 @@ log = logging.getLogger(__name__)
 
 _CATALOG: dict[str, list[dict]] = {
     "ES": [
+        # ── Señales directas (cuentan personas reales) ─────────────────────────
+        # Prioridad máxima: el dato mide presencia física de personas en o cerca
+        # de la isócrona. Sin cadenas de derivación estadística.
+        {
+            "feature_key_template": "aena_pasajeros_{aeropuerto_iata_snake}",
+            "source": "aena",
+            "categoria": "turismo",
+            "periodicidad": "mensual",
+            "descripcion": (
+                "Pasajeros de aeropuerto — AENA. Número total de pasajeros (llegadas + "
+                "salidas) en el aeropuerto que da servicio a la ciudad de la ubicación. "
+                "Ej. MAD para Madrid, AGP para Málaga, BCN para Barcelona. "
+                "Cuenta personas reales que llegan a la ciudad — proxy directo del "
+                "tráfico turístico y de visitantes que entran en el radio comercial."
+            ),
+            "url_referencia": "https://www.aena.es/es/corporativa/estadisticas.html",
+            "url_descarga": "https://www.aena.es/es/corporativa/estadisticas.html",
+            "granularidad": "aeropuerto (ciudad)",
+            "cobertura_desde": "2000-01",
+            "latencia_dias": 20,
+            "notas_tecnicas": (
+                "Publicado ~día 20 del mes siguiente. Descarga Excel desde portal AENA "
+                "estadísticas. Sin autenticación. Seleccionar aeropuerto por código IATA "
+                "que sirve a la ciudad de la ubicación. Solo incluir si la ciudad tiene "
+                "un aeropuerto con tráfico turístico significativo (>1M pax/año) y la "
+                "ubicación está en zona de influencia del flujo de visitantes."
+            ),
+        },
+        {
+            "feature_key_template": "ine_pernoctaciones_hoteleras_{provincia_snake}",
+            "source": "ine",
+            "categoria": "turismo",
+            "periodicidad": "mensual",
+            "descripcion": (
+                "Pernoctaciones hoteleras por provincia — INE Encuesta Ocupación Hotelera. "
+                "Número de noches que los viajeros pasan en hoteles de la provincia. "
+                "Cuenta noches reales de personas presentes en la provincia — proxy "
+                "directo del volumen de turistas activos que pueden visitar la tienda."
+            ),
+            "url_referencia": "https://www.ine.es/dyngs/IOE/es/operacion.htm?numinv=23692",
+            "url_descarga": "https://servicios.ine.es/wstempus/js/ES/DATOS_TABLA/2074?tip=AM",
+            "granularidad": "provincial",
+            "cobertura_desde": "1999-01",
+            "latencia_dias": 45,
+            "notas_tecnicas": (
+                "API INE sin autenticación. Solo relevante para provincias con peso "
+                "turístico significativo (costera, capital, Patrimonio UNESCO). "
+                "Usar pernoctaciones (no viajeros) — mide días de presencia efectiva. "
+                "Evaluar si la ubicación está en zona de influencia turística."
+            ),
+        },
+        # ── Señales de contexto económico (índices derivados) ─────────────────
+        # Incluir solo si no hay señal directa disponible para el mismo constructo
+        # y el mecanismo causal está muy documentado y es específico a la ubicación.
         {
             "feature_key_template": "ine_icm_minorista_{provincia_snake}",
             "source": "ine",
             "categoria": "macroeconomia",
             "periodicidad": "mensual",
             "descripcion": (
-                "Índice de Comercio Minorista — INE. Mide la evolución del volumen de "
-                "negocio del comercio al por menor a precios constantes. "
-                "Disponible por CCAA y provincia."
+                "Índice de Comercio Minorista — INE. Mide el volumen de negocio del "
+                "comercio al por menor a precios constantes. Disponible por provincia. "
+                "SEÑAL DERIVADA: mide actividad agregada de un sector, no afluencia "
+                "directa. Incluir solo si la tienda no está en zona turística (donde "
+                "pernoctaciones es más relevante) y el ICM provincial está disponible."
             ),
             "url_referencia": "https://www.ine.es/dyngs/IOE/es/operacion.htm?numinv=30250",
             "url_descarga": "https://servicios.ine.es/wstempus/js/ES/DATOS_TABLA/2688?tip=AM",
@@ -45,8 +101,9 @@ _CATALOG: dict[str, list[dict]] = {
             "latencia_dias": 45,
             "notas_tecnicas": (
                 "Publicado ~6 semanas después del mes de referencia. "
-                "Usar la serie IRA (índice ajustado estacionalmente) para eliminar "
-                "efecto calendario. Formato JSON via API INE sin autenticación."
+                "Usar la serie IRA (ajustada estacionalmente). API INE sin autenticación. "
+                "Descartar si ya se incluye pernoctaciones o pasajeros aeropuerto para "
+                "la misma ubicación — son más directas para ubicaciones turísticas."
             ),
         },
         {
@@ -55,8 +112,11 @@ _CATALOG: dict[str, list[dict]] = {
             "categoria": "laboral",
             "periodicidad": "mensual",
             "descripcion": (
-                "Paro registrado por municipio — SEPE. Número de personas desempleadas "
-                "inscritas en oficinas de empleo el último día hábil de cada mes."
+                "Paro registrado por municipio — SEPE. Personas desempleadas inscritas "
+                "en oficinas de empleo el último día hábil de cada mes. "
+                "SEÑAL DERIVADA: mide capacidad adquisitiva local, no presencia física. "
+                "Causal plausible solo en ubicaciones en zonas residenciales con afluencia "
+                "mayoritariamente de barrio (no centros comerciales ni zonas turísticas)."
             ),
             "url_referencia": "https://www.sepe.es/HomeSepe/que-es-el-sepe/estadisticas/datos-estadisticos/paro/datos-municipios.html",
             "url_descarga": "https://www.sepe.es/HomeSepe/que-es-el-sepe/estadisticas/datos-estadisticos/paro/datos-municipios.html",
@@ -64,48 +124,9 @@ _CATALOG: dict[str, list[dict]] = {
             "cobertura_desde": "2006-01",
             "latencia_dias": 10,
             "notas_tecnicas": (
-                "Disponible como Excel/CSV por municipio. Actualizado el día 10 de "
-                "cada mes. Dato absoluto — normalizar por población activa del municipio "
-                "para comparabilidad entre ubicaciones."
-            ),
-        },
-        {
-            "feature_key_template": "ine_ipc_ccaa_{ccaa_snake}",
-            "source": "ine",
-            "categoria": "macroeconomia",
-            "periodicidad": "mensual",
-            "descripcion": (
-                "IPC General por CCAA — INE. Variación del nivel de precios al consumo. "
-                "Proxy del poder adquisitivo regional."
-            ),
-            "url_referencia": "https://www.ine.es/dyngs/IOE/es/operacion.htm?numinv=30138",
-            "url_descarga": "https://servicios.ine.es/wstempus/js/ES/DATOS_TABLA/50902?tip=AM",
-            "granularidad": "ccaa",
-            "cobertura_desde": "2002-01",
-            "latencia_dias": 30,
-            "notas_tecnicas": (
-                "Disponible a nivel CCAA, no provincial. Usar como proxy regional. "
-                "Latencia ~30 días. API INE sin autenticación."
-            ),
-        },
-        {
-            "feature_key_template": "ine_turismo_hotelero_{provincia_snake}",
-            "source": "ine",
-            "categoria": "turismo",
-            "periodicidad": "mensual",
-            "descripcion": (
-                "Encuesta de Ocupación Hotelera — INE. Viajeros y pernoctaciones por "
-                "provincia y tipo de establecimiento."
-            ),
-            "url_referencia": "https://www.ine.es/dyngs/IOE/es/operacion.htm?numinv=23692",
-            "url_descarga": "https://servicios.ine.es/wstempus/js/ES/DATOS_TABLA/2074?tip=AM",
-            "granularidad": "provincial",
-            "cobertura_desde": "1999-01",
-            "latencia_dias": 45,
-            "notas_tecnicas": (
-                "Solo relevante para provincias con peso turístico significativo "
-                "(costera, capital, Patrimonio UNESCO). Evaluar si la ubicación "
-                "está en zona de influencia turística antes de incluir."
+                "Excel/CSV por municipio. Actualizado el día 10 de cada mes. "
+                "Descartar para zonas turísticas, grandes ejes comerciales o centros "
+                "comerciales donde la afluencia no depende del mercado laboral local."
             ),
         },
     ],
@@ -361,7 +382,21 @@ Incluye una fuente SOLO si cumple todos estos requisitos:
    en tu respuesta. Si dos fuentes miden lo mismo, elige la de mayor granularidad geográfica \
    o menor latencia.
 
+7. DIRECTITUD — CRITERIO DE DESEMPATE Y CALIDAD: Entre señales que pasan los criterios 1-6, \
+   prioriza siempre las que cuentan personas reales sobre las que construyen un índice derivado. \
+   Escala de directitud (de más a menos preferida):
+     A. MÁXIMA: cuenta personas físicas en o hacia la isócrona — pasajeros aeropuerto, \
+        pernoctaciones hoteleras, escalas de crucero, validaciones de metro.
+     B. ALTA: mide actividad observable directamente — ventas de taquilla, ocupación \
+        de aparcamiento, visitantes contados en atracción cercana.
+     C. MEDIA: índice sectorial con dato provincial/municipal (ICM, variación empleo local).
+     D. BAJA: índice macroeconómico nacional o agregado regional (IPC, PIB, confianza \
+        consumidor). Incluir solo si no existe nada más directo para el constructo.
+   Documenta el nivel (A/B/C/D) en el campo 'notas' de cada fuente seleccionada. \
+   No incluyas señales de nivel D si ya tienes al menos una señal de nivel A o B.
+
 SESGO CONSERVADOR: Ante la duda entre incluir y excluir, excluye. \
+3 señales de nivel A/B valen más que 8 índices de nivel C/D. \
 Documenta el motivo en 'fuentes_descartadas' para que el equipo pueda revisarlo.
 
 ━━━ FORMATO DE RESPUESTA ━━━

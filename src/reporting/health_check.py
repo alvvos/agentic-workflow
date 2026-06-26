@@ -12,6 +12,7 @@ Filosofía:
   • Gráficos que ilustran una conclusión, no que presentan datos brutos.
 """
 
+import calendar
 import json
 import re
 from datetime import date, timedelta
@@ -3505,7 +3506,7 @@ def _render_eventos_mensual_section(location_uuid: str, fecha_max) -> html.Div |
 def _render_cruceros_section(
     location_uuid: str, fecha_max, ventana: str = "semana"
 ) -> html.Div | None:
-    """12-month YoY passenger chart for cruise locations + % delta del período."""
+    """Continuous passenger timeline: confirmed past → current month → previsión future."""
     try:
         from src.db.store import get_conn
 
@@ -3529,56 +3530,46 @@ def _render_cruceros_section(
 
     _MESES_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
     color = "#1abc9c"
-    mes_hoy = date.today().month
+    today = date.today()
 
     df_y = pd.DataFrame(yoy_rows, columns=["fecha", "value"])
     df_y["fecha"] = pd.to_datetime(df_y["fecha"])
-    df_y["anio"] = df_y["fecha"].dt.year
-    df_y["mes_num"] = df_y["fecha"].dt.month
 
     anio_actual = fecha_max.year if hasattr(fecha_max, "year") else pd.Timestamp(fecha_max).year
     anio_prev = anio_actual - 1
 
-    if df_y[df_y["anio"] == anio_actual].empty:
+    if df_y[df_y["fecha"].dt.year == anio_actual].empty:
         return None
 
-    # Load ship metadata from the calendar store
-    cruise_meta: dict[int, list[dict]] = {}  # {anio: [{mes_num, barco, pax}]}
-    try:
-        from src.db.store import get_conn as _gc
+    # Aggregate daily data into monthly totals keyed as 'YYYY-MM'
+    pax_by_month: dict[str, float] = {}
+    for _, row in df_y.iterrows():
+        ym = row["fecha"].strftime("%Y-%m")
+        pax_by_month[ym] = pax_by_month.get(ym, 0) + (row["value"] or 0)
 
-        meta_rows = (
-            _gc()
-            .execute(
-                """SELECT fecha_inicio::text, metadata
+    # Ship metadata from calendar store (for annotation list)
+    cruise_meta: dict[str, list[dict]] = {}  # 'YYYY-MM' -> [{barco, pax}]
+    try:
+        meta_rows = conn.execute(
+            """SELECT fecha_inicio::text, metadata
                FROM store_calendario_org
                WHERE location_uuid = ? AND evento_key = 'escala_crucero'
                  AND fecha_inicio >= ?
                ORDER BY fecha_inicio""",
-                [location_uuid, str(desde_yoy.date() if hasattr(desde_yoy, "date") else desde_yoy)],
-            )
-            .fetchall()
-        )
+            [location_uuid, str(desde_yoy.date() if hasattr(desde_yoy, "date") else desde_yoy)],
+        ).fetchall()
         for fecha_str, meta in meta_rows:
             if not meta:
                 continue
             dt = pd.Timestamp(fecha_str)
-            yr = dt.year
-            mn = dt.month
+            ym = dt.strftime("%Y-%m")
             barco = (meta.get("barco") or "").strip()[:30]
             pax = meta.get("n_pasajeros") or meta.get("pasajeros") or 0
-            cruise_meta.setdefault(yr, []).append({"mes_num": mn, "barco": barco, "pax": int(pax)})
+            cruise_meta.setdefault(ym, []).append({"barco": barco, "pax": int(pax)})
     except Exception:
         pass
 
-    mes_pivot = df_y.groupby(["anio", "mes_num"])["value"].sum().reset_index()
-
-    def _gv(yr, m):
-        r = mes_pivot[(mes_pivot["anio"] == yr) & (mes_pivot["mes_num"] == m)]
-        return float(r["value"].iloc[0]) if not r.empty else None
-
-    # Previsión de escalas futuras (store_calendario_org) para el año actual
-    _mes_actual_num = date.today().month
+    # Previsión for future months in current year
     _fc_by_month: dict[int, float] = {}
     try:
         _fc_rows = conn.execute(
@@ -3598,147 +3589,112 @@ def _render_cruceros_section(
     except Exception:
         pass
 
-    y_act = [_gv(anio_actual, m) for m in range(1, 13)]
-    y_prev = [_gv(anio_prev, m) for m in range(1, 13)]
-    has_p = any(v for v in y_prev)
-
-    # Niveles de fiabilidad por mes (afecta color y texto):
-    #   'conf' — mes completo pasado, dato real
-    #   'prog' — mes en curso, acumulado parcial
-    #   'prev' — mes futuro, previsión del puerto
-    #   'miss' — sin datos ni previsión
-    def _tier(m: int) -> str:
-        if y_act[m - 1] and y_act[m - 1] > 0:
-            return "prog" if m >= _mes_actual_num else "conf"
-        return "prev" if m in _fc_by_month else "miss"
-
-    tiers = [_tier(m) for m in range(1, 13)]
-
-    # Inyectar valores de previsión en y_act para que el gráfico los muestre
-    for m in range(1, 13):
-        if tiers[m - 1] == "prev":
-            y_act[m - 1] = _fc_by_month[m]
-
-    missing = [t == "miss" for t in tiers]
-
-    max_act = max((v for v in y_act if v), default=1)
-    max_prev = max((v for v in y_prev if v), default=0) if has_p else 0
-    max_all = max(max_act, max_prev, 1)
-    ghost_h = max_all * 0.06
-    y_disp = [v if (v and not missing[i]) else ghost_h for i, v in enumerate(y_act)]
-    _C_CONF = _hex_rgba(color, 0.88)  # real — meses completos pasados
-    _C_PROG = _hex_rgba(color, 0.55)  # en curso — mes actual, parcial
-    _C_PREV = _hex_rgba(color, 0.25)  # previsión — meses futuros
-    _C_MISS = "rgba(224,224,224,0.55)"
+    _C_CONF = _hex_rgba(color, 0.88)
+    _C_PROG = _hex_rgba(color, 0.55)
+    _C_PREV = _hex_rgba(color, 0.25)
+    _C_MISS = "rgba(224,224,224,0.45)"
     _tier_color = {"conf": _C_CONF, "prog": _C_PROG, "prev": _C_PREV, "miss": _C_MISS}
-    bar_cols = [_tier_color[t] for t in tiers]
-    # % interanual por mes (cruceros)
-    cr_yoy_pcts = []
-    for i in range(12):
-        pa = y_prev[i]
-        ya = y_act[i]
-        if not missing[i] and pa and pa > 0 and ya:
-            cr_yoy_pcts.append((ya - pa) / pa * 100)
-        else:
-            cr_yoy_pcts.append(None)
 
-    bar_text = []
-    text_col = []
-    for i, v in enumerate(y_act):
-        tier = tiers[i]
+    # ── Build continuous month list: Jan(prev_year) → Dec(current_year) ──────────
+    x_months: list[pd.Timestamp] = []
+    y_vals: list[float] = []
+    tiers: list[str] = []
+
+    cur = date(anio_prev, 1, 1)
+    end = date(anio_actual, 12, 1)
+    while cur <= end:
+        ym = cur.strftime("%Y-%m")
+        last_day_num = calendar.monthrange(cur.year, cur.month)[1]
+        last_of_month = date(cur.year, cur.month, last_day_num)
+
+        if ym in pax_by_month and pax_by_month[ym] > 0:
+            v = pax_by_month[ym]
+            tier = "conf" if last_of_month < today else "prog"
+        elif cur > today.replace(day=1) and cur.year == anio_actual and cur.month in _fc_by_month:
+            v = _fc_by_month[cur.month]
+            tier = "prev"
+        else:
+            v = 0.0
+            tier = "miss"
+
+        x_months.append(pd.Timestamp(cur))
+        y_vals.append(v)
+        tiers.append(tier)
+
+        cur = date(cur.year, cur.month + 1, 1) if cur.month < 12 else date(cur.year + 1, 1, 1)
+
+    max_v = max((v for v in y_vals if v and v > 0), default=1)
+    ghost_h = max_v * 0.04
+
+    # Build display values, bar text and colors
+    y_disp: list[float] = []
+    bar_cols: list[str] = []
+    bar_text: list[str] = []
+    text_pos: list[str] = []
+    hover: list[str] = []
+
+    for i, (ts, v, tier) in enumerate(zip(x_months, y_vals, tiers)):
+        month_label = f"{_MESES_ES[ts.month - 1]} {ts.year}"
+        bar_cols.append(_tier_color[tier])
+
         if tier == "miss":
-            bar_text.append("Sin datos")
-            text_col.append("#aaaaaa")
+            y_disp.append(ghost_h)
+            bar_text.append("")
+            text_pos.append("inside")
+            hover.append(f"{month_label}: sin datos<extra></extra>")
             continue
-        val_str = f"<b>{int(v):,}</b>" if v >= 1 else f"<b>{v:.0f}</b>"
+
+        y_disp.append(v)
+        text_pos.append("outside")
+        hover.append(f"{month_label}: <b>{int(v):,}</b> pax<extra></extra>")
+
+        val_str = f"<b>{int(v):,}</b>"
+
         if tier == "prev":
-            bar_text.append(f"{val_str}<br><i>prev.</i>")
-            text_col.append(_C_MUTED)
+            bar_text.append(f"{val_str}<br><i style='font-size:7px'>prev.</i>")
             continue
-        pct = cr_yoy_pcts[i]
-        if pct is not None:
+
+        # YoY delta vs same month previous year
+        prev_ym = f"{ts.year - 1}-{ts.month:02d}"
+        prev_v = pax_by_month.get(prev_ym)
+        if prev_v and prev_v > 0:
+            pct = (v - prev_v) / prev_v * 100
             if abs(pct) < 0.5:
-                bar_text.append(f"{val_str}<br>={pct:+.1f}%")
-                text_col.append(_C_MUTED)
+                bar_text.append(val_str)
             elif pct > 0:
-                bar_text.append(f"{val_str}<br>▲{pct:+.1f}%")
-                text_col.append("#27ae60")
+                bar_text.append(f"{val_str}<br><span style='color:#27ae60'>▲{pct:+.1f}%</span>")
             else:
-                bar_text.append(f"{val_str}<br>▼{pct:+.1f}%")
-                text_col.append("#e74c3c")
+                bar_text.append(f"{val_str}<br><span style='color:#e74c3c'>▼{pct:+.1f}%</span>")
         else:
             bar_text.append(val_str)
-            text_col.append(_C_DARK)
-    text_pos = ["outside" if tier != "miss" else "inside" for tier in tiers]
 
-    prev_hover = [
-        (
-            f"{_MESES_ES[i]}: <b>{int(y_prev[i]):,}</b> pax<extra></extra>"
-            if y_prev[i]
-            else f"{_MESES_ES[i]}: sin datos<extra></extra>"
-        )
-        for i in range(12)
+    # X-axis tick labels: abbreviated month, show year only on January
+    ticktext = [
+        f"Ene<br><b>{ts.year}</b>" if ts.month == 1 else _MESES_ES[ts.month - 1] for ts in x_months
     ]
 
     fig = go.Figure()
-    if has_p:
-        y_prev_d = [v if v else 0.0 for v in y_prev]
-        fig.add_trace(
-            go.Bar(
-                x=_MESES_ES,
-                y=y_prev_d,
-                name=str(anio_prev),
-                marker=dict(
-                    color=_hex_rgba(color, 0.15), line=dict(color=color, width=1), cornerradius=5
-                ),
-                hovertemplate=prev_hover,
-                showlegend=False,
-            )
-        )
     fig.add_trace(
         go.Bar(
-            x=_MESES_ES,
+            x=x_months,
             y=y_disp,
-            name=str(anio_actual),
-            marker=dict(color=bar_cols, cornerradius=5),
+            marker=dict(color=bar_cols, cornerradius=4),
             text=bar_text,
             textposition=text_pos,
-            textfont=dict(size=9, color=text_col),
-            hovertemplate=[
-                (
-                    f"{_MESES_ES[i]}: <b>{int(y_act[i]):,}</b> pax<extra></extra>"
-                    if not missing[i]
-                    else f"{_MESES_ES[i]}: sin datos<extra></extra>"
-                )
-                for i in range(12)
-            ],
+            textfont=dict(size=8),
+            hovertemplate=hover,
             showlegend=False,
         )
     )
-    max_v = max_all or 1
-    fig.update_layout(
-        barmode="group",
-        height=220,
-        margin=dict(t=20, b=10, l=10, r=10),
-        plot_bgcolor="white",
-        paper_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(showgrid=False, tickfont=dict(size=10), fixedrange=True),
-        yaxis=dict(visible=False, fixedrange=True, range=[0, max_v * 1.60]),
-        showlegend=False,
-    )
-    _vline_x = _MESES_ES[mes_hoy - 1]
-    fig.add_shape(
-        type="line",
-        x0=_vline_x,
-        x1=_vline_x,
-        y0=0,
-        y1=1,
-        xref="x",
-        yref="paper",
+
+    # Vertical "hoy" line at start of current month
+    today_ts = pd.Timestamp(today.replace(day=1))
+    fig.add_vline(
+        x=today_ts.timestamp() * 1000,
         line=dict(color="rgba(0,82,204,0.45)", width=1.5, dash="dot"),
     )
     fig.add_annotation(
-        x=_vline_x,
+        x=today_ts,
         y=1.01,
         xref="x",
         yref="paper",
@@ -3748,7 +3704,23 @@ def _render_cruceros_section(
         font=dict(size=8, color="rgba(0,82,204,0.7)"),
     )
 
-    # % delta período
+    fig.update_layout(
+        height=230,
+        margin=dict(t=20, b=30, l=10, r=10),
+        plot_bgcolor="white",
+        paper_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(
+            showgrid=False,
+            tickvals=x_months,
+            ticktext=ticktext,
+            tickfont=dict(size=9),
+            fixedrange=True,
+        ),
+        yaxis=dict(visible=False, fixedrange=True, range=[0, max_v * 1.55]),
+        showlegend=False,
+    )
+
+    # ── KPI del período ────────────────────────────────────────────────────────
     kpi_el = html.Span()
     try:
         dias_v = 28 if ventana == "mes" else 7
@@ -3763,7 +3735,7 @@ def _render_cruceros_section(
             pct = (v_act - v_ant) / v_ant * 100
             if abs(pct) < 0.5:
                 kpi_el = html.Span(
-                    f"{val_txt} pax este {per_lbl} · = {pct:+.1f}%",
+                    f"{val_txt} pax este {per_lbl} · ={pct:+.1f}%",
                     style={"color": _C_MUTED, "fontSize": "0.76rem", "fontWeight": "600"},
                 )
             else:
@@ -3776,7 +3748,8 @@ def _render_cruceros_section(
     except Exception:
         pass
 
-    def dot(op, bdr=""):
+    # ── Leyenda: puntos de color + lista de barcos del año actual ─────────────
+    def _dot(op, bdr=""):
         return html.Span(
             style={
                 "display": "inline-block",
@@ -3786,86 +3759,92 @@ def _render_cruceros_section(
                 "opacity": op,
                 "flexShrink": 0,
                 "border": bdr,
-                "borderRadius": "1px",
+                "borderRadius": "2px",
                 "marginRight": "4px",
             }
         )
 
-    def _cruise_list_els(yr, text_color):
-        ships = sorted(cruise_meta.get(yr, []), key=lambda x: x["mes_num"])
-        seen = set()
-        els = []
-        for s in ships[:6]:
-            key = (s["barco"], s["mes_num"])
-            if key in seen or not s["barco"]:
+    tier_legend = html.Div(
+        [
+            html.Div(
+                [_dot("0.88"), html.Span("Real", style={"fontSize": "0.62rem", "color": _C_DARK})],
+                className="d-flex align-items-center gap-1",
+            ),
+            html.Div(
+                [
+                    _dot("0.55"),
+                    html.Span("En curso", style={"fontSize": "0.62rem", "color": _C_MUTED}),
+                ],
+                className="d-flex align-items-center gap-1",
+            ),
+            html.Div(
+                [
+                    _dot("0.25"),
+                    html.Span("Previsión", style={"fontSize": "0.62rem", "color": _C_MUTED}),
+                ],
+                className="d-flex align-items-center gap-1",
+            ),
+        ],
+        className="d-flex gap-3 mb-1",
+    )
+
+    # Current year ship list (up to 6, then "+N más")
+    ship_els: list = []
+    ym_current_year = [ts.strftime("%Y-%m") for ts in x_months if ts.year == anio_actual]
+    seen_ships: set = set()
+    for ym in ym_current_year:
+        for s in cruise_meta.get(ym, []):
+            key = (s["barco"], ym[:7])
+            if key in seen_ships or not s["barco"]:
                 continue
-            seen.add(key)
-            pax_txt = f"{s['pax']:,}".replace(",", ".") if s["pax"] else ""
-            parts = [
-                html.Span(
-                    _MESES_ES[s["mes_num"] - 1],
-                    style={
-                        "color": _C_MUTED,
-                        "fontSize": "0.60rem",
-                        "minWidth": "22px",
-                        "display": "inline-block",
-                    },
-                ),
-                html.Span(s["barco"], style={"fontSize": "0.62rem", "color": text_color}),
-            ]
-            if pax_txt:
-                parts.append(
-                    html.Span(f" · {pax_txt} pax", style={"fontSize": "0.59rem", "color": _C_MUTED})
+            seen_ships.add(key)
+            mes_label = _MESES_ES[int(ym[5:7]) - 1]
+            pax_txt = f" · {s['pax']:,} pax" if s["pax"] else ""
+            ship_els.append(
+                html.Div(
+                    [
+                        html.Span(
+                            mes_label,
+                            style={"color": _C_MUTED, "fontSize": "0.59rem", "minWidth": "22px"},
+                        ),
+                        html.Span(s["barco"], style={"fontSize": "0.61rem", "color": _C_DARK}),
+                        html.Span(pax_txt, style={"fontSize": "0.59rem", "color": _C_MUTED}),
+                    ],
+                    className="d-flex align-items-center gap-1",
                 )
-            els.append(html.Div(parts, className="d-flex align-items-center gap-1"))
-        remainder = len(set((s["barco"], s["mes_num"]) for s in ships if s["barco"])) - len(seen)
-        if remainder > 0:
-            els.append(
-                html.Span(f"+{remainder} más", style={"fontSize": "0.59rem", "color": _C_MUTED})
             )
-        return els
+            if len(ship_els) >= 6:
+                break
+        if len(ship_els) >= 6:
+            break
 
-    def _year_block(yr_label, dot_el, text_color):
-        header = html.Div(
-            [
-                dot_el,
-                html.Span(
-                    str(yr_label),
-                    style={"fontSize": "0.67rem", "color": text_color, "fontWeight": "600"},
-                ),
-            ],
-            className="d-flex align-items-center mb-1",
+    remainder = max(0, len(seen_ships) - 6)
+
+    ships_block = html.Div(
+        ship_els
+        + (
+            [html.Span(f"+{remainder} más", style={"fontSize": "0.59rem", "color": _C_MUTED})]
+            if remainder > 0
+            else []
         )
-        return html.Div(
-            [header] + _cruise_list_els(yr_label, text_color), style={"minWidth": "160px"}
-        )
+    )
 
-    legend_blocks = [_year_block(anio_actual, dot("0.88"), _C_DARK)]
-    if has_p and cruise_meta.get(anio_prev):
-        legend_blocks.append(_year_block(anio_prev, dot("0.2", f"1px solid {color}"), _C_MUTED))
-
-    leyenda = html.Div(legend_blocks, className="d-flex flex-wrap gap-4 mb-2")
+    leyenda = html.Div([tier_legend, ships_block], className="mb-1")
 
     has_prev_tier = any(t == "prev" for t in tiers)
     nota_fuente = html.Div(
         [
             html.I(className="fas fa-circle-info me-1", style={"fontSize": "0.65rem"}),
             html.Span(
-                "Fuente: Puertos del Estado · estadística oficial mensual. "
+                "Puertos del Estado · estadística oficial mensual"
                 + (
-                    "Los meses futuros (más claros) muestran la previsión contractual "
-                    "del Puerto de Málaga, disponible antes del cierre oficial."
+                    " · meses futuros: previsión contractual Puerto de Málaga."
                     if has_prev_tier
-                    else "Datos publicados con aprox. 4-6 semanas de retraso sobre el cierre del mes."
+                    else " · publicado con ~4-6 semanas de retraso."
                 ),
             ),
         ],
-        style={
-            "fontSize": "0.62rem",
-            "color": _C_MUTED,
-            "marginTop": "4px",
-            "lineHeight": "1.4",
-        },
+        style={"fontSize": "0.62rem", "color": _C_MUTED, "marginTop": "4px", "lineHeight": "1.4"},
     )
 
     return html.Div(
@@ -3889,7 +3868,7 @@ def _render_cruceros_section(
                 id=f"crucero-yoy-{location_uuid[:8]}",
                 figure=fig,
                 config=_CFG_GRAPH,
-                style={"height": "200px"},
+                style={"height": "230px"},
             ),
             nota_fuente,
         ],
