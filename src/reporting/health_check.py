@@ -2106,6 +2106,9 @@ _UNIVERSAL_KEYS = frozenset(
         "llueve",
         "temp_max",
         "temp_min",
+        # cruceros: tienen su propia sección dedicada en el panel
+        "n_pasajeros_crucero_dia",
+        "n_pasajeros_crucero_oficial",
     }
 )
 
@@ -3887,11 +3890,7 @@ def _render_senal_contexto_modal(
         df_ts["anio"] = df_ts["fecha"].dt.year
         df_ts["mes_num"] = df_ts["fecha"].dt.month
 
-        keys = [
-            k
-            for k in df_ts["feature_key"].unique()
-            if k not in _UNIVERSAL_KEYS and k != "n_pasajeros_crucero_dia"
-        ]
+        keys = [k for k in df_ts["feature_key"].unique() if k not in _UNIVERSAL_KEYS]
         metro_keys = sorted([k for k in keys if "metro" in k])
         other_keys = sorted([k for k in keys if k not in metro_keys])
 
