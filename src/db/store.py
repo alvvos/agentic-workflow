@@ -10,6 +10,7 @@ Usage
   conn = get_conn()                  # thread-local, autocommit=True
   conn = get_conn(read_only=False)   # read_only ignored (pool is shared)
 """
+
 import atexit
 import os
 import threading
@@ -17,8 +18,8 @@ from typing import Optional
 
 import pandas as pd
 import psycopg
-from psycopg_pool import ConnectionPool
 from dotenv import load_dotenv
+from psycopg_pool import ConnectionPool
 
 load_dotenv()
 
@@ -63,6 +64,7 @@ def _pool() -> ConnectionPool:
 
 # ── Query result wrapper ──────────────────────────────────────────────────────
 
+
 class _PgResult:
     """Wraps a psycopg cursor to expose fetchone / fetchall / df."""
 
@@ -85,6 +87,7 @@ class _PgResult:
 
 
 # ── Connection wrapper ────────────────────────────────────────────────────────
+
 
 def _norm_sql(sql: str) -> str:
     """Convert ? positional placeholders to psycopg %s.
@@ -129,6 +132,7 @@ class PgConn:
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
+
 
 def get_conn(read_only: bool = False) -> PgConn:  # noqa: ARG001  (read_only kept for API compat)
     """
@@ -413,23 +417,48 @@ _DDL: list[str] = [
     CREATE INDEX IF NOT EXISTS idx_feature_flags_loc
         ON feature_flags (location_uuid)
     """,
+    """
+    CREATE TABLE IF NOT EXISTS location_pois (
+        id               SERIAL           PRIMARY KEY,
+        org_uuid         TEXT             NOT NULL,
+        location_uuid    TEXT             NOT NULL,
+        nombre           TEXT             NOT NULL,
+        lat              DOUBLE PRECISION NOT NULL,
+        lon              DOUBLE PRECISION NOT NULL,
+        categoria        TEXT             NOT NULL,
+        valor_relativo   DOUBLE PRECISION DEFAULT 0.5,
+        detalle          TEXT,
+        radio_m          INTEGER,
+        isocrona_minutos INTEGER,
+        isocrona_geojson JSONB,
+        fuente           TEXT             DEFAULT 'manual',
+        activo           BOOLEAN          DEFAULT TRUE,
+        created_at       TIMESTAMP        DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (location_uuid, nombre, categoria)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_location_pois_loc
+        ON location_pois (location_uuid)
+        WHERE activo = TRUE
+    """,
 ]
 
 _FACT_VISITAS_COLS = [
-    ("total_visits",    "INTEGER"),
+    ("total_visits", "INTEGER"),
     ("unique_visitors", "INTEGER"),
-    ("new_visitors",    "INTEGER"),
-    ("uv_7d",           "DOUBLE PRECISION"),
-    ("uv_28d",          "DOUBLE PRECISION"),
-    ("uv_month",        "DOUBLE PRECISION"),
-    ("uv_year",         "DOUBLE PRECISION"),
-    ("freq_7d",         "DOUBLE PRECISION"),
-    ("freq_28d",        "DOUBLE PRECISION"),
-    ("freq_month",      "DOUBLE PRECISION"),
-    ("freq_year",       "DOUBLE PRECISION"),
-    ("dwell_time_min",  "DOUBLE PRECISION"),
-    ("dwell_hist",      "TEXT"),
-    ("hourly_visits",   "TEXT"),
+    ("new_visitors", "INTEGER"),
+    ("uv_7d", "DOUBLE PRECISION"),
+    ("uv_28d", "DOUBLE PRECISION"),
+    ("uv_month", "DOUBLE PRECISION"),
+    ("uv_year", "DOUBLE PRECISION"),
+    ("freq_7d", "DOUBLE PRECISION"),
+    ("freq_28d", "DOUBLE PRECISION"),
+    ("freq_month", "DOUBLE PRECISION"),
+    ("freq_year", "DOUBLE PRECISION"),
+    ("dwell_time_min", "DOUBLE PRECISION"),
+    ("dwell_hist", "TEXT"),
+    ("hourly_visits", "TEXT"),
 ]
 
 
@@ -445,6 +474,7 @@ def _apply_ddl(conn: PgConn) -> None:
     _migrate_feature_registry_fks(conn)
     _migrate_feature_flags_contexto(conn)
     _migrate_feature_flags_periodicidad(conn)
+    _migrate_location_pois(conn)
     _sync_users_from_json(conn)
 
 
@@ -452,15 +482,16 @@ def _sync_users_from_json(conn: PgConn) -> None:
     """Upsert users from users.json into dim_usuarios on every startup."""
     import json as _json
     from pathlib import Path as _Path
-    users_file = _Path(__file__).parent.parent.parent / 'users.json'
+
+    users_file = _Path(__file__).parent.parent.parent / "users.json"
     if not users_file.exists():
         return
     users = _json.loads(users_file.read_text())
     rows = []
     for username, entry in users.items():
         if isinstance(entry, str):
-            entry = {'password': entry, 'role': 'user'}
-        rows.append((username, entry.get('password', ''), entry.get('role', 'user')))
+            entry = {"password": entry, "role": "user"}
+        rows.append((username, entry.get("password", ""), entry.get("role", "user")))
     conn.executemany(
         "INSERT INTO dim_usuarios (user_id, password_hash, role) VALUES (?,?,?)"
         " ON CONFLICT (user_id) DO UPDATE SET password_hash = excluded.password_hash, role = excluded.role",
@@ -472,7 +503,9 @@ def _migrate_feature_registry(conn: PgConn) -> None:
     """Elimina wmape_delta de feature_registry, actualiza CHECK de status, añade fill_method."""
     conn.execute("ALTER TABLE feature_registry DROP COLUMN IF EXISTS wmape_delta")
     conn.execute("ALTER TABLE feature_registry DROP COLUMN IF EXISTS fill_method")
-    conn.execute("ALTER TABLE feature_registry DROP CONSTRAINT IF EXISTS feature_registry_status_check")
+    conn.execute(
+        "ALTER TABLE feature_registry DROP CONSTRAINT IF EXISTS feature_registry_status_check"
+    )
     # Primero sanear filas con status obsoleto (active/rejected), luego añadir constraint
     conn.execute(
         "UPDATE feature_registry SET status = 'con_cobertura' "
@@ -533,15 +566,11 @@ def _migrate_feature_flags(conn: PgConn) -> None:
     if has_col:
         conn.execute("ALTER TABLE feature_flags DROP COLUMN IF EXISTS zone_uuid")
         conn.execute("ALTER TABLE feature_flags DROP CONSTRAINT IF EXISTS uq_feature_flags")
-        conn.execute(
-            "ALTER TABLE feature_flags ADD PRIMARY KEY (feature_key, location_uuid)"
-        )
+        conn.execute("ALTER TABLE feature_flags ADD PRIMARY KEY (feature_key, location_uuid)")
 
 
 def _migrate_dim_ubicaciones(conn: PgConn) -> None:
-    conn.execute(
-        "ALTER TABLE dim_ubicaciones ADD COLUMN IF NOT EXISTS catchment_rings_json TEXT"
-    )
+    conn.execute("ALTER TABLE dim_ubicaciones ADD COLUMN IF NOT EXISTS catchment_rings_json TEXT")
 
 
 def _migrate_fk_constraints(conn: PgConn) -> None:
@@ -549,25 +578,95 @@ def _migrate_fk_constraints(conn: PgConn) -> None:
     # (table, constraint_name, fk_col, ref_table, ref_col, on_delete_action)
     fks = [
         # jerarquía principal
-        ("dim_ubicaciones",    "fk_ubi_org",       "org_uuid",         "dim_organizaciones", "org_uuid",   "CASCADE"),
-        ("dim_zonas",          "fk_zonas_loc",     "location_uuid",    "dim_ubicaciones",    "location_uuid","CASCADE"),
-        ("dim_zonas",          "fk_zona_parent",   "parent_zone_uuid", "dim_zonas",          "zone_uuid",  "SET NULL"),
+        ("dim_ubicaciones", "fk_ubi_org", "org_uuid", "dim_organizaciones", "org_uuid", "CASCADE"),
+        (
+            "dim_zonas",
+            "fk_zonas_loc",
+            "location_uuid",
+            "dim_ubicaciones",
+            "location_uuid",
+            "CASCADE",
+        ),
+        ("dim_zonas", "fk_zona_parent", "parent_zone_uuid", "dim_zonas", "zone_uuid", "SET NULL"),
         # datos de visitas y features
-        ("fact_visitas",       "fk_fact_loc",      "location_uuid",    "dim_ubicaciones",    "location_uuid","CASCADE"),
-        ("store_geo_snapshots","fk_geo_loc",       "location_uuid",    "dim_ubicaciones",    "location_uuid","CASCADE"),
-        ("store_features_ext", "fk_feat_ext_loc",  "location_uuid",    "dim_ubicaciones",    "location_uuid","CASCADE"),
+        (
+            "fact_visitas",
+            "fk_fact_loc",
+            "location_uuid",
+            "dim_ubicaciones",
+            "location_uuid",
+            "CASCADE",
+        ),
+        (
+            "store_geo_snapshots",
+            "fk_geo_loc",
+            "location_uuid",
+            "dim_ubicaciones",
+            "location_uuid",
+            "CASCADE",
+        ),
+        (
+            "store_features_ext",
+            "fk_feat_ext_loc",
+            "location_uuid",
+            "dim_ubicaciones",
+            "location_uuid",
+            "CASCADE",
+        ),
         # calendario (nullable: solo afecta filas con valor)
-        ("store_calendario_org","fk_cal_org",      "org_uuid",         "dim_organizaciones", "org_uuid",   "CASCADE"),
-        ("store_calendario_org","fk_cal_loc",      "location_uuid",    "dim_ubicaciones",    "location_uuid","CASCADE"),
+        (
+            "store_calendario_org",
+            "fk_cal_org",
+            "org_uuid",
+            "dim_organizaciones",
+            "org_uuid",
+            "CASCADE",
+        ),
+        (
+            "store_calendario_org",
+            "fk_cal_loc",
+            "location_uuid",
+            "dim_ubicaciones",
+            "location_uuid",
+            "CASCADE",
+        ),
         # modelos ML
-        ("model_registry",     "fk_model_loc",     "location_uuid",    "dim_ubicaciones",    "location_uuid","CASCADE"),
-        ("model_registry",     "fk_model_zone",    "zone_uuid",        "dim_zonas",          "zone_uuid",  "CASCADE"),
+        (
+            "model_registry",
+            "fk_model_loc",
+            "location_uuid",
+            "dim_ubicaciones",
+            "location_uuid",
+            "CASCADE",
+        ),
+        ("model_registry", "fk_model_zone", "zone_uuid", "dim_zonas", "zone_uuid", "CASCADE"),
         # chatbot
-        ("chat_conversaciones","fk_conv_user",     "user_id",          "dim_usuarios",       "user_id",    "CASCADE"),
-        ("chat_conversaciones","fk_conv_loc",      "location_uuid",    "dim_ubicaciones",    "location_uuid","CASCADE"),
-        ("chat_mensajes",      "fk_mensajes_conv", "conv_id",          "chat_conversaciones","conv_id",    "CASCADE"),
+        ("chat_conversaciones", "fk_conv_user", "user_id", "dim_usuarios", "user_id", "CASCADE"),
+        (
+            "chat_conversaciones",
+            "fk_conv_loc",
+            "location_uuid",
+            "dim_ubicaciones",
+            "location_uuid",
+            "CASCADE",
+        ),
+        (
+            "chat_mensajes",
+            "fk_mensajes_conv",
+            "conv_id",
+            "chat_conversaciones",
+            "conv_id",
+            "CASCADE",
+        ),
         # caché de respuestas (nullable)
-        ("cache_responses",    "fk_cache_loc",     "location_uuid",    "dim_ubicaciones",    "location_uuid","CASCADE"),
+        (
+            "cache_responses",
+            "fk_cache_loc",
+            "location_uuid",
+            "dim_ubicaciones",
+            "location_uuid",
+            "CASCADE",
+        ),
     ]
     for table, cname, fk_col, ref_table, ref_col, action in fks:
         exists = conn.execute(
@@ -586,9 +685,21 @@ def _migrate_fk_constraints(conn: PgConn) -> None:
 def _migrate_feature_registry_fks(conn: PgConn) -> None:
     """feature_registry es la fuente de verdad: borrar una feature la elimina de todas las tablas."""
     fks = [
-        ("feature_flags",        "fk_flags_registry",    "feature_key", "feature_registry", "feature_key"),
-        ("feature_eval_results", "fk_eval_registry",     "feature_key", "feature_registry", "feature_key"),
-        ("store_features_ext",   "fk_feat_ext_registry", "feature_key", "feature_registry", "feature_key"),
+        ("feature_flags", "fk_flags_registry", "feature_key", "feature_registry", "feature_key"),
+        (
+            "feature_eval_results",
+            "fk_eval_registry",
+            "feature_key",
+            "feature_registry",
+            "feature_key",
+        ),
+        (
+            "store_features_ext",
+            "fk_feat_ext_registry",
+            "feature_key",
+            "feature_registry",
+            "feature_key",
+        ),
     ]
     for table, cname, fk_col, ref_table, ref_col in fks:
         exists = conn.execute(
@@ -606,9 +717,145 @@ def _migrate_feature_registry_fks(conn: PgConn) -> None:
 
 def _migrate_dim_zonas(conn: PgConn) -> None:
     conn.execute("ALTER TABLE dim_zonas ADD COLUMN IF NOT EXISTS zone_type TEXT DEFAULT ''")
-    conn.execute("ALTER TABLE dim_zonas ADD COLUMN IF NOT EXISTS parent_zone_uuid TEXT DEFAULT NULL")
+    conn.execute(
+        "ALTER TABLE dim_zonas ADD COLUMN IF NOT EXISTS parent_zone_uuid TEXT DEFAULT NULL"
+    )
     conn.execute("ALTER TABLE dim_zonas ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0")
     conn.execute("ALTER TABLE dim_zonas ADD COLUMN IF NOT EXISTS last_zone BOOLEAN DEFAULT FALSE")
+
+
+def _migrate_location_pois(conn: PgConn) -> None:
+    """Siembra los POIs de Gran Vía si la tabla está vacía para esa ubicación."""
+    _GV_UUID = "faf7d203-342e-44c6-96e3-1ed64d8252c3"
+    already = conn.execute(
+        "SELECT 1 FROM location_pois WHERE location_uuid = ? LIMIT 1", [_GV_UUID]
+    ).fetchone()
+    if already:
+        return
+    org_row = conn.execute(
+        "SELECT org_uuid FROM dim_ubicaciones WHERE location_uuid = ?", [_GV_UUID]
+    ).fetchone()
+    if not org_row:
+        return
+    org_uuid = org_row[0]
+    _SEED = [
+        (
+            _GV_UUID,
+            org_uuid,
+            "Gran Vía · L1 / L5",
+            40.4193,
+            -3.7014,
+            "metro",
+            1.0,
+            "~32 000 validaciones/día · 3 min a pie",
+            None,
+            None,
+        ),
+        (
+            _GV_UUID,
+            org_uuid,
+            "Callao · L3 / L5",
+            40.4207,
+            -3.7077,
+            "metro",
+            0.75,
+            "~24 000 validaciones/día · 5 min a pie",
+            None,
+            None,
+        ),
+        (
+            _GV_UUID,
+            org_uuid,
+            "Sol · L1 / L2 / L3",
+            40.4168,
+            -3.7026,
+            "metro",
+            0.95,
+            "~60 000 validaciones/día · nodo central · 8 min a pie",
+            None,
+            None,
+        ),
+        (
+            _GV_UUID,
+            org_uuid,
+            "Santo Domingo · L2",
+            40.4194,
+            -3.7110,
+            "metro",
+            0.35,
+            "~8 000 validaciones/día · 7 min a pie",
+            None,
+            None,
+        ),
+        (
+            _GV_UUID,
+            org_uuid,
+            "Puerta del Sol",
+            40.4168,
+            -3.7038,
+            "tourist_poi",
+            1.0,
+            "~25 000 turistas/día · km 0 de España",
+            None,
+            None,
+        ),
+        (
+            _GV_UUID,
+            org_uuid,
+            "Plaza Mayor",
+            40.4155,
+            -3.7074,
+            "tourist_poi",
+            0.9,
+            "~18 000 visitas/día · epicentro turístico",
+            None,
+            None,
+        ),
+        (
+            _GV_UUID,
+            org_uuid,
+            "Mercado de San Miguel",
+            40.4152,
+            -3.7088,
+            "tourist_poi",
+            0.55,
+            "~7 000 visitas/día · mercado gastronómico",
+            None,
+            None,
+        ),
+        (
+            _GV_UUID,
+            org_uuid,
+            "Teatro Real",
+            40.4231,
+            -3.7086,
+            "event_venue",
+            0.8,
+            "Ópera y conciertos · hasta 1 746 asientos",
+            None,
+            None,
+        ),
+        (
+            _GV_UUID,
+            org_uuid,
+            "Cines Callao",
+            40.4217,
+            -3.7059,
+            "event_venue",
+            0.6,
+            "Estrenos y premieres · Plaza de Callao",
+            None,
+            None,
+        ),
+    ]
+    conn.executemany(
+        "INSERT INTO location_pois "
+        "(location_uuid, org_uuid, nombre, lat, lon, categoria, valor_relativo, detalle, "
+        " radio_m, isocrona_minutos) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?) "
+        "ON CONFLICT (location_uuid, nombre, categoria) DO NOTHING",
+        _SEED,
+    )
 
 
 def _migrate_fact_visitas(conn: PgConn) -> None:
@@ -621,6 +868,4 @@ def _migrate_fact_visitas(conn: PgConn) -> None:
     }
     for col, dtype in _FACT_VISITAS_COLS:
         if col not in existing:
-            conn.execute(
-                f"ALTER TABLE fact_visitas ADD COLUMN IF NOT EXISTS {col} {dtype}"
-            )
+            conn.execute(f"ALTER TABLE fact_visitas ADD COLUMN IF NOT EXISTS {col} {dtype}")

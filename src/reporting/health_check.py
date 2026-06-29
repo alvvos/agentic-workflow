@@ -27,7 +27,7 @@ from dash import dcc, html
 from src.core import data_master as _dm
 from src.data_processing.data_radar import obtener_clima_historico, obtener_info_ubicacion
 from src.data_processing.geo_enrichment import get_geo_snapshot_date, get_geo_vals
-from src.reporting.geo_panel import generar_panel_geo_visual
+from src.reporting.geo_panel import generar_mapa_contexto, generar_panel_geo_visual
 
 festivos_espana = holidays.ES(years=[2024, 2025, 2026])
 dias_semana_es = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
@@ -4401,6 +4401,7 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
         html.P("Sin datos de contexto externo disponibles.", className="text-muted")
     )
 
+    mapa_contexto = generar_mapa_contexto(location_uuid, geo_vals_loc) if location_uuid else None
     sec_geo = (
         generar_panel_geo_visual(location_uuid, geo_vals_loc, clima, fecha_captura=fecha_captura)
         if location_uuid
@@ -4456,6 +4457,7 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
             pdf_header,
             header,
             narrativa,
+            mapa_contexto or html.Div(),
             acordeon,
         ]
     )

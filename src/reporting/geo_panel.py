@@ -1674,6 +1674,30 @@ def _flow_vectors(lat0, lon0, pois, n_rows=9, n_cols=11, arrow_len_m=75):
     return all_lats, all_lons
 
 
+def _get_pois(uuid: str) -> list[dict]:
+    """Lee POIs desde DB y los adapta al formato de _fig_mapa (label/valor)."""
+    try:
+        from src.db.queries import get_pois_for_location
+
+        rows = get_pois_for_location(uuid)
+        if rows:
+            return [
+                {
+                    "lat": r["lat"],
+                    "lon": r["lon"],
+                    "label": r["nombre"],
+                    "categoria": r["categoria"],
+                    "valor": r["valor_relativo"] if r["valor_relativo"] is not None else 0.5,
+                    "detalle": r["detalle"] or "",
+                    "sonar": r["categoria"] == "tourist_poi",
+                }
+                for r in rows
+            ]
+    except Exception:
+        pass
+    return _SPATIAL_CONTEXT.get(uuid, [])
+
+
 def _fig_mapa(vals, lat, lon, uuid):
     if lat is None or lon is None:
         return None
@@ -1733,8 +1757,8 @@ def _fig_mapa(vals, lat, lon, uuid):
             )
         )
 
-    # Contexto espacial externo — POIs agrupados por categoría con efecto sonar
-    spatial_pois = _SPATIAL_CONTEXT.get(uuid, [])
+    # Contexto espacial externo — POIs desde DB (fallback a hardcoded)
+    spatial_pois = _get_pois(uuid)
     if spatial_pois:
         from itertools import groupby
         from operator import itemgetter
@@ -2307,4 +2331,71 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
             seccion_c,
             seccion_d,
         ]
+    )
+
+
+# ── Mapa standalone (visible sin abrir acordeón) ──────────────────────────────
+
+
+def generar_mapa_contexto(location_uuid: str, vals: dict) -> html.Div | None:
+    """
+    Devuelve una tarjeta compacta con el mapa de isócronas + POIs para renderizar
+    directamente en el panel (sin acordeón).  Retorna None si no hay coordenadas.
+    """
+    nombre, lat, lon = _info_ubicacion(location_uuid)
+    if lat is None or lon is None:
+        return None
+
+    activos = {k: v for k, v in vals.items() if v is not None}
+    fig = _fig_mapa(activos, lat, lon, location_uuid)
+    if fig is None:
+        return None
+
+    catchment = get_catchment_rings(location_uuid)
+    leyenda_rings = []
+    if catchment:
+        leyenda_rings = [
+            html.Span(
+                [
+                    html.Span(
+                        style={
+                            "display": "inline-block",
+                            "width": "10px",
+                            "height": "10px",
+                            "borderRadius": "2px",
+                            "backgroundColor": c,
+                            "marginRight": "4px",
+                        }
+                    ),
+                    html.Span(label, className="text-muted small me-3"),
+                ]
+            )
+            for c, label in [
+                ("#28A745", "0–5 min"),
+                ("#f39c12", "0–10 min"),
+                ("#0052CC", "0–15 min"),
+            ]
+        ]
+
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.I(className="fas fa-map-marked-alt me-2 text-primary"),
+                    html.Span("Contexto espacial", className="fw-bold small text-uppercase"),
+                    html.Span(
+                        " · " + nombre if nombre else "",
+                        className="text-muted small ms-1",
+                    ),
+                    html.Div(leyenda_rings, className="ms-auto d-flex align-items-center"),
+                ],
+                className="d-flex align-items-center px-3 py-2 border-bottom bg-white",
+            ),
+            dcc.Graph(
+                figure=fig,
+                config={"displayModeBar": False, "scrollZoom": True},
+                style={"height": "340px"},
+            ),
+        ],
+        className="border-0 shadow-sm rounded-4 overflow-hidden mb-3 bg-white",
     )
