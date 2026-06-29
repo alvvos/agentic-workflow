@@ -7,7 +7,6 @@ import src.callbacks.filtros  # noqa: F401
 import src.callbacks.pipeline_callbacks  # noqa: F401
 import src.callbacks.sync  # noqa: F401
 import src.core.auth  # noqa: F401 — registers /login, /logout, before_request
-import src.core.pdf_endpoint  # noqa: F401 — registers /api/html-to-pdf
 from src.core.config import app, server  # noqa: F401
 from src.layout.main_layout import serve_layout
 
