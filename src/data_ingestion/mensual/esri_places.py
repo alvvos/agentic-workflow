@@ -8,12 +8,20 @@ Créditos:  ~1 crédito ArcGIS por cada 5 places devueltos.
 Radio de búsqueda: 1 200 m (≈ isócrona peatonal 15 min) por defecto.
 Configurable en location_source_config (source = 'esri_places').
 
-Categorías buscadas por defecto (taxonomy ArcGIS Places v1):
-  19044  Transit Station   → metro / subway / bus station
-  19045  Train Station     → estaciones de cercanías / AVE
-  16036  Tourist Attraction → monumentos, museos, landmarks
-  10000  Arts & Entertainment → teatros, salas de concierto, cines
-  17060  Clothing Store    → competidores directos (moda/textil)
+Categorías buscadas por defecto (taxonomy Foursquare / ArcGIS Places v1):
+  4bf58dd8d48988d1fd931735  Metro Station
+  4bf58dd8d48988d129951735  Rail Station
+  4bf58dd8d48988d12d941735  Monument / Landmark
+  4deefb944765f83613cdba6e  Historic Site
+  4bf58dd8d48988d181941735  Museum
+  4bf58dd8d48988d137941735  Theater
+  5032792091d4c4b30a586d5c  Concert Hall
+  4bf58dd8d48988d103951735  Clothing Store
+  4bf58dd8d48988d1f6941735  Department Store
+  63be6904847c3692a84b9bec  Fashion Retail (parent category)
+
+LÍMITE: la API acepta máximo 10 categoryIds por llamada. Si se configuran
+más de 10, se hacen varias llamadas y se deduplican los resultados por nombre.
 
 Para descubrir el árbol completo de categorías:
   GET https://places-api.arcgis.com/arcgis/rest/services/places-service/v1/categories?token={key}
@@ -84,20 +92,20 @@ _TIMEOUT = 30
 _DEFAULT_RADIO_M = 1200
 _DEFAULT_PAGE_SIZE = 20  # máximo permitido por la API
 
-# Taxonomía ArcGIS Places v1
-# Referencia: https://developers.arcgis.com/rest/places/categories/
+# Taxonomía Foursquare / ArcGIS Places v1 (IDs verificados en llamada real, 2026-06)
 _DEFAULT_CATEGORIES: dict[str, tuple[str, str]] = {
-    "19044": ("metro", "Transit Station"),
-    "19045": ("metro", "Train Station"),
-    "16036": ("tourist_poi", "Tourist Attraction"),
-    "16003": ("tourist_poi", "Museum"),
-    "16005": ("tourist_poi", "Historic Site"),
-    "10000": ("event_venue", "Arts and Entertainment"),
-    "10041": ("event_venue", "Concert Hall"),
-    "10002": ("event_venue", "Movie Theater"),
-    "17060": ("competitor", "Clothing Store"),
-    "17069": ("competitor", "Department Store"),
+    "4bf58dd8d48988d1fd931735": ("metro", "Metro Station"),
+    "4bf58dd8d48988d129951735": ("metro", "Rail Station"),
+    "4bf58dd8d48988d12d941735": ("tourist_poi", "Monument / Landmark"),
+    "4deefb944765f83613cdba6e": ("tourist_poi", "Historic Site"),
+    "4bf58dd8d48988d181941735": ("tourist_poi", "Museum"),
+    "4bf58dd8d48988d137941735": ("event_venue", "Theater"),
+    "5032792091d4c4b30a586d5c": ("event_venue", "Concert Hall"),
+    "4bf58dd8d48988d103951735": ("competitor", "Clothing Store"),
+    "4bf58dd8d48988d1f6941735": ("competitor", "Department Store"),
+    "63be6904847c3692a84b9bec": ("competitor", "Fashion Retail"),
 }
+_MAX_CATEGORY_IDS_PER_CALL = 10
 
 # Relevancia por categoría (0-1)
 _DEFAULT_VALOR: dict[str, float] = {
@@ -182,15 +190,15 @@ def _call_places_near_point(
         return json.loads(resp.read())
 
 
-def _fetch_all_places(
+def _fetch_page_batch(
     lat: float,
     lon: float,
     radio_m: int,
     category_ids: list[str],
     token: str,
-    max_resultados: int = 200,
+    max_resultados: int,
 ) -> list[dict]:
-    """Itera páginas hasta agotar resultados o alcanzar max_resultados."""
+    """Itera páginas para un lote de ≤10 categoryIds."""
     results = []
     page_token = None
     while len(results) < max_resultados:
@@ -209,14 +217,43 @@ def _fetch_all_places(
         next_url = pagination.get("nextUrl")
         if not next_url or not batch:
             break
-        # extraer pageToken del nextUrl
         parsed = urllib.parse.urlparse(next_url)
         qs = urllib.parse.parse_qs(parsed.query)
         page_token = qs.get("pageToken", [None])[0]
         if not page_token:
             break
 
-    return results[:max_resultados]
+    return results
+
+
+def _fetch_all_places(
+    lat: float,
+    lon: float,
+    radio_m: int,
+    category_ids: list[str],
+    token: str,
+    max_resultados: int = 200,
+) -> list[dict]:
+    """Divide en lotes de 10 (límite API) y deduplica por placeId."""
+    seen: set[str] = set()
+    results: list[dict] = []
+
+    batches = [
+        category_ids[i : i + _MAX_CATEGORY_IDS_PER_CALL]
+        for i in range(0, len(category_ids), _MAX_CATEGORY_IDS_PER_CALL)
+    ]
+    for batch in batches:
+        for place in _fetch_page_batch(lat, lon, radio_m, batch, token, max_resultados):
+            pid = place.get("placeId", "")
+            if pid and pid in seen:
+                continue
+            if pid:
+                seen.add(pid)
+            results.append(place)
+            if len(results) >= max_resultados:
+                return results
+
+    return results
 
 
 # ── Escritura en location_pois ────────────────────────────────────────────────

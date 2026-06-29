@@ -442,6 +442,20 @@ _DDL: list[str] = [
         ON location_pois (location_uuid)
         WHERE activo = TRUE
     """,
+    """
+    CREATE TABLE IF NOT EXISTS location_source_config (
+        id            SERIAL    PRIMARY KEY,
+        location_uuid TEXT      NOT NULL,
+        source        TEXT      NOT NULL,
+        params        JSONB     NOT NULL DEFAULT '{}',
+        activo        BOOLEAN   NOT NULL DEFAULT TRUE,
+        created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (location_uuid, source)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_lsc_source ON location_source_config (source) WHERE activo = TRUE
+    """,
 ]
 
 _FACT_VISITAS_COLS = [
@@ -475,6 +489,7 @@ def _apply_ddl(conn: PgConn) -> None:
     _migrate_feature_flags_contexto(conn)
     _migrate_feature_flags_periodicidad(conn)
     _migrate_location_pois(conn)
+    _migrate_location_source_config(conn)
     _sync_users_from_json(conn)
 
 
@@ -722,6 +737,44 @@ def _migrate_dim_zonas(conn: PgConn) -> None:
     )
     conn.execute("ALTER TABLE dim_zonas ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0")
     conn.execute("ALTER TABLE dim_zonas ADD COLUMN IF NOT EXISTS last_zone BOOLEAN DEFAULT FALSE")
+
+
+def _migrate_location_source_config(conn: PgConn) -> None:
+    """Siembra config por defecto para Gran Vía (esri_places, metro_madrid, ine_eoh)."""
+    import json as _json
+
+    _GV_UUID = "faf7d203-342e-44c6-96e3-1ed64d8252c3"
+
+    _ROWS = [
+        (
+            _GV_UUID,
+            "esri_places",
+            _json.dumps({"radio_m": 1200, "max_resultados": 200}),
+        ),
+        (
+            _GV_UUID,
+            "metro_madrid",
+            _json.dumps(
+                {
+                    "estaciones": [
+                        {"nombre": "Gran Vía", "slug": "gran_via"},
+                        {"nombre": "Callao", "slug": "callao"},
+                        {"nombre": "Sol", "slug": "sol"},
+                    ]
+                }
+            ),
+        ),
+        (
+            _GV_UUID,
+            "ine_eoh",
+            _json.dumps({"provincia_nombre": "Madrid", "tabla_viajeros": 2078}),
+        ),
+    ]
+    conn.executemany(
+        "INSERT INTO location_source_config (location_uuid, source, params) VALUES (?,?,?) "
+        "ON CONFLICT (location_uuid, source) DO NOTHING",
+        _ROWS,
+    )
 
 
 def _migrate_location_pois(conn: PgConn) -> None:
