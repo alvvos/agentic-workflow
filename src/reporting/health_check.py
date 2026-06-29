@@ -4452,12 +4452,23 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
         className="pm-acordeon shadow-sm rounded-4",
     )
 
+    cuerpo_superior = (
+        dbc.Row(
+            [
+                dbc.Col(narrativa, xs=12, lg=6, className="mb-3 mb-lg-0"),
+                dbc.Col(mapa_contexto, xs=12, lg=6),
+            ],
+            className="mb-3 align-items-start",
+        )
+        if mapa_contexto
+        else html.Div([narrativa], className="mb-3")
+    )
+
     return html.Div(
         [
             pdf_header,
             header,
-            narrativa,
-            mapa_contexto or html.Div(),
+            cuerpo_superior,
             acordeon,
         ]
     )
