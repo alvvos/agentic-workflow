@@ -2,6 +2,7 @@
 Historial persistente de conversaciones por usuario.
 Tablas: chat_conversaciones, chat_mensajes
 """
+
 import json
 import logging
 import re as _re
@@ -14,9 +15,7 @@ from src.db.store import get_conn
 
 MAX_CONVS = 50
 _log = logging.getLogger(__name__)
-_UUID_PAT = _re.compile(
-    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', _re.I
-)
+_UUID_PAT = _re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", _re.I)
 
 
 def _safe_uuid(val) -> Optional[str]:
@@ -89,8 +88,11 @@ def update_conversation(
         new_title = row[0] if row else "Nueva conversación"
         if new_title == "Nueva conversación":
             first_user = next(
-                (m["content"] for m in (messages or [])
-                 if m.get("role") == "user" and isinstance(m.get("content"), str)),
+                (
+                    m["content"]
+                    for m in (messages or [])
+                    if m.get("role") == "user" and isinstance(m.get("content"), str)
+                ),
                 None,
             )
             if first_user:
@@ -115,10 +117,11 @@ def update_conversation(
         conn.execute("DELETE FROM chat_mensajes WHERE conv_id = ?", [conv_id])
         if messages:
             conn.executemany(
-                "INSERT INTO chat_mensajes (conv_id, seq, role, content)"
-                " VALUES (?, ?, ?, ?)",
-                [(conv_id, i, m.get("role", "user"), _serialize(m.get("content", "")))
-                 for i, m in enumerate(messages)],
+                "INSERT INTO chat_mensajes (conv_id, seq, role, content)" " VALUES (?, ?, ?, ?)",
+                [
+                    (conv_id, i, m.get("role", "user"), _serialize(m.get("content", "")))
+                    for i, m in enumerate(messages)
+                ],
             )
     except Exception as exc:
         _log.error("update_conversation failed for conv_id=%s: %s", conv_id, exc)
@@ -146,17 +149,21 @@ def delete_conversation(session_id: str, conv_id: str) -> None:
 
 def list_conversations(session_id: str) -> list[dict]:
     try:
-        rows = get_conn().execute(
-            "SELECT conv_id, title, updated_at, location_uuid"
-            " FROM chat_conversaciones WHERE user_id = ?"
-            " ORDER BY updated_at DESC LIMIT ?",
-            [session_id, MAX_CONVS],
-        ).fetchall()
+        rows = (
+            get_conn()
+            .execute(
+                "SELECT conv_id, title, updated_at, location_uuid"
+                " FROM chat_conversaciones WHERE user_id = ?"
+                " ORDER BY updated_at DESC LIMIT ?",
+                [session_id, MAX_CONVS],
+            )
+            .fetchall()
+        )
         return [
             {
-                "id":            r[0],
-                "title":         r[1] or "Nueva conversación",
-                "updated_at":    _ts_to_epoch(r[2]),
+                "id": r[0],
+                "title": r[1] or "Nueva conversación",
+                "updated_at": _ts_to_epoch(r[2]),
                 "location_uuid": r[3],
             }
             for r in rows
@@ -183,12 +190,12 @@ def load_conversation(session_id: str, conv_id: str) -> Optional[dict]:
         ).fetchall()
 
         return {
-            "id":            conv_row[0],
-            "title":         conv_row[1] or "Nueva conversación",
-            "created_at":    _ts_to_epoch(conv_row[2]),
-            "updated_at":    _ts_to_epoch(conv_row[3]),
+            "id": conv_row[0],
+            "title": conv_row[1] or "Nueva conversación",
+            "created_at": _ts_to_epoch(conv_row[2]),
+            "updated_at": _ts_to_epoch(conv_row[3]),
             "location_uuid": conv_row[4],
-            "messages":      [{"role": r[0], "content": _deserialize(r[1])} for r in msg_rows],
+            "messages": [{"role": r[0], "content": _deserialize(r[1])} for r in msg_rows],
         }
     except Exception as exc:
         _log.error("load_conversation failed: %s", exc)

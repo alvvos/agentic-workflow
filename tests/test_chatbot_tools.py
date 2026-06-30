@@ -8,10 +8,10 @@ no exceptions). Add a new class per tool when a new tool is introduced.
 Run:
     pytest tests/test_chatbot_tools.py -v
 """
+
 import json
 from datetime import date, timedelta
 from pathlib import Path
-from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -19,14 +19,14 @@ import pytest
 
 # ── Synthetic dataset config ──────────────────────────────────────────────────
 
-_DATA_DIR  = Path("src/data")
-_SESSION   = "pytest_tools"
-_CSV_PATH  = _DATA_DIR / f"dataset_{_SESSION}.csv"
-_LOC_A     = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-_LOC_B     = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
-_ZONE_A    = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+_DATA_DIR = Path("src/data")
+_SESSION = "pytest_tools"
+_CSV_PATH = _DATA_DIR / f"dataset_{_SESSION}.csv"
+_LOC_A = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+_LOC_B = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+_ZONE_A = "cccccccc-cccc-cccc-cccc-cccccccccccc"
 # Real location UUID that exists in todas_las_ubicaciones.json (for get_weather_holidays)
-_REAL_LOC  = "3c73b012-fa57-4023-8d76-7b0e60cd6fbc"
+_REAL_LOC = "3c73b012-fa57-4023-8d76-7b0e60cd6fbc"
 
 
 def _hourly_json(peak_hour: int = 17) -> str:
@@ -49,21 +49,23 @@ def synthetic_csv():
         d = today - timedelta(days=n_days - i)
         for loc, zone in [(_LOC_A, _ZONE_A), (_LOC_B, _ZONE_A)]:
             base = 400 + rng.integers(-120, 120)
-            rows.append({
-                "location_id":    loc,
-                "zone_uuid":      zone,
-                "fecha":          d.isoformat(),
-                "total_visits":   int(base * 1.5),
-                "unique_visitors": int(base),
-                "new_visitors":   int(base * 0.3),
-                "dwell_time":     float(rng.integers(120, 600)),
-                "hourly_visits":  _hourly_json(peak_hour=int(rng.integers(14, 20))),
-                # Enriched columns — avoids calling Open-Meteo during tests
-                "es_festivo":     0,
-                "llueve":         int(rng.random() < 0.2),
-                "temp_max":       float(rng.integers(15, 35)),
-                "temp_min":       float(rng.integers(5, 18)),
-            })
+            rows.append(
+                {
+                    "location_id": loc,
+                    "zone_uuid": zone,
+                    "fecha": d.isoformat(),
+                    "total_visits": int(base * 1.5),
+                    "unique_visitors": int(base),
+                    "new_visitors": int(base * 0.3),
+                    "dwell_time": float(rng.integers(120, 600)),
+                    "hourly_visits": _hourly_json(peak_hour=int(rng.integers(14, 20))),
+                    # Enriched columns — avoids calling Open-Meteo during tests
+                    "es_festivo": 0,
+                    "llueve": int(rng.random() < 0.2),
+                    "temp_max": float(rng.integers(15, 35)),
+                    "temp_min": float(rng.integers(5, 18)),
+                }
+            )
 
     df = pd.DataFrame(rows)
     _DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -77,13 +79,13 @@ def synthetic_csv():
 # ── Imports after fixture so module-level code runs with the right path ───────
 
 from src.chatbot.tools import (  # noqa: E402
-    get_pm_data,
-    get_gis_data,
-    get_weather_holidays,
-    get_forecast,
-    get_anomalies,
-    get_hourly_breakdown,
     compare_locations,
+    get_anomalies,
+    get_forecast,
+    get_gis_data,
+    get_hourly_breakdown,
+    get_pm_data,
+    get_weather_holidays,
 )
 
 _FECHA_INI = (date.today() - timedelta(days=30)).isoformat()
@@ -91,6 +93,7 @@ _FECHA_FIN = date.today().isoformat()
 
 
 # ── get_pm_data ───────────────────────────────────────────────────────────────
+
 
 class TestGetPmData:
     def test_valid_call_returns_metrics(self):
@@ -121,6 +124,7 @@ class TestGetPmData:
 
 # ── get_gis_data ──────────────────────────────────────────────────────────────
 
+
 class TestGetGisData:
     def test_unknown_uuid_returns_sin_datos_not_exception(self):
         r = get_gis_data(_LOC_A)
@@ -133,6 +137,7 @@ class TestGetGisData:
 
 
 # ── get_weather_holidays ──────────────────────────────────────────────────────
+
 
 class TestGetWeatherHolidays:
     def test_valid_location_returns_periodo(self):
@@ -153,6 +158,7 @@ class TestGetWeatherHolidays:
 
 
 # ── get_forecast ──────────────────────────────────────────────────────────────
+
 
 class TestGetForecast:
     def test_returns_predictions(self):
@@ -185,6 +191,7 @@ class TestGetForecast:
 
 # ── get_anomalies ─────────────────────────────────────────────────────────────
 
+
 class TestGetAnomalies:
     def test_returns_valid_structure(self):
         inicio = (date.today() - timedelta(days=60)).isoformat()
@@ -214,6 +221,7 @@ class TestGetAnomalies:
 
 # ── get_hourly_breakdown ──────────────────────────────────────────────────────
 
+
 class TestGetHourlyBreakdown:
     def test_returns_valid_structure(self):
         r = get_hourly_breakdown(_LOC_A, _FECHA_INI, _FECHA_FIN, session_id=_SESSION)
@@ -237,7 +245,9 @@ class TestGetHourlyBreakdown:
             assert 0 <= data["hora_pico"] <= 23
 
     def test_zone_filter(self):
-        r = get_hourly_breakdown(_LOC_A, _FECHA_INI, _FECHA_FIN, zone_uuid=_ZONE_A, session_id=_SESSION)
+        r = get_hourly_breakdown(
+            _LOC_A, _FECHA_INI, _FECHA_FIN, zone_uuid=_ZONE_A, session_id=_SESSION
+        )
         assert "error" not in r, r.get("error")
 
     def test_unknown_location_returns_error(self):
@@ -246,6 +256,7 @@ class TestGetHourlyBreakdown:
 
 
 # ── compare_locations ─────────────────────────────────────────────────────────
+
 
 class TestCompareLocations:
     def test_returns_valid_structure(self):
@@ -263,7 +274,9 @@ class TestCompareLocations:
 
     def test_all_valid_metricas(self):
         for metrica in ("total_visits", "unique_visitors", "new_visitors", "dwell_time"):
-            r = compare_locations([_LOC_A], _FECHA_INI, _FECHA_FIN, metrica=metrica, session_id=_SESSION)
+            r = compare_locations(
+                [_LOC_A], _FECHA_INI, _FECHA_FIN, metrica=metrica, session_id=_SESSION
+            )
             assert "error" not in r, f"Fallo con métrica {metrica}: {r.get('error')}"
 
     def test_invalid_metrica_returns_error(self):

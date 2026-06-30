@@ -3,6 +3,7 @@ Caché persistente de respuestas del asistente — tabla cache_responses en Post
 Clave: MD5(pregunta_normalizada + "|" + location_uuid).
 TTL: 7 días (campo expires_at, limpiado con DELETE en get_cached / clear_cache).
 """
+
 import hashlib
 from datetime import datetime, timedelta, timezone
 
@@ -63,8 +64,6 @@ def clear_cache() -> int:
 def purge_expired() -> int:
     """Borra entradas caducadas. Llamar periódicamente o al arrancar."""
     conn = get_conn()
-    n = conn.execute(
-        "SELECT COUNT(*) FROM cache_responses WHERE expires_at <= NOW()"
-    ).fetchone()[0]
+    n = conn.execute("SELECT COUNT(*) FROM cache_responses WHERE expires_at <= NOW()").fetchone()[0]
     conn.execute("DELETE FROM cache_responses WHERE expires_at <= NOW()")
     return n

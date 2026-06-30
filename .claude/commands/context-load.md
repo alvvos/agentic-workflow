@@ -13,7 +13,7 @@ Lee toda la documentación técnica del proyecto para tener contexto completo an
    - Versión en producción (del campo en ARCHITECTURE.md)
    - Número de tablas en PostgreSQL
    - Número de ubicaciones activas en Miniso (con/sin geo)
-   
+
    Ejemplo: "Contexto cargado — v2.2.18 · 17 tablas PG · Miniso 4 ubicaciones (3 con geo, 1 sin coordenadas)."
 
 3. **No resumas** el contenido de los archivos al usuario. Solo la línea de confirmación. Queda listo para trabajar.

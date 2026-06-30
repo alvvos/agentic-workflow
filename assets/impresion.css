@@ -1,14 +1,14 @@
 @media print {
     /* 1. Limpieza de bordes y fechas basura del navegador */
     @page {
-        margin: 0; 
+        margin: 0;
         size: A4 portrait;
     }
 
     body {
-        margin: 15mm 20mm !important; 
+        margin: 15mm 20mm !important;
         background-color: white !important;
-        -webkit-print-color-adjust: exact !important; 
+        -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
     }
 
@@ -37,9 +37,9 @@
     }
 
     /* 5. Forzar ancho total de la página */
-    .col-lg-9, .col-xl-10 { 
-        width: 100% !important; 
-        max-width: 100% !important; 
-        flex: 0 0 100% !important; 
+    .col-lg-9, .col-xl-10 {
+        width: 100% !important;
+        max-width: 100% !important;
+        flex: 0 0 100% !important;
     }
 }

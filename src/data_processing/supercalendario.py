@@ -1,75 +1,77 @@
 from datetime import date, timedelta
 from typing import Optional
+
 import pandas as pd
 
 # Spain + shared events
 _ES_COLS = [
-    'es_rebajas_invierno',
-    'es_rebajas_verano',
-    'es_black_friday_semana',
-    'es_cyber_monday',
-    'es_navidad_compras',
-    'es_reyes_compras',
-    'es_san_valentin_ventana',
-    'es_dia_madre_ventana',
+    "es_rebajas_invierno",
+    "es_rebajas_verano",
+    "es_black_friday_semana",
+    "es_cyber_monday",
+    "es_navidad_compras",
+    "es_reyes_compras",
+    "es_san_valentin_ventana",
+    "es_dia_madre_ventana",
 ]
 
 # Mexico-specific events (always 0 for ES orgs; model learns the split via training data)
 _MX_COLS = [
-    'es_buen_fin_mx',
-    'es_dia_muertos_ventana',
-    'es_independencia_mx',
-    'es_dia_madre_mx',
-    'es_regreso_clases_mx',
-    'es_dia_nino_mx',
+    "es_buen_fin_mx",
+    "es_dia_muertos_ventana",
+    "es_independencia_mx",
+    "es_dia_madre_mx",
+    "es_regreso_clases_mx",
+    "es_dia_nino_mx",
 ]
 
-CALENDARIO_FEATURE_COLS = _ES_COLS + _MX_COLS + ['dias_hasta_evento_comercial']
+CALENDARIO_FEATURE_COLS = _ES_COLS + _MX_COLS + ["dias_hasta_evento_comercial"]
 
 # Default config: all ES events on, all MX events off.
 # Use CONFIG_PRESETS['MX'] for Mexican orgs or pass org_config overrides directly.
 _DEFAULT_CONFIG = {
     # ES
-    'rebajas_invierno': True,
-    'rebajas_verano': True,
-    'black_friday': True,
-    'cyber_monday': True,
-    'navidad_compras': True,
-    'reyes_compras': True,
-    'san_valentin': True,
-    'dia_madre': True,
+    "rebajas_invierno": True,
+    "rebajas_verano": True,
+    "black_friday": True,
+    "cyber_monday": True,
+    "navidad_compras": True,
+    "reyes_compras": True,
+    "san_valentin": True,
+    "dia_madre": True,
     # MX (off by default)
-    'buen_fin_mx': False,
-    'dia_muertos': False,
-    'independencia_mx': False,
-    'dia_madre_mx': False,
-    'regreso_clases_mx': False,
-    'dia_nino_mx': False,
+    "buen_fin_mx": False,
+    "dia_muertos": False,
+    "independencia_mx": False,
+    "dia_madre_mx": False,
+    "regreso_clases_mx": False,
+    "dia_nino_mx": False,
 }
 
 # Ready-to-use presets — pass as org_config or store in dim_organizaciones.config_calendario
 CONFIG_PRESETS: dict = {
-    'ES': dict(_DEFAULT_CONFIG),
-    'MX': {
-        'rebajas_invierno': False,
-        'rebajas_verano': False,
-        'black_friday': False,   # replaced by buen_fin_mx
-        'cyber_monday': True,
-        'navidad_compras': True,
-        'reyes_compras': True,
-        'san_valentin': True,
-        'dia_madre': False,      # ES = 1st Sunday May; MX = May 10 fixed
-        'buen_fin_mx': True,
-        'dia_muertos': True,
-        'independencia_mx': True,
-        'dia_madre_mx': True,
-        'regreso_clases_mx': True,
-        'dia_nino_mx': True,
+    "ES": dict(_DEFAULT_CONFIG),
+    "MX": {
+        "rebajas_invierno": False,
+        "rebajas_verano": False,
+        "black_friday": False,  # replaced by buen_fin_mx
+        "cyber_monday": True,
+        "navidad_compras": True,
+        "reyes_compras": True,
+        "san_valentin": True,
+        "dia_madre": False,  # ES = 1st Sunday May; MX = May 10 fixed
+        "buen_fin_mx": True,
+        "dia_muertos": True,
+        "independencia_mx": True,
+        "dia_madre_mx": True,
+        "regreso_clases_mx": True,
+        "dia_nino_mx": True,
     },
 }
 
 
 # ── date helpers ──────────────────────────────────────────────────────────────
+
 
 def _black_friday(year: int) -> date:
     d = date(year, 11, 30)
@@ -104,58 +106,60 @@ def _buen_fin_mx(year: int) -> date:
 
 # ── event builder ─────────────────────────────────────────────────────────────
 
+
 def _eventos_del_anio(year: int, config: dict) -> list:
     """Returns [(start, end, feature_key), ...] for the given year."""
     eventos = []
 
     # ── Spain / global ────────────────────────────────────────────────────────
-    if config.get('reyes_compras', True):
-        eventos.append((date(year, 1, 1), date(year, 1, 5), 'es_reyes_compras'))
-    if config.get('rebajas_invierno', True):
-        eventos.append((date(year, 1, 7), date(year, 2, 28), 'es_rebajas_invierno'))
-    if config.get('san_valentin', True):
-        eventos.append((date(year, 2, 7), date(year, 2, 14), 'es_san_valentin_ventana'))
-    if config.get('dia_madre', True):
+    if config.get("reyes_compras", True):
+        eventos.append((date(year, 1, 1), date(year, 1, 5), "es_reyes_compras"))
+    if config.get("rebajas_invierno", True):
+        eventos.append((date(year, 1, 7), date(year, 2, 28), "es_rebajas_invierno"))
+    if config.get("san_valentin", True):
+        eventos.append((date(year, 2, 7), date(year, 2, 14), "es_san_valentin_ventana"))
+    if config.get("dia_madre", True):
         dm = _dia_madre_es(year)
-        eventos.append((dm - timedelta(days=7), dm, 'es_dia_madre_ventana'))
-    if config.get('rebajas_verano', True):
-        eventos.append((date(year, 7, 1), date(year, 8, 31), 'es_rebajas_verano'))
+        eventos.append((dm - timedelta(days=7), dm, "es_dia_madre_ventana"))
+    if config.get("rebajas_verano", True):
+        eventos.append((date(year, 7, 1), date(year, 8, 31), "es_rebajas_verano"))
 
     bf = _black_friday(year)
-    if config.get('black_friday', True):
+    if config.get("black_friday", True):
         bf_monday = bf - timedelta(days=4)
-        eventos.append((bf_monday, bf, 'es_black_friday_semana'))
-    if config.get('cyber_monday', True):
+        eventos.append((bf_monday, bf, "es_black_friday_semana"))
+    if config.get("cyber_monday", True):
         cm = bf + timedelta(days=3)
-        eventos.append((cm, cm, 'es_cyber_monday'))
-    if config.get('navidad_compras', True):
-        eventos.append((date(year, 12, 1), date(year, 12, 24), 'es_navidad_compras'))
+        eventos.append((cm, cm, "es_cyber_monday"))
+    if config.get("navidad_compras", True):
+        eventos.append((date(year, 12, 1), date(year, 12, 24), "es_navidad_compras"))
 
     # ── Mexico ────────────────────────────────────────────────────────────────
-    if config.get('dia_nino_mx', False):
+    if config.get("dia_nino_mx", False):
         # Día del Niño: April 30 (shopping window Apr 28–30)
-        eventos.append((date(year, 4, 28), date(year, 4, 30), 'es_dia_nino_mx'))
-    if config.get('dia_madre_mx', False):
+        eventos.append((date(year, 4, 28), date(year, 4, 30), "es_dia_nino_mx"))
+    if config.get("dia_madre_mx", False):
         # Día de la Madre MX: fixed May 10 (shopping window May 3–10)
-        eventos.append((date(year, 5, 3), date(year, 5, 10), 'es_dia_madre_mx'))
-    if config.get('independencia_mx', False):
+        eventos.append((date(year, 5, 3), date(year, 5, 10), "es_dia_madre_mx"))
+    if config.get("independencia_mx", False):
         # Noche de independencia Sep 15 + holiday Sep 16 (shopping Sep 13–16)
-        eventos.append((date(year, 9, 13), date(year, 9, 16), 'es_independencia_mx'))
-    if config.get('regreso_clases_mx', False):
+        eventos.append((date(year, 9, 13), date(year, 9, 16), "es_independencia_mx"))
+    if config.get("regreso_clases_mx", False):
         # Back-to-school MX: mid-August
-        eventos.append((date(year, 8, 15), date(year, 8, 31), 'es_regreso_clases_mx'))
-    if config.get('buen_fin_mx', False):
+        eventos.append((date(year, 8, 15), date(year, 8, 31), "es_regreso_clases_mx"))
+    if config.get("buen_fin_mx", False):
         # El Buen Fin: 4-day event (Fri–Mon) around the 3rd Monday of November
         bf_mx = _buen_fin_mx(year)
-        eventos.append((bf_mx, bf_mx + timedelta(days=3), 'es_buen_fin_mx'))
-    if config.get('dia_muertos', False):
+        eventos.append((bf_mx, bf_mx + timedelta(days=3), "es_buen_fin_mx"))
+    if config.get("dia_muertos", False):
         # Día de Muertos: Oct 31–Nov 2 (shopping window Oct 28–Nov 2)
-        eventos.append((date(year, 10, 28), date(year, 11, 2), 'es_dia_muertos_ventana'))
+        eventos.append((date(year, 10, 28), date(year, 11, 2), "es_dia_muertos_ventana"))
 
     return eventos
 
 
 # ── public API ────────────────────────────────────────────────────────────────
+
 
 def get_calendario_features(fecha, org_config: Optional[dict] = None) -> dict:
     """
@@ -194,6 +198,6 @@ def get_calendario_features(fecha, org_config: Optional[dict] = None) -> dict:
             delta = (start - fecha).days
             if delta < dias_hasta:
                 dias_hasta = delta
-    result['dias_hasta_evento_comercial'] = dias_hasta
+    result["dias_hasta_evento_comercial"] = dias_hasta
 
     return result

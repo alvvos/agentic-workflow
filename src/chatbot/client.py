@@ -7,20 +7,31 @@ Flujo:
   3. Si Claude solicita una herramienta, la ejecuta en local (tools.py).
   4. Devuelve la respuesta final como string.
 """
+
 import json
 import os
 from datetime import date
 
 import anthropic
 
-from src.chatbot.tools import (
-    get_pm_data, get_gis_data, get_weather_holidays,
-    get_forecast, get_anomalies, get_hourly_breakdown, compare_locations,
-    get_location_info, get_active_features, get_external_features,
-    get_calendar_events, get_cruise_calls, get_model_metrics, get_ev_ranks,
-    _find_location,
-)
 from src.chatbot.cache import get_cached, set_cached
+from src.chatbot.tools import (
+    _find_location,
+    compare_locations,
+    get_active_features,
+    get_anomalies,
+    get_calendar_events,
+    get_cruise_calls,
+    get_ev_ranks,
+    get_external_features,
+    get_forecast,
+    get_gis_data,
+    get_hourly_breakdown,
+    get_location_info,
+    get_model_metrics,
+    get_pm_data,
+    get_weather_holidays,
+)
 
 _MODEL = "claude-sonnet-4-6"
 
@@ -35,9 +46,9 @@ _TOOL_DEFINITIONS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "location_id":  {"type": "string", "description": "UUID de la ubicación."},
+                "location_id": {"type": "string", "description": "UUID de la ubicación."},
                 "fecha_inicio": {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
-                "fecha_fin":    {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
+                "fecha_fin": {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
             },
             "required": ["location_id", "fecha_inicio", "fecha_fin"],
         },
@@ -52,10 +63,10 @@ _TOOL_DEFINITIONS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "location_id":  {"type": "string", "description": "UUID de la ubicación."},
+                "location_id": {"type": "string", "description": "UUID de la ubicación."},
                 "fecha_inicio": {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
-                "fecha_fin":    {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
-                "zone_uuid":    {"type": "string", "description": "UUID de zona (opcional)."},
+                "fecha_fin": {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
+                "zone_uuid": {"type": "string", "description": "UUID de zona (opcional)."},
             },
             "required": ["location_id", "fecha_inicio", "fecha_fin"],
         },
@@ -71,8 +82,11 @@ _TOOL_DEFINITIONS = [
             "type": "object",
             "properties": {
                 "location_uuid": {"type": "string", "description": "UUID de la ubicación."},
-                "zone_uuid":     {"type": "string", "description": "UUID de la zona a predecir."},
-                "n_dias":        {"type": "integer", "description": "Horizonte de predicción en días (1-90). Default 14."},
+                "zone_uuid": {"type": "string", "description": "UUID de la zona a predecir."},
+                "n_dias": {
+                    "type": "integer",
+                    "description": "Horizonte de predicción en días (1-90). Default 14.",
+                },
             },
             "required": ["location_uuid", "zone_uuid"],
         },
@@ -88,9 +102,12 @@ _TOOL_DEFINITIONS = [
             "type": "object",
             "properties": {
                 "location_uuid": {"type": "string", "description": "UUID de la ubicación."},
-                "fecha_inicio":  {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
-                "fecha_fin":     {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
-                "zone_uuid":     {"type": "string", "description": "UUID de zona específica (opcional)."},
+                "fecha_inicio": {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
+                "fecha_fin": {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
+                "zone_uuid": {
+                    "type": "string",
+                    "description": "UUID de zona específica (opcional).",
+                },
             },
             "required": ["location_uuid", "fecha_inicio", "fecha_fin"],
         },
@@ -106,9 +123,12 @@ _TOOL_DEFINITIONS = [
             "type": "object",
             "properties": {
                 "location_uuid": {"type": "string", "description": "UUID de la ubicación."},
-                "fecha_inicio":  {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
-                "fecha_fin":     {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
-                "zone_uuid":     {"type": "string", "description": "UUID de zona específica (opcional)."},
+                "fecha_inicio": {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
+                "fecha_fin": {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
+                "zone_uuid": {
+                    "type": "string",
+                    "description": "UUID de zona específica (opcional).",
+                },
             },
             "required": ["location_uuid", "fecha_inicio", "fecha_fin"],
         },
@@ -129,8 +149,11 @@ _TOOL_DEFINITIONS = [
                     "description": "Lista de UUIDs de ubicaciones a comparar.",
                 },
                 "fecha_inicio": {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
-                "fecha_fin":    {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
-                "metrica":      {"type": "string", "description": "Métrica a comparar (default: unique_visitors)."},
+                "fecha_fin": {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
+                "metrica": {
+                    "type": "string",
+                    "description": "Métrica a comparar (default: unique_visitors).",
+                },
             },
             "required": ["location_uuids", "fecha_inicio", "fecha_fin"],
         },
@@ -146,7 +169,10 @@ _TOOL_DEFINITIONS = [
             "type": "object",
             "properties": {
                 "location_uuid": {"type": "string", "description": "UUID de la ubicación."},
-                "fecha":         {"type": "string", "description": "Fecha ISO para snapshot histórico (opcional)."},
+                "fecha": {
+                    "type": "string",
+                    "description": "Fecha ISO para snapshot histórico (opcional).",
+                },
             },
             "required": ["location_uuid"],
         },
@@ -196,14 +222,17 @@ _TOOL_DEFINITIONS = [
             "type": "object",
             "properties": {
                 "location_uuid": {"type": "string", "description": "UUID de la ubicación."},
-                "feature_keys":  {
+                "feature_keys": {
                     "type": "array",
                     "items": {"type": "string"},
                     "description": "Lista de feature keys a consultar.",
                 },
-                "fecha_inicio":  {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
-                "fecha_fin":     {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
-                "incluir_yoy":   {"type": "boolean", "description": "Si true, añade comparativa con el mismo periodo del año anterior."},
+                "fecha_inicio": {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
+                "fecha_fin": {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
+                "incluir_yoy": {
+                    "type": "boolean",
+                    "description": "Si true, añade comparativa con el mismo periodo del año anterior.",
+                },
             },
             "required": ["location_uuid", "feature_keys", "fecha_inicio", "fecha_fin"],
         },
@@ -220,9 +249,12 @@ _TOOL_DEFINITIONS = [
             "type": "object",
             "properties": {
                 "location_uuid": {"type": "string", "description": "UUID de la ubicación."},
-                "fecha_inicio":  {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
-                "fecha_fin":     {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
-                "evento_key":    {"type": "string", "description": "Filtrar por tipo de evento (opcional, ej: 'concierto_wizink')."},
+                "fecha_inicio": {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
+                "fecha_fin": {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
+                "evento_key": {
+                    "type": "string",
+                    "description": "Filtrar por tipo de evento (opcional, ej: 'concierto_wizink').",
+                },
             },
             "required": ["location_uuid", "fecha_inicio", "fecha_fin"],
         },
@@ -238,9 +270,12 @@ _TOOL_DEFINITIONS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "location_uuid": {"type": "string", "description": "UUID de la ubicación portuaria."},
-                "fecha_inicio":  {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
-                "fecha_fin":     {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
+                "location_uuid": {
+                    "type": "string",
+                    "description": "UUID de la ubicación portuaria.",
+                },
+                "fecha_inicio": {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
+                "fecha_fin": {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
             },
             "required": ["location_uuid", "fecha_inicio", "fecha_fin"],
         },
@@ -258,7 +293,10 @@ _TOOL_DEFINITIONS = [
             "type": "object",
             "properties": {
                 "location_uuid": {"type": "string", "description": "UUID de la ubicación."},
-                "zone_uuid":     {"type": "string", "description": "UUID de la zona específica (opcional)."},
+                "zone_uuid": {
+                    "type": "string",
+                    "description": "UUID de la zona específica (opcional).",
+                },
             },
             "required": ["location_uuid"],
         },
@@ -278,8 +316,8 @@ _TOOL_DEFINITIONS = [
             "type": "object",
             "properties": {
                 "location_uuid": {"type": "string", "description": "UUID de la ubicación."},
-                "fecha_inicio":  {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
-                "fecha_fin":     {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
+                "fecha_inicio": {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
+                "fecha_fin": {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
             },
             "required": ["location_uuid", "fecha_inicio", "fecha_fin"],
         },
@@ -287,26 +325,26 @@ _TOOL_DEFINITIONS = [
 ]
 
 _TOOL_FN = {
-    "get_pm_data":            lambda args: get_pm_data(**args),
-    "get_gis_data":           lambda args: get_gis_data(**args),
-    "get_weather_holidays":   lambda args: get_weather_holidays(**args),
-    "get_forecast":           lambda args: get_forecast(**args),
-    "get_anomalies":          lambda args: get_anomalies(**args),
-    "get_hourly_breakdown":   lambda args: get_hourly_breakdown(**args),
-    "compare_locations":      lambda args: compare_locations(**args),
-    "get_location_info":      lambda args: get_location_info(**args),
-    "get_active_features":    lambda args: get_active_features(**args),
-    "get_external_features":  lambda args: get_external_features(**args),
-    "get_calendar_events":    lambda args: get_calendar_events(**args),
-    "get_cruise_calls":       lambda args: get_cruise_calls(**args),
-    "get_model_metrics":      lambda args: get_model_metrics(**args),
-    "get_ev_ranks":           lambda args: get_ev_ranks(**args),
+    "get_pm_data": lambda args: get_pm_data(**args),
+    "get_gis_data": lambda args: get_gis_data(**args),
+    "get_weather_holidays": lambda args: get_weather_holidays(**args),
+    "get_forecast": lambda args: get_forecast(**args),
+    "get_anomalies": lambda args: get_anomalies(**args),
+    "get_hourly_breakdown": lambda args: get_hourly_breakdown(**args),
+    "compare_locations": lambda args: compare_locations(**args),
+    "get_location_info": lambda args: get_location_info(**args),
+    "get_active_features": lambda args: get_active_features(**args),
+    "get_external_features": lambda args: get_external_features(**args),
+    "get_calendar_events": lambda args: get_calendar_events(**args),
+    "get_cruise_calls": lambda args: get_cruise_calls(**args),
+    "get_model_metrics": lambda args: get_model_metrics(**args),
+    "get_ev_ranks": lambda args: get_ev_ranks(**args),
 }
 
 
 def _system_prompt(
-    location_uuid:  str | None,
-    zone_uuid:      str | None = None,
+    location_uuid: str | None,
+    zone_uuid: str | None = None,
     extra_mentions: list | None = None,
 ) -> str:
     today = date.today().isoformat()
@@ -336,8 +374,10 @@ def _system_prompt(
         loc = _find_location(loc_uuid)
         if not loc:
             return ""
-        zones     = [z for z in loc.get("zones", []) if not z.get("hidden")]
-        zones_txt = ", ".join(f"{z['zoneName']} (uuid: {z['uuid']})" for z in zones) or "sin zonas visibles"
+        zones = [z for z in loc.get("zones", []) if not z.get("hidden")]
+        zones_txt = (
+            ", ".join(f"{z['zoneName']} (uuid: {z['uuid']})" for z in zones) or "sin zonas visibles"
+        )
         label = "Ubicación activa" if is_active else "Ubicación mencionada"
         txt = (
             f"{label}: '{loc.get('name')}' ({loc.get('org', '')}). "
@@ -400,7 +440,7 @@ def chat(
     if cached:
         return f"⚡ {cached}"
 
-    client  = anthropic.Anthropic(api_key=api_key)
+    client = anthropic.Anthropic(api_key=api_key)
     history = list(messages)
 
     for _ in range(max_turns):
@@ -427,18 +467,26 @@ def chat(
             for block in response.content:
                 if block.type != "tool_use":
                     continue
-                fn   = _TOOL_FN.get(block.name)
+                fn = _TOOL_FN.get(block.name)
                 args = {**block.input}
-                _TOOLS_SESSION = {"get_pm_data", "get_forecast", "get_anomalies", "get_hourly_breakdown", "compare_locations"}
+                _TOOLS_SESSION = {
+                    "get_pm_data",
+                    "get_forecast",
+                    "get_anomalies",
+                    "get_hourly_breakdown",
+                    "compare_locations",
+                }
                 if block.name in _TOOLS_SESSION:
                     args.setdefault("session_id", session_id)
 
                 result = fn(args) if fn else {"error": f"Herramienta desconocida: {block.name}"}
-                tool_results.append({
-                    "type":        "tool_result",
-                    "tool_use_id": block.id,
-                    "content":     json.dumps(result, ensure_ascii=False),
-                })
+                tool_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": json.dumps(result, ensure_ascii=False),
+                    }
+                )
 
             history.append({"role": "user", "content": tool_results})
             continue

@@ -10,9 +10,10 @@ Funciones públicas:
     parse_mention(text)           → (clean_text, location_uuid | None, zone_uuid | None)
     slug_for(uuid)                → "@slug" | None
 """
+
 import re
-import unicodedata
 import time
+import unicodedata
 
 _mention_map_cache: dict = {}
 _mention_map_ts: float = 0.0
@@ -43,7 +44,7 @@ def get_mention_map() -> dict:
     except Exception:
         return _mention_map_cache
 
-    result: dict     = {}
+    result: dict = {}
     seen_slugs: dict = {}
 
     def _unique_slug(base: str) -> str:
@@ -55,46 +56,46 @@ def get_mention_map() -> dict:
 
     try:
         for org in get_all_orgs():
-            org_token = _normalize(org['nombre'])
-            for loc in get_locs_for_org(org['org_uuid']):
-                loc_uuid  = loc['location_uuid']
-                loc_token = _normalize(loc['nombre'])
+            org_token = _normalize(org["nombre"])
+            for loc in get_locs_for_org(org["org_uuid"]):
+                loc_uuid = loc["location_uuid"]
+                loc_token = _normalize(loc["nombre"])
                 if not loc_uuid or not loc_token:
                     continue
 
                 loc_slug = _unique_slug(f"{org_token}_{loc_token}")
                 result[loc_slug] = {
-                    "type":  "location",
-                    "uuid":  loc_uuid,
+                    "type": "location",
+                    "uuid": loc_uuid,
                     "label": f"@{loc_slug}",
-                    "org":   org['nombre'],
-                    "name":  loc['nombre'],
+                    "org": org["nombre"],
+                    "name": loc["nombre"],
                 }
 
                 for zone in get_zones_for_loc(loc_uuid):
-                    if zone['hidden']:
+                    if zone["hidden"]:
                         continue
-                    zone_uuid  = zone['zone_uuid']
-                    zone_name  = zone['nombre']
+                    zone_uuid = zone["zone_uuid"]
+                    zone_name = zone["nombre"]
                     zone_token = _normalize(zone_name)
                     if not zone_uuid or not zone_token:
                         continue
 
                     zone_slug = _unique_slug(f"{org_token}_{loc_token}_{zone_token}")
                     result[zone_slug] = {
-                        "type":          "zone",
-                        "uuid":          zone_uuid,
+                        "type": "zone",
+                        "uuid": zone_uuid,
                         "location_uuid": loc_uuid,
-                        "label":         f"@{zone_slug}",
-                        "org":           org['nombre'],
-                        "name":          zone_name,
-                        "location_name": loc['nombre'],
+                        "label": f"@{zone_slug}",
+                        "org": org["nombre"],
+                        "name": zone_name,
+                        "location_name": loc["nombre"],
                     }
     except Exception:
         return _mention_map_cache
 
     _mention_map_cache = result
-    _mention_map_ts    = time.time()
+    _mention_map_ts = time.time()
     return result
 
 
@@ -112,27 +113,31 @@ def parse_all_mentions(text: str) -> tuple[str, list[dict]]:
     clean = text
 
     for match in re.finditer(r"@([A-Za-z0-9_]+)", text):
-        slug  = match.group(1)
+        slug = match.group(1)
         entry = mention_map.get(slug)
         if not entry:
             continue
 
         if entry["type"] == "zone":
             display = f"{entry['location_name']} · {entry['name']}"
-            mentions.append({
-                "location_uuid": entry["location_uuid"],
-                "zone_uuid":     entry["uuid"],
-                "name":          display,
-                "type":          "zone",
-            })
+            mentions.append(
+                {
+                    "location_uuid": entry["location_uuid"],
+                    "zone_uuid": entry["uuid"],
+                    "name": display,
+                    "type": "zone",
+                }
+            )
         else:
             display = entry["name"]
-            mentions.append({
-                "location_uuid": entry["uuid"],
-                "zone_uuid":     None,
-                "name":          display,
-                "type":          "location",
-            })
+            mentions.append(
+                {
+                    "location_uuid": entry["uuid"],
+                    "zone_uuid": None,
+                    "name": display,
+                    "type": "location",
+                }
+            )
 
         clean = clean.replace(match.group(0), f"[{display}]", 1)
 

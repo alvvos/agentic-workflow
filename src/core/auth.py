@@ -1,10 +1,12 @@
-import os
 import json
+import os
+
 import flask
 from werkzeug.security import check_password_hash
+
 from src.core.config import MODO_DESARROLLO, server
 
-_USERS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'users.json')
+_USERS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "users.json")
 
 
 def _load_users() -> dict:
@@ -15,7 +17,7 @@ def _load_users() -> dict:
 
 
 def _save_users(users: dict) -> None:
-    with open(_USERS_FILE, 'w') as f:
+    with open(_USERS_FILE, "w") as f:
         json.dump(users, f, indent=2)
 
 
@@ -33,14 +35,14 @@ def get_current_user() -> str:
     """Devuelve el nombre del usuario autenticado o '' en modo desarrollo."""
     if MODO_DESARROLLO:
         return "local_dev"
-    return flask.session.get('user', '')
+    return flask.session.get("user", "")
 
 
 def get_current_role() -> str:
     """Devuelve el rol del usuario autenticado ('admin' | 'user')."""
     if MODO_DESARROLLO:
         return "admin"
-    return flask.session.get('role', 'user')
+    return flask.session.get("role", "user")
 
 
 def is_admin() -> bool:
@@ -51,9 +53,9 @@ def get_current_org_access() -> list | None:
     """Devuelve la lista de org_uuids accesibles, o None si el usuario ve todo (admin/dev)."""
     if MODO_DESARROLLO:
         return None
-    if flask.session.get('role') == 'admin':
+    if flask.session.get("role") == "admin":
         return None
-    return flask.session.get('org_access', [])
+    return flask.session.get("org_access", [])
 
 
 _LOGIN_HTML = """<!DOCTYPE html>
@@ -121,7 +123,7 @@ function togglePwd(){
 </body>
 </html>"""
 
-_ALLOWED_PATHS = ('/login', '/logout', '/_dash-component-suites/', '/assets/')
+_ALLOWED_PATHS = ("/login", "/logout", "/_dash-component-suites/", "/assets/")
 
 
 @server.before_request
@@ -130,22 +132,23 @@ def require_login():
         return
     if any(flask.request.path.startswith(p) for p in _ALLOWED_PATHS):
         return
-    if not flask.session.get('user'):
-        return flask.redirect('/login')
+    if not flask.session.get("user"):
+        return flask.redirect("/login")
 
 
-@server.route('/login', methods=['GET', 'POST'])
+@server.route("/login", methods=["GET", "POST"])
 def login():
-    if flask.request.method == 'POST':
-        username = flask.request.form.get('username', '').strip()
-        password = flask.request.form.get('password', '')
+    if flask.request.method == "POST":
+        username = flask.request.form.get("username", "").strip()
+        password = flask.request.form.get("password", "")
 
         authenticated = False
-        role = 'user'
+        role = "user"
 
         # Primary: DuckDB dim_usuarios
         try:
             from src.db.store import get_conn
+
             conn = get_conn()
             row = conn.execute(
                 "SELECT password_hash, role FROM dim_usuarios WHERE user_id = ?",
@@ -153,7 +156,7 @@ def login():
             ).fetchone()
             if row and check_password_hash(row[0], password):
                 authenticated = True
-                role = row[1] or 'user'
+                role = row[1] or "user"
                 conn.execute(
                     "UPDATE dim_usuarios SET last_login = current_timestamp WHERE user_id = ?",
                     [username],
@@ -165,29 +168,34 @@ def login():
         if not authenticated:
             users = _load_users()
             entry = _get_entry(users, username)
-            if entry and check_password_hash(entry['password'], password):
+            if entry and check_password_hash(entry["password"], password):
                 authenticated = True
-                role = entry.get('role', 'user')
+                role = entry.get("role", "user")
 
         if authenticated:
-            flask.session['user'] = username
-            flask.session['role'] = role
-            if role != 'admin':
+            flask.session["user"] = username
+            flask.session["role"] = role
+            if role != "admin":
                 try:
                     from src.db.store import get_conn
-                    rows = get_conn().execute(
-                        "SELECT org_uuid FROM user_org_access WHERE user_id = ?", [username]
-                    ).fetchall()
-                    flask.session['org_access'] = [r[0] for r in rows]
+
+                    rows = (
+                        get_conn()
+                        .execute(
+                            "SELECT org_uuid FROM user_org_access WHERE user_id = ?", [username]
+                        )
+                        .fetchall()
+                    )
+                    flask.session["org_access"] = [r[0] for r in rows]
                 except Exception:
-                    flask.session['org_access'] = []
-            return flask.redirect('/')
-        return flask.render_template_string(_LOGIN_HTML, error='Usuario o contraseña incorrectos')
+                    flask.session["org_access"] = []
+            return flask.redirect("/")
+        return flask.render_template_string(_LOGIN_HTML, error="Usuario o contraseña incorrectos")
     return flask.render_template_string(_LOGIN_HTML, error=None)
 
 
-@server.route('/logout')
+@server.route("/logout")
 def logout():
-    flask.session.pop('user', None)
-    flask.session.pop('role', None)
-    return flask.redirect('/login')
+    flask.session.pop("user", None)
+    flask.session.pop("role", None)
+    return flask.redirect("/login")

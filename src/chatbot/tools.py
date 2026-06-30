@@ -3,29 +3,37 @@ Funciones de acceso a datos locales expuestas como herramientas MCP.
 Cada función es pura Python — pueden llamarse directamente desde el cliente
 o envolverse en un servidor FastMCP para transporte stdio/HTTP.
 """
+
 import json
-import requests
 from glob import glob
 from pathlib import Path
 
 import holidays as _holidays_lib
 import pandas as pd
+import requests
 
 _DATA_DIR = Path(__file__).parent.parent / "data"
 _RAW_GLOB = str(_DATA_DIR / "dataset_*.csv")
-MAX_DAYS  = 90
+MAX_DAYS = 90
 MAX_DAYS_EXT = 760  # external features allow longer windows
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _find_location(location_uuid: str) -> dict | None:
     from src.db.queries import get_location_by_uuid, get_zones_for_loc
+
     loc = get_location_by_uuid(location_uuid)
     if loc is None:
         return None
     loc["zones"] = [
-        {"uuid": z["zone_uuid"], "zoneName": z["nombre"], "hidden": z["hidden"], "zoneType": z["zone_type"]}
+        {
+            "uuid": z["zone_uuid"],
+            "zoneName": z["nombre"],
+            "hidden": z["hidden"],
+            "zoneType": z["zone_type"],
+        }
         for z in get_zones_for_loc(location_uuid)
     ]
     return loc
@@ -34,12 +42,19 @@ def _find_location(location_uuid: str) -> dict | None:
 def _load_dataset(session_id: str = "local_dev") -> pd.DataFrame:
     try:
         from src.db.store import get_conn
-        df = get_conn().execute("""
+
+        df = (
+            get_conn()
+            .execute(
+                """
             SELECT fecha, location_uuid AS location_id, zone_uuid,
                    total_visits, unique_visitors, new_visitors,
                    dwell_time_min AS dwell_time, hourly_visits
             FROM fact_visitas ORDER BY fecha
-        """).df()
+        """
+            )
+            .df()
+        )
         if not df.empty:
             df["fecha"] = pd.to_datetime(df["fecha"])
             return df
@@ -57,6 +72,7 @@ def _load_dataset(session_id: str = "local_dev") -> pd.DataFrame:
 
 
 # ── Herramienta 1: get_pm_data ────────────────────────────────────────────────
+
 
 def get_pm_data(
     location_id: str,
@@ -92,25 +108,23 @@ def get_pm_data(
     if df.empty:
         return {"error": "No hay datos disponibles en este momento."}
 
-    mask = (
-        (df["location_id"] == location_id) &
-        (df["fecha"] >= t0) &
-        (df["fecha"] <= t1)
-    )
+    mask = (df["location_id"] == location_id) & (df["fecha"] >= t0) & (df["fecha"] <= t1)
     if zone_uuid:
         mask &= df["zone_uuid"] == zone_uuid
 
     sub = df[mask].copy()
     if sub.empty:
-        return {"error": f"Sin datos para location_id={location_id} en el rango {fecha_inicio}→{fecha_fin}."}
+        return {
+            "error": f"Sin datos para location_id={location_id} en el rango {fecha_inicio}→{fecha_fin}."
+        }
 
     # Métricas base
-    total_dias  = delta_days + 1
-    total_vis   = int(sub["total_visits"].sum())
-    media_dia   = round(total_vis / max(len(sub), 1), 0)
-    dwell_med   = round(sub["dwell_time"].mean(), 0)
-    uv_total    = int(sub["unique_visitors"].sum())
-    new_vis     = int(sub["new_visitors"].dropna().sum())
+    total_dias = delta_days + 1
+    total_vis = int(sub["total_visits"].sum())
+    media_dia = round(total_vis / max(len(sub), 1), 0)
+    dwell_med = round(sub["dwell_time"].mean(), 0)
+    uv_total = int(sub["unique_visitors"].sum())
+    new_vis = int(sub["new_visitors"].dropna().sum())
 
     # Hora pico (parsear hourly_visits JSON)
     hora_pico = None
@@ -131,8 +145,12 @@ def get_pm_data(
         t0 = t1 - pd.Timedelta(days=6)
         t_prev_1 = t0 - pd.Timedelta(days=1)
         t_prev_0 = t_prev_1 - pd.Timedelta(days=6)
-        v_now  = df[(df["location_id"] == location_id) & df["fecha"].between(t0, t1)]["total_visits"].sum()
-        v_prev = df[(df["location_id"] == location_id) & df["fecha"].between(t_prev_0, t_prev_1)]["total_visits"].sum()
+        v_now = df[(df["location_id"] == location_id) & df["fecha"].between(t0, t1)][
+            "total_visits"
+        ].sum()
+        v_prev = df[(df["location_id"] == location_id) & df["fecha"].between(t_prev_0, t_prev_1)][
+            "total_visits"
+        ].sum()
         if v_prev:
             wow_pct = round((v_now - v_prev) / v_prev * 100, 1)
     except Exception:
@@ -140,8 +158,8 @@ def get_pm_data(
 
     # Info de la ubicación
     loc_info = _find_location(location_id)
-    nombre   = loc_info.get("name", location_id) if loc_info else location_id
-    org      = loc_info.get("org", "") if loc_info else ""
+    nombre = loc_info.get("name", location_id) if loc_info else location_id
+    org = loc_info.get("org", "") if loc_info else ""
 
     return {
         "ubicacion": nombre,
@@ -161,6 +179,7 @@ def get_pm_data(
 
 # ── Herramienta 2: get_gis_data ───────────────────────────────────────────────
 
+
 def get_gis_data(location_uuid: str, fecha: str | None = None) -> dict:
     """
     Devuelve los datos geoespaciales almacenados localmente para una ubicación.
@@ -172,6 +191,7 @@ def get_gis_data(location_uuid: str, fecha: str | None = None) -> dict:
     """
     try:
         from src.data_processing.geo_enrichment import get_geo_vals
+
         vals = get_geo_vals(location_uuid, fecha)
     except Exception as e:
         return {"error": f"No se pudo cargar geo_features.json: {e}"}
@@ -181,14 +201,14 @@ def get_gis_data(location_uuid: str, fecha: str | None = None) -> dict:
         return {"sin_datos": True, "location_uuid": location_uuid}
 
     loc_info = _find_location(location_uuid)
-    nombre   = loc_info.get("name", location_uuid) if loc_info else location_uuid
+    nombre = loc_info.get("name", location_uuid) if loc_info else location_uuid
 
     result = {"ubicacion": nombre, "location_uuid": location_uuid}
 
     # Alcance peatonal
     if activos.get("poblacion_5min"):
         result["alcance_peatonal"] = {
-            "5min_hab":  activos.get("poblacion_5min"),
+            "5min_hab": activos.get("poblacion_5min"),
             "10min_hab": activos.get("poblacion_10min"),
             "15min_hab": activos.get("poblacion_15min"),
         }
@@ -196,13 +216,16 @@ def get_gis_data(location_uuid: str, fecha: str | None = None) -> dict:
     # Perfil económico
     if activos.get("renta_hogar_anual"):
         result["perfil_economico"] = {
-            "renta_hogar_anual_eur":    activos.get("renta_hogar_anual"),
-            "renta_hogar_mensual_eur":  activos.get("renta_hogar_mensual"),
-            "n_hogares_800m":           activos.get("n_hogares_total"),
-            "pct_hogares_renta_alta":   (
-                round((activos.get("hogares_renta_alta", 0) or 0) /
-                      activos["n_hogares_total"] * 100, 1)
-                if activos.get("n_hogares_total") else None
+            "renta_hogar_anual_eur": activos.get("renta_hogar_anual"),
+            "renta_hogar_mensual_eur": activos.get("renta_hogar_mensual"),
+            "n_hogares_800m": activos.get("n_hogares_total"),
+            "pct_hogares_renta_alta": (
+                round(
+                    (activos.get("hogares_renta_alta", 0) or 0) / activos["n_hogares_total"] * 100,
+                    1,
+                )
+                if activos.get("n_hogares_total")
+                else None
             ),
         }
 
@@ -210,38 +233,45 @@ def get_gis_data(location_uuid: str, fecha: str | None = None) -> dict:
     if activos.get("gasto_ropa_calzado"):
         result["gasto_retail"] = {
             "ropa_calzado_eur_hogar_año": activos.get("gasto_ropa_calzado"),
-            "cuidado_personal_eur":       activos.get("gasto_cuidado_personal"),
-            "ocio_cultura_eur":           activos.get("gasto_ocio_cultura"),
+            "cuidado_personal_eur": activos.get("gasto_cuidado_personal"),
+            "ocio_cultura_eur": activos.get("gasto_ocio_cultura"),
         }
 
     # Presión online
     if activos.get("pct_compras_online") and activos.get("n_hogares_total"):
         nhog = activos["n_hogares_total"]
         result["canal_online"] = {
-            "pct_compra_online":         round(activos["pct_compras_online"] / nhog * 100, 1),
-            "pct_compra_ropa_online":    round((activos.get("online_ropa_deporte_pct") or 0) / nhog * 100, 1),
+            "pct_compra_online": round(activos["pct_compras_online"] / nhog * 100, 1),
+            "pct_compra_ropa_online": round(
+                (activos.get("online_ropa_deporte_pct") or 0) / nhog * 100, 1
+            ),
         }
 
     # Salud financiera
     if activos.get("puede_afrontar_imprevistos_pct") and activos.get("n_hogares_total"):
         nhog = activos["n_hogares_total"]
         result["salud_financiera"] = {
-            "pct_puede_afrontar_imprevistos": round(activos["puede_afrontar_imprevistos_pct"] / nhog * 100, 1),
-            "pct_riesgo_pobreza":             round((activos.get("en_riesgo_pobreza_pct") or 0) / nhog * 100, 1),
+            "pct_puede_afrontar_imprevistos": round(
+                activos["puede_afrontar_imprevistos_pct"] / nhog * 100, 1
+            ),
+            "pct_riesgo_pobreza": round(
+                (activos.get("en_riesgo_pobreza_pct") or 0) / nhog * 100, 1
+            ),
         }
 
     # Entorno competitivo (Phase 2, si disponible)
     if activos.get("n_competidores_500m") is not None:
         result["entorno_competitivo"] = {
-            "competidores_500m":         activos.get("n_competidores_500m"),
+            "competidores_500m": activos.get("n_competidores_500m"),
             "dist_competidor_cercano_m": activos.get("dist_competidor_cercano_m"),
-            "dist_transporte_m":         activos.get("dist_transporte_min_m"),
+            "dist_transporte_m": activos.get("dist_transporte_min_m"),
         }
 
     return result
 
 
 # ── Herramienta 4: get_forecast ──────────────────────────────────────────────
+
 
 def get_forecast(
     location_uuid: str,
@@ -257,15 +287,20 @@ def get_forecast(
     if not 1 <= n_dias <= 90:
         return {"error": "n_dias debe estar entre 1 y 90."}
 
-    from src.services.ml_predictivo import ejecutar_auditoria_predictiva
-    from src.db.queries import get_df_enriquecido
     from datetime import date
+
+    from src.db.queries import get_df_enriquecido
+    from src.services.ml_predictivo import ejecutar_auditoria_predictiva
 
     df = get_df_enriquecido(location_uuid, session_id)
 
     if df is None or df.empty:
         # fallback CSV
-        from src.data_processing.constructor_master import cargar_csv_crudo, enriquecer_datos_ubicacion
+        from src.data_processing.constructor_master import (
+            cargar_csv_crudo,
+            enriquecer_datos_ubicacion,
+        )
+
         archivo = str(_DATA_DIR / f"dataset_{session_id}.csv")
         if not Path(archivo).exists():
             files = sorted(glob(_RAW_GLOB))
@@ -289,10 +324,10 @@ def get_forecast(
     if "error" in result:
         return result
 
-    grafica  = result.get("grafica", {})
-    fechas   = grafica.get("fechas", [])
+    grafica = result.get("grafica", {})
+    fechas = grafica.get("fechas", [])
     predichos = grafica.get("predichos", [])
-    reales   = grafica.get("reales", [])
+    reales = grafica.get("reales", [])
 
     predicciones = []
     for f, p, r in zip(fechas, predichos, reales):
@@ -314,6 +349,7 @@ def get_forecast(
 
 
 # ── Herramienta 5: get_anomalies ──────────────────────────────────────────────
+
 
 def get_anomalies(
     location_uuid: str,
@@ -361,14 +397,16 @@ def get_anomalies(
         for _, row in grp.iterrows():
             z = (row["total_visits"] - media) / std
             if abs(z) > 2.0:
-                anomalias.append({
-                    "fecha": row["fecha"].strftime("%Y-%m-%d"),
-                    "zona": zone_map.get(zona, zona),
-                    "visitas": int(row["total_visits"]),
-                    "media_periodo": round(media, 1),
-                    "z_score": round(float(z), 2),
-                    "tipo": "pico" if z > 0 else "caída",
-                })
+                anomalias.append(
+                    {
+                        "fecha": row["fecha"].strftime("%Y-%m-%d"),
+                        "zona": zone_map.get(zona, zona),
+                        "visitas": int(row["total_visits"]),
+                        "media_periodo": round(media, 1),
+                        "z_score": round(float(z), 2),
+                        "tipo": "pico" if z > 0 else "caída",
+                    }
+                )
 
     anomalias.sort(key=lambda x: abs(x["z_score"]), reverse=True)
 
@@ -381,6 +419,7 @@ def get_anomalies(
 
 
 # ── Herramienta 6: get_hourly_breakdown ──────────────────────────────────────
+
 
 def get_hourly_breakdown(
     location_uuid: str,
@@ -409,12 +448,24 @@ def get_hourly_breakdown(
     if sub.empty:
         return {"error": "Sin datos de desglose horario en el periodo indicado."}
 
-    _DIAS = {0: "Lunes", 1: "Martes", 2: "Miércoles", 3: "Jueves", 4: "Viernes", 5: "Sábado", 6: "Domingo"}
+    _DIAS = {
+        0: "Lunes",
+        1: "Martes",
+        2: "Miércoles",
+        3: "Jueves",
+        4: "Viernes",
+        5: "Sábado",
+        6: "Domingo",
+    }
 
     rows = []
     for _, row in sub.iterrows():
         try:
-            arr = json.loads(row["hourly_visits"]) if isinstance(row["hourly_visits"], str) else row["hourly_visits"]
+            arr = (
+                json.loads(row["hourly_visits"])
+                if isinstance(row["hourly_visits"], str)
+                else row["hourly_visits"]
+            )
             if not isinstance(arr, list) or len(arr) != 24:
                 continue
         except Exception:
@@ -498,13 +549,15 @@ def compare_locations(
             por_dia = sub.groupby("fecha")[metrica].sum()
             total = int(por_dia.sum())
             media_diaria = round(float(por_dia.mean()), 1)
-        resultados.append({
-            "nombre": nombre,
-            "uuid": uuid,
-            "total": total,
-            "media_diaria": media_diaria,
-            "dias_con_datos": int(sub["fecha"].nunique()),
-        })
+        resultados.append(
+            {
+                "nombre": nombre,
+                "uuid": uuid,
+                "total": total,
+                "media_diaria": media_diaria,
+                "dias_con_datos": int(sub["fecha"].nunique()),
+            }
+        )
 
     ranking = sorted(
         [r for r in resultados if not r.get("sin_datos")],
@@ -522,6 +575,7 @@ def compare_locations(
 
 
 # ── Herramienta 3: get_weather_holidays ───────────────────────────────────────
+
 
 def get_weather_holidays(
     location_id: str,
@@ -554,9 +608,9 @@ def get_weather_holidays(
     if not loc:
         return {"error": f"Ubicación {location_id} no encontrada."}
 
-    lat          = loc.get("lat") or 40.4168
-    lon          = loc.get("lon") or -3.7038
-    region_code  = loc.get("region_code", "MD")
+    lat = loc.get("lat") or 40.4168
+    lon = loc.get("lon") or -3.7038
+    region_code = loc.get("region_code", "MD")
 
     # ── Festivos ─────────────────────────────────────────────────────────────
     years = list({t0.year, t1.year})
@@ -567,8 +621,7 @@ def get_weather_holidays(
 
     dates = pd.date_range(fecha_inicio, fecha_fin, freq="D")
     festivos = [
-        {"fecha": d.strftime("%Y-%m-%d"), "nombre": cal[d.date()]}
-        for d in dates if d.date() in cal
+        {"fecha": d.strftime("%Y-%m-%d"), "nombre": cal[d.date()]} for d in dates if d.date() in cal
     ]
 
     # ── Clima (Open-Meteo archive) ────────────────────────────────────────────
@@ -584,8 +637,8 @@ def get_weather_holidays(
         resp = requests.get(url, timeout=10).json()
         for i, fstr in enumerate(resp["daily"]["time"]):
             weather_daily[fstr] = {
-                "tmax":             resp["daily"]["temperature_2m_max"][i],
-                "tmin":             resp["daily"]["temperature_2m_min"][i],
+                "tmax": resp["daily"]["temperature_2m_max"][i],
+                "tmin": resp["daily"]["temperature_2m_min"][i],
                 "precipitacion_mm": resp["daily"]["precipitation_sum"][i],
             }
     except Exception:
@@ -594,31 +647,32 @@ def get_weather_holidays(
     # ── Resumen por día ───────────────────────────────────────────────────────
     por_dia = []
     for d in dates:
-        fstr   = d.strftime("%Y-%m-%d")
-        entry  = {"fecha": fstr, "dia_semana": d.strftime("%A")}
+        fstr = d.strftime("%Y-%m-%d")
+        entry = {"fecha": fstr, "dia_semana": d.strftime("%A")}
         festivo = cal.get(d.date())
         if festivo:
             entry["festivo"] = festivo
         w = weather_daily.get(fstr)
         if w:
-            entry["tmax"]             = w["tmax"]
-            entry["tmin"]             = w["tmin"]
+            entry["tmax"] = w["tmax"]
+            entry["tmin"] = w["tmin"]
             entry["precipitacion_mm"] = w["precipitacion_mm"]
-            entry["lluvia"]           = (w["precipitacion_mm"] or 0) > 1.0
+            entry["lluvia"] = (w["precipitacion_mm"] or 0) > 1.0
         por_dia.append(entry)
 
     return {
-        "ubicacion":        loc.get("name", location_id),
-        "region":           region_code,
-        "periodo":          {"inicio": fecha_inicio, "fin": fecha_fin, "dias": delta_days + 1},
-        "festivos":         festivos,
-        "n_festivos":       len(festivos),
+        "ubicacion": loc.get("name", location_id),
+        "region": region_code,
+        "periodo": {"inicio": fecha_inicio, "fin": fecha_fin, "dias": delta_days + 1},
+        "festivos": festivos,
+        "n_festivos": len(festivos),
         "clima_disponible": bool(weather_daily),
-        "por_dia":          por_dia,
+        "por_dia": por_dia,
     }
 
 
 # ── Herramienta 8: get_location_info ─────────────────────────────────────────
+
 
 def get_location_info(location_uuid: str) -> dict:
     """
@@ -629,6 +683,7 @@ def get_location_info(location_uuid: str) -> dict:
     """
     try:
         from src.db.store import get_conn
+
         conn = get_conn()
         row = conn.execute(
             """SELECT u.location_uuid, u.nombre, u.ciudad, u.provincia,
@@ -649,6 +704,7 @@ def get_location_info(location_uuid: str) -> dict:
 
     try:
         from src.db.store import get_conn
+
         conn = get_conn()
         zonas = conn.execute(
             """SELECT zone_uuid, nombre, zone_type, hidden, last_zone
@@ -661,31 +717,32 @@ def get_location_info(location_uuid: str) -> dict:
 
     zonas_list = [
         {
-            "uuid":       z[0],
-            "nombre":     z[1],
-            "tipo":       z[2],
-            "oculta":     bool(z[3]),
-            "zona_hoja":  bool(z[4]),
+            "uuid": z[0],
+            "nombre": z[1],
+            "tipo": z[2],
+            "oculta": bool(z[3]),
+            "zona_hoja": bool(z[4]),
         }
         for z in zonas
     ]
 
     return {
         "location_uuid": location_uuid,
-        "nombre":        nombre,
-        "organizacion":  org_nombre,
-        "org_uuid":      org_uuid,
-        "ciudad":        ciudad,
-        "provincia":     provincia,
-        "direccion":     direccion,
+        "nombre": nombre,
+        "organizacion": org_nombre,
+        "org_uuid": org_uuid,
+        "ciudad": ciudad,
+        "provincia": provincia,
+        "direccion": direccion,
         "codigo_postal": cp,
-        "coordenadas":   {"lat": lat, "lon": lon},
-        "n_zonas":       len(zonas_list),
-        "zonas":         zonas_list,
+        "coordenadas": {"lat": lat, "lon": lon},
+        "n_zonas": len(zonas_list),
+        "zonas": zonas_list,
     }
 
 
 # ── Herramienta 9: get_active_features ───────────────────────────────────────
+
 
 def get_active_features(location_uuid: str) -> dict:
     """
@@ -696,6 +753,7 @@ def get_active_features(location_uuid: str) -> dict:
     """
     try:
         from src.db.store import get_conn
+
         conn = get_conn()
         rows = conn.execute(
             """SELECT f.feature_key, r.source, r.categoria, r.notas,
@@ -713,16 +771,17 @@ def get_active_features(location_uuid: str) -> dict:
         loc = _find_location(location_uuid)
         nombre = loc.get("name", location_uuid) if loc else location_uuid
         return {
-            "ubicacion":       nombre,
+            "ubicacion": nombre,
             "n_features_activas": 0,
-            "features":        [],
-            "nota":            "No hay features externas activas para esta ubicación.",
+            "features": [],
+            "nota": "No hay features externas activas para esta ubicación.",
         }
 
     feature_keys = [r[0] for r in rows]
     last_values: dict = {}
     try:
         from src.db.store import get_conn
+
         conn = get_conn()
         placeholders = ",".join(["?"] * len(feature_keys))
         lv_rows = conn.execute(
@@ -745,9 +804,9 @@ def get_active_features(location_uuid: str) -> dict:
     for fk, source, categoria, notas, wmape_delta, evaluated_at in rows:
         entry: dict = {
             "feature_key": fk,
-            "fuente":      source,
-            "categoria":   categoria,
-            "notas":       notas,
+            "fuente": source,
+            "categoria": categoria,
+            "notas": notas,
         }
         if wmape_delta is not None:
             entry["impacto_wmape_pct"] = round(float(wmape_delta) * 100, 2)
@@ -760,13 +819,14 @@ def get_active_features(location_uuid: str) -> dict:
     nombre = loc.get("name", location_uuid) if loc else location_uuid
 
     return {
-        "ubicacion":          nombre,
+        "ubicacion": nombre,
         "n_features_activas": len(features),
-        "features":           features,
+        "features": features,
     }
 
 
 # ── Herramienta 10: get_external_features ────────────────────────────────────
+
 
 def get_external_features(
     location_uuid: str,
@@ -794,6 +854,7 @@ def get_external_features(
 
     try:
         from src.db.store import get_conn
+
         conn = get_conn()
         placeholders = ",".join(["?"] * len(feature_keys))
         rows = conn.execute(
@@ -817,6 +878,7 @@ def get_external_features(
         t1_py = t1 - pd.DateOffset(years=1)
         try:
             from src.db.store import get_conn
+
             conn = get_conn()
             py_rows = conn.execute(
                 f"""SELECT feature_key, SUM(value)
@@ -839,11 +901,11 @@ def get_external_features(
     for fk, vals in by_key.items():
         valores = [v["valor"] for v in vals]
         entry: dict = {
-            "total":      round(sum(valores), 2),
-            "media_dia":  round(sum(valores) / len(valores), 2),
-            "max":        round(max(valores), 2),
-            "min":        round(min(valores), 2),
-            "n_dias":     len(valores),
+            "total": round(sum(valores), 2),
+            "media_dia": round(sum(valores) / len(valores), 2),
+            "max": round(max(valores), 2),
+            "min": round(min(valores), 2),
+            "n_dias": len(valores),
         }
         if fk in yoy_deltas:
             entry["yoy_pct"] = yoy_deltas[fk]
@@ -854,15 +916,16 @@ def get_external_features(
     nombre = loc.get("name", location_uuid) if loc else location_uuid
 
     return {
-        "ubicacion":    nombre,
-        "periodo":      {"inicio": fecha_inicio, "fin": fecha_fin},
-        "resumen":      resumen,
-        "series":       by_key,
-        "sin_datos":    keys_sin_datos,
+        "ubicacion": nombre,
+        "periodo": {"inicio": fecha_inicio, "fin": fecha_fin},
+        "resumen": resumen,
+        "series": by_key,
+        "sin_datos": keys_sin_datos,
     }
 
 
 # ── Herramienta 11: get_calendar_events ──────────────────────────────────────
+
 
 def get_calendar_events(
     location_uuid: str,
@@ -882,6 +945,7 @@ def get_calendar_events(
 
     try:
         from src.db.store import get_conn
+
         conn = get_conn()
         query = """SELECT evento_key, fecha_inicio, fecha_fin, metadata
                    FROM store_calendario_org
@@ -895,22 +959,41 @@ def get_calendar_events(
     except Exception as e:
         return {"error": f"Error al consultar el calendario: {e}"}
 
-    _META_KEYS = ("titulo", "nombre", "barco", "artista", "venue", "venue_nombre",
-                  "aforo", "n_pasajeros", "pasajeros", "operador", "naviera",
-                  "terminal", "rsvp_count", "going", "url", "impacto")
+    _META_KEYS = (
+        "titulo",
+        "nombre",
+        "barco",
+        "artista",
+        "venue",
+        "venue_nombre",
+        "aforo",
+        "n_pasajeros",
+        "pasajeros",
+        "operador",
+        "naviera",
+        "terminal",
+        "rsvp_count",
+        "going",
+        "url",
+        "impacto",
+    )
 
     eventos = []
     for key, fi, ff, meta_raw in rows:
-        meta = meta_raw if isinstance(meta_raw, dict) else (
-            json.loads(meta_raw) if meta_raw else {}
+        meta = (
+            meta_raw if isinstance(meta_raw, dict) else (json.loads(meta_raw) if meta_raw else {})
         )
-        titulo = (meta.get("titulo") or meta.get("nombre") or
-                  meta.get("barco") or key.replace("_", " ").title())
+        titulo = (
+            meta.get("titulo")
+            or meta.get("nombre")
+            or meta.get("barco")
+            or key.replace("_", " ").title()
+        )
         entry: dict = {
-            "evento_key":   key,
-            "titulo":       titulo,
+            "evento_key": key,
+            "titulo": titulo,
             "fecha_inicio": str(fi),
-            "fecha_fin":    str(ff),
+            "fecha_fin": str(ff),
         }
         # Exponer toda la metadata relevante directamente
         for k in _META_KEYS:
@@ -927,15 +1010,16 @@ def get_calendar_events(
     nombre = loc.get("name", location_uuid) if loc else location_uuid
 
     return {
-        "ubicacion":   nombre,
-        "periodo":     {"inicio": fecha_inicio, "fin": fecha_fin},
-        "n_eventos":   len(eventos),
-        "por_tipo":    por_tipo,
-        "eventos":     eventos,
+        "ubicacion": nombre,
+        "periodo": {"inicio": fecha_inicio, "fin": fecha_fin},
+        "n_eventos": len(eventos),
+        "por_tipo": por_tipo,
+        "eventos": eventos,
     }
 
 
 # ── Herramienta 12: get_cruise_calls ─────────────────────────────────────────
+
 
 def get_cruise_calls(
     location_uuid: str,
@@ -953,8 +1037,10 @@ def get_cruise_calls(
         return {"error": "Formato de fecha no válido. Usa YYYY-MM-DD."}
 
     try:
-        from src.db.store import get_conn
         import json as _json
+
+        from src.db.store import get_conn
+
         conn = get_conn()
         raw_rows = conn.execute(
             """SELECT fecha_inicio::text, metadata
@@ -970,22 +1056,28 @@ def get_cruise_calls(
     if not raw_rows:
         return {
             "ubicacion": (_find_location(location_uuid) or {}).get("name", location_uuid),
-            "periodo":   {"inicio": fecha_inicio, "fin": fecha_fin},
+            "periodo": {"inicio": fecha_inicio, "fin": fecha_fin},
             "n_escalas": 0,
-            "escalas":   [],
-            "nota":      "No se registran escalas de cruceros en este periodo.",
+            "escalas": [],
+            "nota": "No se registran escalas de cruceros en este periodo.",
         }
 
     escalas = []
     for fecha_s, meta_json in raw_rows:
-        meta = meta_json if isinstance(meta_json, dict) else (_json.loads(meta_json) if meta_json else {})
-        escalas.append({
-            "fecha":     fecha_s,
-            "barco":     meta.get('barco', '—'),
-            "operador":  meta.get('operador') or meta.get('naviera', ''),
-            "pasajeros": meta.get('n_pasajeros'),
-            "terminal":  meta.get('terminal', ''),
-        })
+        meta = (
+            meta_json
+            if isinstance(meta_json, dict)
+            else (_json.loads(meta_json) if meta_json else {})
+        )
+        escalas.append(
+            {
+                "fecha": fecha_s,
+                "barco": meta.get("barco", "—"),
+                "operador": meta.get("operador") or meta.get("naviera", ""),
+                "pasajeros": meta.get("n_pasajeros"),
+                "terminal": meta.get("terminal", ""),
+            }
+        )
 
     # Resumen mensual
     df_e = pd.DataFrame(escalas)
@@ -1005,6 +1097,7 @@ def get_cruise_calls(
     yoy: dict | None = None
     try:
         from src.db.store import get_conn
+
         conn = get_conn()
         t0_py = t0 - pd.DateOffset(years=1)
         t1_py = t1 - pd.DateOffset(years=1)
@@ -1019,7 +1112,9 @@ def get_cruise_calls(
             yoy = {
                 "periodo_anterior": {"inicio": str(t0_py.date()), "fin": str(t1_py.date())},
                 "pasajeros_año_anterior": int(prev_pax),
-                "delta_pct": round((total_pax - prev_pax) / prev_pax * 100, 1) if prev_pax else None,
+                "delta_pct": (
+                    round((total_pax - prev_pax) / prev_pax * 100, 1) if prev_pax else None
+                ),
             }
     except Exception:
         pass
@@ -1028,12 +1123,12 @@ def get_cruise_calls(
     nombre = loc.get("name", location_uuid) if loc else location_uuid
 
     result: dict = {
-        "ubicacion":        nombre,
-        "periodo":          {"inicio": fecha_inicio, "fin": fecha_fin},
-        "n_escalas":        len(escalas),
+        "ubicacion": nombre,
+        "periodo": {"inicio": fecha_inicio, "fin": fecha_fin},
+        "n_escalas": len(escalas),
         "pasajeros_totales": total_pax,
-        "resumen_mensual":  resumen_mensual,
-        "escalas":          escalas,
+        "resumen_mensual": resumen_mensual,
+        "escalas": escalas,
     }
     if yoy:
         result["yoy"] = yoy
@@ -1041,6 +1136,7 @@ def get_cruise_calls(
 
 
 # ── Herramienta 13: get_model_metrics ────────────────────────────────────────
+
 
 def get_model_metrics(
     location_uuid: str,
@@ -1053,6 +1149,7 @@ def get_model_metrics(
     """
     try:
         from src.db.store import get_conn
+
         conn = get_conn()
         query = """SELECT model_id, zone_uuid, trained_at, features, metrics, is_valid
                    FROM model_registry WHERE location_uuid = ?"""
@@ -1070,32 +1167,39 @@ def get_model_metrics(
         nombre = loc.get("name", location_uuid) if loc else location_uuid
         return {
             "ubicacion": nombre,
-            "modelos":   [],
-            "nota":      "No hay modelos entrenados registrados para esta ubicación.",
+            "modelos": [],
+            "nota": "No hay modelos entrenados registrados para esta ubicación.",
         }
 
     modelos = []
     for mid, zuuid, trained_at, features_raw, metrics_raw, is_valid in model_rows:
-        features = features_raw if isinstance(features_raw, list) else (
-            json.loads(features_raw) if features_raw else []
+        features = (
+            features_raw
+            if isinstance(features_raw, list)
+            else (json.loads(features_raw) if features_raw else [])
         )
-        metrics = metrics_raw if isinstance(metrics_raw, dict) else (
-            json.loads(metrics_raw) if metrics_raw else {}
+        metrics = (
+            metrics_raw
+            if isinstance(metrics_raw, dict)
+            else (json.loads(metrics_raw) if metrics_raw else {})
         )
-        modelos.append({
-            "model_id":   mid,
-            "zone_uuid":  zuuid,
-            "entrenado":  str(trained_at)[:10] if trained_at else None,
-            "valido":     bool(is_valid),
-            "n_features": len(features),
-            "features":   features,
-            "metricas":   metrics,
-        })
+        modelos.append(
+            {
+                "model_id": mid,
+                "zone_uuid": zuuid,
+                "entrenado": str(trained_at)[:10] if trained_at else None,
+                "valido": bool(is_valid),
+                "n_features": len(features),
+                "features": features,
+                "metricas": metrics,
+            }
+        )
 
     # Feature evaluation results
     feat_evals: list = []
     try:
         from src.db.store import get_conn
+
         conn = get_conn()
         q2 = """SELECT feature_key, fecha_eval_ini, fecha_eval_fin,
                        wmape_baseline, wmape_con_feat, wmape_delta, horizonte
@@ -1106,14 +1210,16 @@ def get_model_metrics(
         q2 += " ORDER BY evaluated_at DESC LIMIT 50"
         eval_rows = conn.execute(q2, p2).fetchall()
         for fk, fi, ff, wb, wf, wd, hz in eval_rows:
-            feat_evals.append({
-                "feature_key":      fk,
-                "periodo":          f"{fi} → {ff}",
-                "wmape_baseline":   round(float(wb), 3) if wb is not None else None,
-                "wmape_con_feat":   round(float(wf), 3) if wf is not None else None,
-                "mejora_wmape_pct": round(float(wd) * 100, 2) if wd is not None else None,
-                "horizonte_dias":   hz,
-            })
+            feat_evals.append(
+                {
+                    "feature_key": fk,
+                    "periodo": f"{fi} → {ff}",
+                    "wmape_baseline": round(float(wb), 3) if wb is not None else None,
+                    "wmape_con_feat": round(float(wf), 3) if wf is not None else None,
+                    "mejora_wmape_pct": round(float(wd) * 100, 2) if wd is not None else None,
+                    "horizonte_dias": hz,
+                }
+            )
     except Exception:
         pass
 
@@ -1121,15 +1227,16 @@ def get_model_metrics(
     nombre = loc.get("name", location_uuid) if loc else location_uuid
 
     return {
-        "ubicacion":          nombre,
-        "n_modelos":          len(modelos),
+        "ubicacion": nombre,
+        "n_modelos": len(modelos),
         "modelo_mas_reciente": modelos[0] if modelos else None,
-        "todos_modelos":      modelos,
+        "todos_modelos": modelos,
         "evaluacion_features": feat_evals,
     }
 
 
 # ── Herramienta 14: get_ev_ranks ─────────────────────────────────────────────
+
 
 def get_ev_ranks(
     location_uuid: str,
@@ -1161,12 +1268,16 @@ def get_ev_ranks(
         return {"error": f"Rango máximo: {MAX_DAYS_EXT} días."}
 
     _EV_KEYS = [
-        "ev_rank_concierto", "ev_rank_festival",
-        "ev_rank_deportivo", "ev_rank_municipal", "ev_rank_total",
+        "ev_rank_concierto",
+        "ev_rank_festival",
+        "ev_rank_deportivo",
+        "ev_rank_municipal",
+        "ev_rank_total",
     ]
 
     try:
         from src.db.store import get_conn
+
         conn = get_conn()
         placeholders = ",".join(["?"] * len(_EV_KEYS))
         rows = conn.execute(
@@ -1204,9 +1315,9 @@ def get_ev_ranks(
     nombre = loc.get("name", location_uuid) if loc else location_uuid
 
     return {
-        "ubicacion":        nombre,
-        "periodo":          {"inicio": fecha_inicio, "fin": fecha_fin},
+        "ubicacion": nombre,
+        "periodo": {"inicio": fecha_inicio, "fin": fecha_fin},
         "n_dias_con_senal": len(dias_con_senal),
-        "pico_por_tipo":    picos,
-        "dias":             dias_con_senal,
+        "pico_por_tipo": picos,
+        "dias": dias_con_senal,
     }

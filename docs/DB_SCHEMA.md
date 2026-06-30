@@ -1,8 +1,8 @@
 # DB_SCHEMA — Agentic Workflow
 
-**Motor:** PostgreSQL 16 (Docker Compose)  
-**Conexión:** `src/db/store.py` → pool psycopg v3, thread-local, autocommit  
-**DDL:** se aplica automáticamente en el primer `get_conn()` de cada proceso (`_apply_ddl`)  
+**Motor:** PostgreSQL 16 (Docker Compose)
+**Conexión:** `src/db/store.py` → pool psycopg v3, thread-local, autocommit
+**DDL:** se aplica automáticamente en el primer `get_conn()` de cada proceso (`_apply_ddl`)
 **Última revisión:** 2026-06-21
 
 ---

@@ -5,9 +5,10 @@ El callback actualizar_alerta_sync calcula la fecha más atrasada entre las
 ubicaciones seleccionadas (groupby location_id → max fecha → min entre locs).
 Si esa fecha está más de 1 día por detrás de ayer, debe alertar.
 """
-import pandas as pd
-import pytest
+
 from datetime import date, timedelta
+
+import pandas as pd
 
 
 def _fecha_mas_atrasada(df: pd.DataFrame, locs: list | None = None) -> date:
@@ -25,14 +26,17 @@ def _df_multi(location_fechas: dict) -> pd.DataFrame:
     for loc_id, max_fecha in location_fechas.items():
         # Simulamos 7 días de datos para cada ubicación
         for d in range(7):
-            rows.append({
-                "location_id": loc_id,
-                "fecha": pd.Timestamp(max_fecha) - timedelta(days=d),
-            })
+            rows.append(
+                {
+                    "location_id": loc_id,
+                    "fecha": pd.Timestamp(max_fecha) - timedelta(days=d),
+                }
+            )
     return pd.DataFrame(rows)
 
 
 # ── Lógica de fecha atrasada ──────────────────────────────────────────────────
+
 
 def test_datos_frescos_no_generan_alerta():
     ayer = date.today() - timedelta(days=1)

@@ -7,10 +7,11 @@ Uso (desarrollo / testing con cualquier cliente MCP):
 El servidor Dash NO arranca este proceso directamente; usa tools.py de forma
 in-process para evitar conflictos con gunicorn multi-worker.
 """
+
 from mcp.server.fastmcp import FastMCP
 
-from src.chatbot.tools import get_pm_data as _get_pm_data
 from src.chatbot.tools import get_gis_data as _get_gis_data
+from src.chatbot.tools import get_pm_data as _get_pm_data
 
 mcp = FastMCP(
     name="pm-dashboard",

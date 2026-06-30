@@ -1,32 +1,39 @@
 """
 Callbacks del asistente de chat.
 """
+
 import os
 import re
 
-from dash import Input, Output, State, ALL, callback, no_update
+from dash import ALL, Input, Output, State, callback, no_update
 
 from src.chatbot.cache import get_cached
 from src.chatbot.chat_panel import (
-    render_history, streaming_bubble, mention_option,
-    build_conv_list, initial_history_content,
+    build_conv_list,
+    initial_history_content,
+    mention_option,
+    render_history,
+    streaming_bubble,
 )
 from src.chatbot.history import (
-    create_conversation, update_conversation,
-    list_conversations, load_conversation,
-    rename_conversation, delete_conversation,
+    create_conversation,
+    delete_conversation,
+    list_conversations,
+    load_conversation,
+    rename_conversation,
+    update_conversation,
 )
-from src.chatbot.mentions import parse_all_mentions, get_mention_map
+from src.chatbot.mentions import get_mention_map, parse_all_mentions
 from src.chatbot.tools import _find_location
 
 _DROPDOWN_VISIBLE = {
-    "display":      "block",
-    "maxHeight":    "200px",
-    "overflowY":    "auto",
-    "background":   "white",
-    "border":       "1px solid #b3c8f5",
+    "display": "block",
+    "maxHeight": "200px",
+    "overflowY": "auto",
+    "background": "white",
+    "border": "1px solid #b3c8f5",
     "borderRadius": "10px",
-    "boxShadow":    "0 -4px 16px rgba(0,82,204,0.12)",
+    "boxShadow": "0 -4px 16px rgba(0,82,204,0.12)",
     "marginBottom": "6px",
 }
 _DROPDOWN_HIDDEN = {"display": "none"}
@@ -34,9 +41,10 @@ _DROPDOWN_HIDDEN = {"display": "none"}
 
 # ── Abrir / cerrar modal ──────────────────────────────────────────────────────
 
+
 @callback(
     Output("chat-modal", "is_open"),
-    Input("chat-fab",   "n_clicks"),
+    Input("chat-fab", "n_clicks"),
     State("chat-modal", "is_open"),
     prevent_initial_call=True,
 )
@@ -45,6 +53,7 @@ def toggle_modal(n, is_open):
 
 
 # ── Cargar lista de conversaciones al abrir el modal ─────────────────────────
+
 
 @callback(
     Output("chat-conv-list", "children"),
@@ -60,29 +69,31 @@ def on_modal_open(is_open, session_id):
 
 # ── Nueva conversación ────────────────────────────────────────────────────────
 
+
 @callback(
-    Output("chat-conv-id",          "data"),
-    Output("chat-messages-store",   "data",     allow_duplicate=True),
-    Output("chat-history",          "children", allow_duplicate=True),
-    Output("chat-conv-list",        "children", allow_duplicate=True),
+    Output("chat-conv-id", "data"),
+    Output("chat-messages-store", "data", allow_duplicate=True),
+    Output("chat-history", "children", allow_duplicate=True),
+    Output("chat-conv-list", "children", allow_duplicate=True),
     Input("chat-new-btn", "n_clicks"),
-    State("session-id",   "data"),
+    State("session-id", "data"),
     prevent_initial_call=True,
 )
 def on_new_conversation(n_clicks, session_id):
     if not n_clicks:
         return no_update, no_update, no_update, no_update
-    sid   = session_id or "anonymous"
+    sid = session_id or "anonymous"
     convs = list_conversations(sid)
     return None, [], initial_history_content(), build_conv_list(convs)
 
 
 # ── Seleccionar conversación existente ────────────────────────────────────────
 
+
 @callback(
-    Output("chat-conv-id",        "data",     allow_duplicate=True),
-    Output("chat-messages-store", "data",     allow_duplicate=True),
-    Output("chat-history",        "children", allow_duplicate=True),
+    Output("chat-conv-id", "data", allow_duplicate=True),
+    Output("chat-messages-store", "data", allow_duplicate=True),
+    Output("chat-history", "children", allow_duplicate=True),
     Input({"type": "conv-item", "id": ALL}, "n_clicks"),
     State("session-id", "data"),
     prevent_initial_call=True,
@@ -91,6 +102,7 @@ def on_select_conversation(n_clicks_list, session_id):
     if not any(n_clicks_list):
         return no_update, no_update, no_update
     from dash import ctx
+
     triggered = ctx.triggered_id
     if not triggered or not isinstance(triggered, dict):
         return no_update, no_update, no_update
@@ -104,9 +116,10 @@ def on_select_conversation(n_clicks_list, session_id):
 
 # ── Renombrar conversación ───────────────────────────────────────────────────
 
+
 @callback(
-    Output("chat-conv-editing",   "data"),
-    Output("chat-conv-list",      "children", allow_duplicate=True),
+    Output("chat-conv-editing", "data"),
+    Output("chat-conv-list", "children", allow_duplicate=True),
     Input({"type": "conv-rename-btn", "id": ALL}, "n_clicks"),
     State("session-id", "data"),
     prevent_initial_call=True,
@@ -115,17 +128,18 @@ def start_rename(n_clicks_list, session_id):
     if not any(n_clicks_list or []):
         return no_update, no_update
     from dash import ctx
+
     conv_id = ctx.triggered_id["id"]
-    convs   = list_conversations(session_id or "anonymous")
+    convs = list_conversations(session_id or "anonymous")
     return conv_id, build_conv_list(convs, editing_id=conv_id)
 
 
 @callback(
-    Output("chat-conv-editing",   "data",     allow_duplicate=True),
-    Output("chat-conv-list",      "children", allow_duplicate=True),
+    Output("chat-conv-editing", "data", allow_duplicate=True),
+    Output("chat-conv-list", "children", allow_duplicate=True),
     Input({"type": "conv-rename-confirm", "id": ALL}, "n_clicks"),
-    Input({"type": "conv-rename-input",   "id": ALL}, "n_submit"),
-    State({"type": "conv-rename-input",   "id": ALL}, "value"),
+    Input({"type": "conv-rename-input", "id": ALL}, "n_submit"),
+    State({"type": "conv-rename-input", "id": ALL}, "value"),
     State("session-id", "data"),
     prevent_initial_call=True,
 )
@@ -133,16 +147,17 @@ def confirm_rename(n_confirm, n_submit_list, values, session_id):
     if not any(n_confirm or []) and not any(n_submit_list or []):
         return no_update, no_update
     from dash import ctx
-    conv_id   = ctx.triggered_id["id"]
+
+    conv_id = ctx.triggered_id["id"]
     new_title = (values[0] if values else "").strip() or "Conversación"
-    sid       = session_id or "anonymous"
+    sid = session_id or "anonymous"
     rename_conversation(sid, conv_id, new_title)
     return None, build_conv_list(list_conversations(sid))
 
 
 @callback(
-    Output("chat-conv-editing",   "data",     allow_duplicate=True),
-    Output("chat-conv-list",      "children", allow_duplicate=True),
+    Output("chat-conv-editing", "data", allow_duplicate=True),
+    Output("chat-conv-list", "children", allow_duplicate=True),
     Input({"type": "conv-rename-cancel", "id": ALL}, "n_clicks"),
     State("session-id", "data"),
     prevent_initial_call=True,
@@ -155,24 +170,26 @@ def cancel_rename(n_clicks_list, session_id):
 
 # ── Eliminar conversación ────────────────────────────────────────────────────
 
+
 @callback(
-    Output("chat-conv-list",      "children", allow_duplicate=True),
-    Output("chat-conv-id",        "data",     allow_duplicate=True),
-    Output("chat-messages-store", "data",     allow_duplicate=True),
-    Output("chat-history",        "children", allow_duplicate=True),
+    Output("chat-conv-list", "children", allow_duplicate=True),
+    Output("chat-conv-id", "data", allow_duplicate=True),
+    Output("chat-messages-store", "data", allow_duplicate=True),
+    Output("chat-history", "children", allow_duplicate=True),
     Input({"type": "conv-delete-btn", "id": ALL}, "n_clicks"),
-    State("session-id",    "data"),
-    State("chat-conv-id",  "data"),
+    State("session-id", "data"),
+    State("chat-conv-id", "data"),
     prevent_initial_call=True,
 )
 def on_delete_conversation(n_clicks_list, session_id, active_conv_id):
     if not any(n_clicks_list or []):
         return no_update, no_update, no_update, no_update
     from dash import ctx
+
     conv_id = ctx.triggered_id["id"]
-    sid     = session_id or "anonymous"
+    sid = session_id or "anonymous"
     delete_conversation(sid, conv_id)
-    convs   = list_conversations(sid)
+    convs = list_conversations(sid)
     new_list = build_conv_list(convs)
     if conv_id == active_conv_id:
         return new_list, None, [], initial_history_content()
@@ -180,6 +197,7 @@ def on_delete_conversation(n_clicks_list, session_id, active_conv_id):
 
 
 # ── Dropdown de @menciones — mostrar/filtrar al escribir @ ───────────────────
+
 
 @callback(
     Output("chat-mention-dropdown", "style"),
@@ -218,6 +236,7 @@ def update_mention_dropdown(value):
 
 # ── Selección en el dropdown — insertar slug en input ────────────────────────
 
+
 @callback(
     Output("chat-input", "value", allow_duplicate=True),
     Input({"type": "mention-option", "slug": ALL}, "n_clicks"),
@@ -228,6 +247,7 @@ def select_mention_option(n_clicks_list, current_value):
     if not any(n_clicks_list):
         return no_update
     from dash import ctx
+
     triggered = ctx.triggered_id
     if not triggered or not isinstance(triggered, dict):
         return no_update
@@ -238,6 +258,7 @@ def select_mention_option(n_clicks_list, current_value):
 
 # ── Chips de sugerencias — insertar en input ──────────────────────────────────
 
+
 @callback(
     Output("chat-input", "value", allow_duplicate=True),
     Input({"type": "suggestion-chip", "q": ALL}, "n_clicks"),
@@ -247,6 +268,7 @@ def insert_suggestion(n_clicks_list):
     if not any(n_clicks_list):
         return no_update
     from dash import ctx
+
     triggered = ctx.triggered_id
     if not triggered or not isinstance(triggered, dict):
         return no_update
@@ -255,23 +277,24 @@ def insert_suggestion(n_clicks_list):
 
 # ── Enviar mensaje ────────────────────────────────────────────────────────────
 
+
 @callback(
-    Output("chat-history",          "children"),
-    Output("chat-messages-store",   "data"),
-    Output("chat-input",            "value"),
-    Output("chat-loading-sink",     "children"),
-    Output("chat-stream-interval",  "disabled"),
-    Output("chat-stream-interval",  "n_intervals"),
-    Output("chat-stream-id",        "data"),
-    Output("chat-conv-id",          "data",     allow_duplicate=True),
-    Output("chat-conv-list",        "children", allow_duplicate=True),
-    Input("chat-send",  "n_clicks"),
+    Output("chat-history", "children"),
+    Output("chat-messages-store", "data"),
+    Output("chat-input", "value"),
+    Output("chat-loading-sink", "children"),
+    Output("chat-stream-interval", "disabled"),
+    Output("chat-stream-interval", "n_intervals"),
+    Output("chat-stream-id", "data"),
+    Output("chat-conv-id", "data", allow_duplicate=True),
+    Output("chat-conv-list", "children", allow_duplicate=True),
+    Input("chat-send", "n_clicks"),
     Input("chat-input", "n_submit"),
-    State("chat-input",          "value"),
+    State("chat-input", "value"),
     State("chat-messages-store", "data"),
-    State("drop-locs",           "value"),
-    State("session-id",          "data"),
-    State("chat-conv-id",        "data"),
+    State("drop-locs", "value"),
+    State("session-id", "data"),
+    State("chat-conv-id", "data"),
     prevent_initial_call=True,
 )
 def on_send(n_clicks, n_submit, user_text, history, locs, session_id, conv_id):
@@ -280,23 +303,20 @@ def on_send(n_clicks, n_submit, user_text, history, locs, session_id, conv_id):
         return _nu9
 
     raw_text = user_text.strip()
-    history  = history or []
-    sid      = session_id or "anonymous"
+    history = history or []
+    sid = session_id or "anonymous"
 
     clean_text, all_mentions = parse_all_mentions(raw_text)
-    primary       = all_mentions[0] if all_mentions else None
-    _raw_loc      = locs[0] if isinstance(locs, list) and locs else locs
+    primary = all_mentions[0] if all_mentions else None
+    _raw_loc = locs[0] if isinstance(locs, list) and locs else locs
     dropdown_uuid = _raw_loc if isinstance(_raw_loc, str) and _raw_loc else None
     location_uuid = (primary["location_uuid"] if primary else None) or dropdown_uuid
-    zone_uuid     = primary["zone_uuid"] if primary else None
-    extra_mentions = [
-        m for m in all_mentions[1:]
-        if m["location_uuid"] != location_uuid
-    ]
+    zone_uuid = primary["zone_uuid"] if primary else None
+    extra_mentions = [m for m in all_mentions[1:] if m["location_uuid"] != location_uuid]
 
-    loc_info      = _find_location(location_uuid) if location_uuid else None
+    loc_info = _find_location(location_uuid) if location_uuid else None
     location_name = loc_info.get("name") if loc_info else None
-    display_text  = clean_text if all_mentions else raw_text
+    display_text = clean_text if all_mentions else raw_text
 
     # Create conversation if this is the first message
     if not conv_id:
@@ -316,19 +336,28 @@ def on_send(n_clicks, n_submit, user_text, history, locs, session_id, conv_id):
         history.append({"role": "assistant", "content": respuesta})
         update_conversation(sid, conv_id, history, location_uuid)
         conv_list = build_conv_list(list_conversations(sid))
-        return (render_history(history), history, "", None, True, 0,
-                None, conv_id, conv_list)
+        return (render_history(history), history, "", None, True, 0, None, conv_id, conv_list)
 
     # Sin API key → error legible
     if not os.environ.get("ANTHROPIC_API_KEY", ""):
         err = "Configura ANTHROPIC_API_KEY en el entorno para activar el asistente."
         history.append({"role": "assistant", "content": err})
         update_conversation(sid, conv_id, history, location_uuid)
-        return (render_history(history), history, "", None, True, no_update,
-                None, conv_id, conv_list)
+        return (
+            render_history(history),
+            history,
+            "",
+            None,
+            True,
+            no_update,
+            None,
+            conv_id,
+            conv_list,
+        )
 
     # Iniciar stream en background
     from src.chatbot import streaming
+
     stream_sid = streaming.start(
         api_messages,
         location_uuid=location_uuid,
@@ -338,12 +367,12 @@ def on_send(n_clicks, n_submit, user_text, history, locs, session_id, conv_id):
     )
 
     meta = {
-        "sid":            stream_sid,
-        "session_id":     sid,
-        "conv_id":        conv_id,
-        "location_uuid":  location_uuid,
-        "location_name":  location_name,
-        "question":       display_text,
+        "sid": stream_sid,
+        "session_id": sid,
+        "conv_id": conv_id,
+        "location_uuid": location_uuid,
+        "location_name": location_name,
+        "question": display_text,
         "extra_mentions": extra_mentions or [],
     }
     partial = render_history(history) + [streaming_bubble("", None)]
@@ -352,16 +381,17 @@ def on_send(n_clicks, n_submit, user_text, history, locs, session_id, conv_id):
 
 # ── Polling del stream ────────────────────────────────────────────────────────
 
+
 @callback(
-    Output("chat-history",          "children",  allow_duplicate=True),
-    Output("chat-messages-store",   "data",      allow_duplicate=True),
-    Output("chat-stream-interval",  "disabled",  allow_duplicate=True),
-    Output("chat-stream-id",        "data",      allow_duplicate=True),
-    Output("chat-conv-list",        "children",  allow_duplicate=True),
-    Input("chat-stream-interval",   "n_intervals"),
-    State("chat-stream-id",         "data"),
-    State("chat-messages-store",    "data"),
-    State("session-id",             "data"),
+    Output("chat-history", "children", allow_duplicate=True),
+    Output("chat-messages-store", "data", allow_duplicate=True),
+    Output("chat-stream-interval", "disabled", allow_duplicate=True),
+    Output("chat-stream-id", "data", allow_duplicate=True),
+    Output("chat-conv-list", "children", allow_duplicate=True),
+    Input("chat-stream-interval", "n_intervals"),
+    State("chat-stream-id", "data"),
+    State("chat-messages-store", "data"),
+    State("session-id", "data"),
     prevent_initial_call=True,
 )
 def poll_stream(n_intervals, meta, history, session_id):
@@ -369,10 +399,11 @@ def poll_stream(n_intervals, meta, history, session_id):
         return no_update, no_update, True, None, no_update
 
     from src.chatbot import streaming
-    state  = streaming.get_state(meta["sid"])
+
+    state = streaming.get_state(meta["sid"])
     status = state.get("status", "error")
-    text   = state.get("text", "")
-    tool   = state.get("tool")
+    text = state.get("text", "")
+    tool = state.get("tool")
     history = history or []
 
     if status in ("pending", "streaming", "tool"):
@@ -385,7 +416,7 @@ def poll_stream(n_intervals, meta, history, session_id):
 
     conv_list = no_update
     if status == "done":
-        sid     = meta.get("session_id") or session_id or "anonymous"
+        sid = meta.get("session_id") or session_id or "anonymous"
         conv_id = meta.get("conv_id")
         if conv_id:
             update_conversation(sid, conv_id, history, meta.get("location_uuid"))
