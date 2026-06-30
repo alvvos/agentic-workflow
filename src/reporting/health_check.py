@@ -3219,6 +3219,12 @@ _ICONO_TIPO = {
     "deportivo": "fas fa-futbol",
     "evento_municipal": "fas fa-city",
 }
+_TIPO_FEATURE_KEY = {
+    "concierto": "ev_rank_concierto",
+    "festival": "ev_rank_festival",
+    "deportivo": "ev_rank_deportivo",
+    "evento_municipal": "ev_rank_municipal",
+}
 _NORM_TIPO = {
     "tm_concierto": "concierto",
     "tm_festival": "festival",
@@ -3238,8 +3244,12 @@ _TIPOS_EXCLUIR = {
 }
 
 
-def _render_eventos_mensual_section(location_uuid: str, fecha_max) -> html.Div | None:
+def _render_eventos_mensual_section(
+    location_uuid: str, fecha_max, notas_map: dict | None = None
+) -> html.Div | None:
     """Monthly event-count bar charts (one per type), same visual pattern as cruise section."""
+    if notas_map is None:
+        notas_map = {}
     try:
         from src.db.store import get_conn
 
@@ -3495,6 +3505,26 @@ def _render_eventos_mensual_section(location_uuid: str, fecha_max) -> html.Div |
 
         icono = _ICONO_TIPO.get(tipo, "fas fa-calendar-day")
         uid8 = location_uuid[:8]
+        _ev_fk = _TIPO_FEATURE_KEY.get(tipo, "")
+        _ev_tt_text = notas_map.get(_ev_fk, "") if _ev_fk else ""
+        _ev_tt_id = f"tt-ev-{tipo}-{uid8}"
+        _ev_info_els = (
+            [
+                html.I(
+                    id=_ev_tt_id,
+                    className="fas fa-info-circle ms-1",
+                    style={"color": "#ced4da", "fontSize": "0.75rem", "cursor": "pointer"},
+                ),
+                dbc.Tooltip(
+                    _ev_tt_text,
+                    target=_ev_tt_id,
+                    placement="right",
+                    style={"fontSize": "0.76rem", "maxWidth": "300px", "textAlign": "left"},
+                ),
+            ]
+            if _ev_tt_text
+            else []
+        )
         charts.append(
             html.Div(
                 [
@@ -3509,6 +3539,7 @@ def _render_eventos_mensual_section(location_uuid: str, fecha_max) -> html.Div |
                                 className="fw-semibold",
                                 style={"fontSize": "0.9rem", "color": _C_DARK},
                             ),
+                            *_ev_info_els,
                         ],
                         className="d-flex align-items-center mb-1",
                     ),
@@ -3528,9 +3559,11 @@ def _render_eventos_mensual_section(location_uuid: str, fecha_max) -> html.Div |
 
 
 def _render_cruceros_section(
-    location_uuid: str, fecha_max, ventana: str = "semana"
+    location_uuid: str, fecha_max, ventana: str = "semana", notas_map: dict | None = None
 ) -> html.Div | None:
     """Grouped bar: año anterior (ghost) vs año en curso (tier-colored), eje Ene-Dic."""
+    if notas_map is None:
+        notas_map = {}
     try:
         from src.db.store import get_conn
 
@@ -3876,6 +3909,26 @@ def _render_cruceros_section(
         style={"fontSize": "0.62rem", "color": _C_MUTED, "marginTop": "4px", "lineHeight": "1.4"},
     )
 
+    _cr_tt_text = notas_map.get("n_pasajeros_crucero_oficial", "")
+    _cr_tt_id = f"tt-crucero-{location_uuid[:8]}"
+    _cr_info_els = (
+        [
+            html.I(
+                id=_cr_tt_id,
+                className="fas fa-info-circle ms-1 me-1",
+                style={"color": "#ced4da", "fontSize": "0.75rem", "cursor": "pointer"},
+            ),
+            dbc.Tooltip(
+                _cr_tt_text,
+                target=_cr_tt_id,
+                placement="right",
+                style={"fontSize": "0.76rem", "maxWidth": "300px", "textAlign": "left"},
+            ),
+        ]
+        if _cr_tt_text
+        else []
+    )
+
     return html.Div(
         [
             html.Div(
@@ -3888,6 +3941,7 @@ def _render_cruceros_section(
                         className="fw-semibold me-2",
                         style={"fontSize": "0.9rem", "color": _C_DARK},
                     ),
+                    *_cr_info_els,
                     kpi_el,
                 ],
                 className="d-flex align-items-center flex-wrap gap-1 mb-1",
@@ -3993,8 +4047,8 @@ def _render_senal_contexto_modal(
                 charts.append(c)
 
     cal_section = _render_calendario_eventos_clima(location_uuid, fecha_max)
-    cruceros_section = _render_cruceros_section(location_uuid, fecha_max, ventana)
-    eventos_mensual_section = _render_eventos_mensual_section(location_uuid, fecha_max)
+    cruceros_section = _render_cruceros_section(location_uuid, fecha_max, ventana, notas_map)
+    eventos_mensual_section = _render_eventos_mensual_section(location_uuid, fecha_max, notas_map)
 
     if not charts and not cal_section and not cruceros_section and not eventos_mensual_section:
         return None
