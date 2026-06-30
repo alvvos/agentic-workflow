@@ -3901,7 +3901,7 @@ def _render_senal_contexto_modal(
                JOIN feature_flags f
                  ON f.feature_key = e.feature_key
                 AND f.location_uuid = e.location_uuid
-                AND f.status = 'active'
+                AND f.status IN ('active', 'contexto')
                WHERE e.location_uuid = ? AND e.value IS NOT NULL AND e.fecha >= ?
                ORDER BY e.feature_key, e.fecha""",
             [location_uuid, str(desde)],

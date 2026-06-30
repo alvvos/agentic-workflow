@@ -2393,7 +2393,7 @@ def generar_mapa_contexto(location_uuid: str, vals: dict) -> html.Div | None:
             dcc.Graph(
                 figure=fig,
                 config={"displayModeBar": False, "scrollZoom": True},
-                style={"height": "340px"},
+                style={"height": "520px"},
             ),
         ],
         className="border-0 shadow-sm rounded-4 overflow-hidden mb-3 bg-white",
