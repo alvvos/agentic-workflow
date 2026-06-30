@@ -3239,13 +3239,6 @@ _NORM_TIPO = {
     "estreno_callao": "concierto",
     "manifestacion_gran_via": "evento_municipal",
 }
-_TIPOS_EXCLUIR = {
-    "vacaciones_escolares",
-    "festivo_regional",
-    "ev_vacaciones_escolares",
-    "ev_festivo_regional",
-    "escala_crucero",
-}
 
 
 def _render_eventos_mensual_section(
