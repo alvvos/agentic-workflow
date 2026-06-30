@@ -488,6 +488,7 @@ def _apply_ddl(conn: PgConn) -> None:
     _migrate_feature_registry_fks(conn)
     _migrate_feature_flags_contexto(conn)
     _migrate_feature_flags_periodicidad(conn)
+    _migrate_feature_registry_display(conn)
     _migrate_location_pois(conn)
     _migrate_location_source_config(conn)
     _sync_users_from_json(conn)
@@ -552,6 +553,197 @@ def _migrate_feature_flags_periodicidad(conn: PgConn) -> None:
         "ALTER TABLE feature_flags ADD CONSTRAINT ff_periodicidad_check "
         "CHECK (periodicidad IN ('diaria', 'mensual', 'trimestral', 'puntual', 'nunca'))"
     )
+
+
+def _migrate_feature_registry_display(conn: PgConn) -> None:
+    """Añade columnas de display a feature_registry y siembra metadatos de señales conocidas."""
+    conn.execute("ALTER TABLE feature_registry ADD COLUMN IF NOT EXISTS label        TEXT")
+    conn.execute("ALTER TABLE feature_registry ADD COLUMN IF NOT EXISTS sublabel     TEXT")
+    conn.execute("ALTER TABLE feature_registry ADD COLUMN IF NOT EXISTS color        VARCHAR(16)")
+    conn.execute("ALTER TABLE feature_registry ADD COLUMN IF NOT EXISTS icon_cls     VARCHAR(64)")
+    conn.execute(
+        "ALTER TABLE feature_registry ADD COLUMN IF NOT EXISTS agg_fn " "VARCHAR(8) DEFAULT 'sum'"
+    )
+    conn.execute(
+        "ALTER TABLE feature_registry ADD COLUMN IF NOT EXISTS display_mode "
+        "VARCHAR(20) DEFAULT 'yoy'"
+    )
+
+    # ── features_ext display_mode='yoy' ──────────────────────────────────────
+    _YOY_UPDATES = [
+        (
+            "afluencia_metro_gran_via",
+            "Metro Gran Vía",
+            "validaciones diarias",
+            "#e67e22",
+            "fas fa-train-subway",
+            "sum",
+        ),
+        (
+            "afluencia_metro_callao",
+            "Metro Callao",
+            "validaciones diarias",
+            "#00539B",
+            "fas fa-train-subway",
+            "sum",
+        ),
+        (
+            "n_turistas_isocrona",
+            "Turistas área",
+            "pers. en isócrona",
+            "#3498db",
+            "fas fa-passport",
+            "sum",
+        ),
+        (
+            "n_eventos_gran_via",
+            "Eventos Gran Vía",
+            "eventos en rango",
+            "#9b59b6",
+            "fas fa-calendar-check",
+            "sum",
+        ),
+        (
+            "ev_rank_concierto",
+            "Ranking conciertos",
+            "score 0-100",
+            "#8e44ad",
+            "fas fa-music",
+            "max",
+        ),
+        (
+            "ev_rank_deportivo",
+            "Ranking deportivo",
+            "score 0-100",
+            "#e74c3c",
+            "fas fa-futbol",
+            "max",
+        ),
+        ("ev_rank_festival", "Ranking festivales", "score 0-100", "#2980b9", "fas fa-star", "max"),
+        ("ev_rank_municipal", "Ranking municipal", "score 0-100", "#e67e22", "fas fa-city", "max"),
+        ("ev_rank_total", "Ranking total", "score 0-100", "#2c3e50", "fas fa-chart-bar", "max"),
+    ]
+    for fk, lbl, sub, col, icon, agg in _YOY_UPDATES:
+        conn.execute(
+            "UPDATE feature_registry SET label=?, sublabel=?, color=?, icon_cls=?, "
+            "agg_fn=?, display_mode='yoy' WHERE feature_key=?",
+            [lbl, sub, col, icon, agg, fk],
+        )
+
+    # ── features_ext display_mode='cruceros' ─────────────────────────────────
+    _CRUCEROS_UPDATES = [
+        (
+            "n_pasajeros_crucero_oficial",
+            "Pasajeros crucero",
+            "pax oficiales",
+            "#1abc9c",
+            "fas fa-ship",
+            "sum",
+        ),
+        (
+            "n_pasajeros_crucero_dia",
+            "Pasajeros crucero día",
+            "pax totales",
+            "#1abc9c",
+            "fas fa-ship",
+            "sum",
+        ),
+    ]
+    for fk, lbl, sub, col, icon, agg in _CRUCEROS_UPDATES:
+        conn.execute(
+            "UPDATE feature_registry SET label=?, sublabel=?, color=?, icon_cls=?, "
+            "agg_fn=?, display_mode='cruceros' WHERE feature_key=?",
+            [lbl, sub, col, icon, agg, fk],
+        )
+
+    # ── features_ext display_mode='calendario' ────────────────────────────────
+    _CAL_UPDATES = [
+        ("llueve", "Lluvia", "días", "#3498db", "fas fa-cloud-rain", "sum"),
+        ("temp_max", "Temperatura máx.", "°C", "#e74c3c", "fas fa-thermometer-full", "mean"),
+        ("temp_min", "Temperatura mín.", "°C", "#3498db", "fas fa-thermometer-empty", "mean"),
+        ("ev_festivo_regional", "Festivo regional", "días", "#27ae60", "fas fa-flag", "sum"),
+        (
+            "ev_vacaciones_escolares",
+            "Vacaciones escolares",
+            "días",
+            "#8e44ad",
+            "fas fa-school",
+            "sum",
+        ),
+        ("cal_escolar_is_break", "Período vacacional", "días", "#8e44ad", "fas fa-school", "sum"),
+        (
+            "cal_escolar_dias_hasta",
+            "Días hasta vacaciones",
+            "días (media)",
+            "#8e44ad",
+            "fas fa-school",
+            "mean",
+        ),
+    ]
+    for fk, lbl, sub, col, icon, agg in _CAL_UPDATES:
+        conn.execute(
+            "UPDATE feature_registry SET label=?, sublabel=?, color=?, icon_cls=?, "
+            "agg_fn=?, display_mode='calendario' WHERE feature_key=?",
+            [lbl, sub, col, icon, agg, fk],
+        )
+
+    # ── calendario_org canonical tipos — display_mode='events_count' (INSERT) ─
+    _EVENTS_COUNT_ROWS = [
+        (
+            "concierto",
+            "calendar",
+            "eventos",
+            "con_cobertura",
+            "Conciertos",
+            "eventos por mes",
+            "#8e44ad",
+            "fas fa-music",
+            "sum",
+        ),
+        (
+            "festival",
+            "calendar",
+            "eventos",
+            "con_cobertura",
+            "Festivales",
+            "eventos por mes",
+            "#2980b9",
+            "fas fa-star",
+            "sum",
+        ),
+        (
+            "deportivo",
+            "calendar",
+            "eventos",
+            "con_cobertura",
+            "Deportivo",
+            "eventos por mes",
+            "#e74c3c",
+            "fas fa-futbol",
+            "sum",
+        ),
+        (
+            "evento_municipal",
+            "calendar",
+            "eventos",
+            "con_cobertura",
+            "Municipal",
+            "eventos por mes",
+            "#e67e22",
+            "fas fa-city",
+            "sum",
+        ),
+    ]
+    for fk, src, cat, stat, lbl, sub, col, icon, agg in _EVENTS_COUNT_ROWS:
+        conn.execute(
+            "INSERT INTO feature_registry "
+            "(feature_key, source, categoria, status, label, sublabel, color, icon_cls, agg_fn, display_mode) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?) "
+            "ON CONFLICT (feature_key) DO UPDATE SET "
+            "label=EXCLUDED.label, sublabel=EXCLUDED.sublabel, color=EXCLUDED.color, "
+            "icon_cls=EXCLUDED.icon_cls, agg_fn=EXCLUDED.agg_fn, display_mode=EXCLUDED.display_mode",
+            [fk, src, cat, stat, lbl, sub, col, icon, agg, "events_count"],
+        )
 
 
 def _migrate_feature_flags_contexto(conn: PgConn) -> None:

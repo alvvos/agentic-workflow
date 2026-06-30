@@ -2094,47 +2094,57 @@ def _render_pm_questions(
 
 # ── Eventos externos ─────────────────────────────────────────────────────────
 
-_UNIVERSAL_KEYS = frozenset(
-    {
-        "ev_festivo_regional",
-        "ev_vacaciones_escolares",
-        "ev_rank_concierto",
-        "ev_rank_deportivo",
-        "ev_rank_festival",
-        "ev_rank_municipal",
-        "ev_rank_total",
-        "llueve",
-        "temp_max",
-        "temp_min",
-        # cruceros: tienen su propia sección dedicada en el panel
-        "n_pasajeros_crucero_dia",
-        "n_pasajeros_crucero_oficial",
-    }
-)
-
-_FEATURE_META = {
-    "n_pasajeros_crucero_dia": ("Pasajeros de crucero", "pax totales", "sum", "#1abc9c"),
-    "n_turistas_isocrona": ("Turistas zona 0-15 min", "pers. estimadas", "sum", "#3498db"),
-    "n_eventos_gran_via": ("Eventos Gran Vía", "eventos en rango", "sum", "#9b59b6"),
-    "afluencia_metro_gran_via": ("Metro Gran Vía", "viajeros validados", "sum", "#e67e22"),
-    "afluencia_metro_callao": ("Metro Callao", "viajeros validados", "sum", "#00539B"),
-    "ev_vacaciones_escolares": ("Vacaciones escolares", "días en el mes", "sum", "#8e44ad"),
-    "cal_escolar_is_break": ("Período vacacional", "días en el mes", "sum", "#8e44ad"),
-    "cal_escolar_dias_hasta": ("Días hasta próx. vacaciones", "días (media)", "mean", "#8e44ad"),
-}
 _DEFAULT_COLOR = "#0052CC"
+
+
+def _load_feature_meta(conn, location_uuid: str) -> dict:
+    """
+    Returns {feature_key: {"label", "sublabel", "color", "icon_cls", "agg_fn", "display_mode", "notas"}}
+    for all features registered in feature_registry that either:
+      - have an active/contexto flag for this location (features_ext / cruceros / calendario features)
+      - OR are of display_mode='events_count' (calendar eventos — shown if data exists, no flag needed)
+    """
+    try:
+        rows = conn.execute(
+            """SELECT fr.feature_key, fr.label, fr.sublabel, fr.color, fr.icon_cls,
+                      fr.agg_fn, COALESCE(fr.display_mode, 'yoy') AS display_mode, fr.notas
+               FROM feature_registry fr
+               WHERE fr.display_mode = 'events_count'
+                  OR EXISTS (
+                       SELECT 1 FROM feature_flags ff
+                       WHERE ff.feature_key = fr.feature_key
+                         AND ff.location_uuid = ?
+                         AND ff.status IN ('active', 'contexto')
+                  )""",
+            [location_uuid],
+        ).fetchall()
+    except Exception:
+        return {}
+    return {
+        fk: {
+            "label": lbl or fk.replace("_", " ").title(),
+            "sublabel": sub or "",
+            "color": col or "#0052CC",
+            "icon_cls": icon or "fas fa-satellite-dish",
+            "agg_fn": agg or "sum",
+            "display_mode": mode,
+            "notas": notas or "",
+        }
+        for fk, lbl, sub, col, icon, agg, mode, notas in rows
+    }
 
 
 def _render_eventos_externos(location_uuid: str, fecha_max) -> html.Div | None:
     """
     Sección 'Contexto externo': agrega por semana y mes las features de
-    store_features_ext exclusivas de la ubicación (excluye features universales).
+    store_features_ext exclusivas de la ubicación (display_mode='yoy').
     Devuelve None si no hay datos.
     """
     try:
         from src.db.store import get_conn
 
         conn = get_conn()
+        feature_meta = _load_feature_meta(conn, location_uuid)
 
         desde = fecha_max - timedelta(days=119)  # ~4 meses para cubrir 4 semanas + 3 meses
         rows = conn.execute(
@@ -2155,7 +2165,11 @@ def _render_eventos_externos(location_uuid: str, fecha_max) -> html.Div | None:
     df_ext = pd.DataFrame(rows, columns=["feature_key", "fecha", "value"])
     df_ext["fecha"] = pd.to_datetime(df_ext["fecha"])
 
-    keys_loc = [k for k in df_ext["feature_key"].unique() if k not in _UNIVERSAL_KEYS]
+    keys_loc = [
+        k
+        for k in df_ext["feature_key"].unique()
+        if feature_meta.get(k, {}).get("display_mode") == "yoy"
+    ]
     if not keys_loc:
         return None
 
@@ -2167,8 +2181,17 @@ def _render_eventos_externos(location_uuid: str, fecha_max) -> html.Div | None:
 
     feature_cards = []
     for fk in sorted(keys_loc):
-        meta = _FEATURE_META.get(fk, (fk.replace("_", " ").title(), "", "sum", _DEFAULT_COLOR))
-        label, unidad, agg_fn, color = meta
+        m = feature_meta.get(
+            fk,
+            {
+                "label": fk.replace("_", " ").title(),
+                "sublabel": "",
+                "agg_fn": "sum",
+                "color": _DEFAULT_COLOR,
+                "icon_cls": "fas fa-satellite-dish",
+            },
+        )
+        label, unidad, agg_fn, color = m["label"], m["sublabel"], m["agg_fn"], m["color"]
 
         df_k = df_ext[df_ext["feature_key"] == fk]
 
@@ -2321,6 +2344,7 @@ def _render_eventos_signals(
         from src.db.store import get_conn
 
         conn = get_conn()
+        feature_meta = _load_feature_meta(conn, location_uuid)
         anio_actual = fecha_max.year if hasattr(fecha_max, "year") else pd.Timestamp(fecha_max).year
         desde = (
             fecha_max.replace(year=anio_actual - 1, month=1, day=1)
@@ -2343,7 +2367,11 @@ def _render_eventos_signals(
     df_ext = pd.DataFrame(rows, columns=["feature_key", "fecha", "value"])
     df_ext["fecha"] = pd.to_datetime(df_ext["fecha"])
 
-    keys_loc = [k for k in df_ext["feature_key"].unique() if k not in _UNIVERSAL_KEYS]
+    keys_loc = [
+        k
+        for k in df_ext["feature_key"].unique()
+        if feature_meta.get(k, {}).get("display_mode") == "yoy"
+    ]
     if not keys_loc:
         return None
 
@@ -2359,8 +2387,17 @@ def _render_eventos_signals(
 
     cards = []
     for fk in sorted(keys_loc):
-        meta = _FEATURE_META.get(fk, (fk.replace("_", " ").title(), "", "sum", _DEFAULT_COLOR))
-        label, unidad, agg_fn, color = meta
+        m = feature_meta.get(
+            fk,
+            {
+                "label": fk.replace("_", " ").title(),
+                "sublabel": "",
+                "agg_fn": "sum",
+                "color": _DEFAULT_COLOR,
+                "icon_cls": "fas fa-satellite-dish",
+            },
+        )
+        label, unidad, agg_fn, color = m["label"], m["sublabel"], m["agg_fn"], m["color"]
         df_k = df_ext[df_ext["feature_key"] == fk]
 
         # ── KPI: % delta período actual vs anterior ────────────────────
@@ -2394,7 +2431,7 @@ def _render_eventos_signals(
 
         header_row = html.Div(
             [
-                html.I(className=f"{_icon_for_feature(fk)} me-2", style={"color": color}),
+                html.I(className=f"{m['icon_cls']} me-2", style={"color": color}),
                 html.Span(
                     label,
                     className="fw-semibold me-2",
@@ -2504,28 +2541,6 @@ def _hex_rgba(hex_color: str, alpha: float) -> str:
     return f"rgba({r},{g},{b},{alpha})"
 
 
-_FEATURE_FA_ICONS = {
-    "afluencia_metro_gran_via": "fas fa-train-subway",
-    "afluencia_metro_callao": "fas fa-train-subway",
-    "n_turistas_isocrona": "fas fa-passport",
-    "n_pasajeros_crucero_dia": "fas fa-ship",
-    "n_eventos_gran_via": "fas fa-calendar-check",
-    "ev_vacaciones_escolares": "fas fa-school",
-    "cal_escolar_is_break": "fas fa-school",
-    "cal_escolar_dias_hasta": "fas fa-school",
-}
-
-
-def _icon_for_feature(fk: str) -> str:
-    return _FEATURE_FA_ICONS.get(fk, "fas fa-satellite-dish")
-
-
-def _hex_rgba(hex_color: str, alpha: float) -> str:
-    h = hex_color.lstrip("#")
-    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-    return f"rgba({r},{g},{b},{alpha})"
-
-
 def _render_signal_yoy_chart(
     df_k,
     fk,
@@ -2540,6 +2555,7 @@ def _render_signal_yoy_chart(
     fecha_max=None,
     ventana="semana",
     tooltip_text="",
+    icon_cls="fas fa-satellite-dish",
 ):
     """
     12-month bar chart (Ene-Dic completo) + año anterior translúcido.
@@ -2758,7 +2774,7 @@ def _render_signal_yoy_chart(
             html.Div(
                 [
                     html.I(
-                        className=f"{_icon_for_feature(fk)} me-2",
+                        className=f"{icon_cls} me-2",
                         style={"color": color, "fontSize": "0.9rem"},
                     ),
                     html.Span(
@@ -3213,18 +3229,6 @@ def _render_calendario_eventos_clima(location_uuid: str, fecha_max) -> html.Div 
     )
 
 
-_ICONO_TIPO = {
-    "concierto": "fas fa-music",
-    "festival": "fas fa-calendar-star",
-    "deportivo": "fas fa-futbol",
-    "evento_municipal": "fas fa-city",
-}
-_TIPO_FEATURE_KEY = {
-    "concierto": "ev_rank_concierto",
-    "festival": "ev_rank_festival",
-    "deportivo": "ev_rank_deportivo",
-    "evento_municipal": "ev_rank_municipal",
-}
 _NORM_TIPO = {
     "tm_concierto": "concierto",
     "tm_festival": "festival",
@@ -3245,11 +3249,11 @@ _TIPOS_EXCLUIR = {
 
 
 def _render_eventos_mensual_section(
-    location_uuid: str, fecha_max, notas_map: dict | None = None
+    location_uuid: str, fecha_max, tipo_meta: dict | None = None
 ) -> html.Div | None:
     """Monthly event-count bar charts (one per type), same visual pattern as cruise section."""
-    if notas_map is None:
-        notas_map = {}
+    if tipo_meta is None:
+        tipo_meta = {}
     try:
         from src.db.store import get_conn
 
@@ -3273,7 +3277,7 @@ def _render_eventos_mensual_section(
     df["tipo"] = df["evento_key"].map(lambda k: _NORM_TIPO.get(k, k))
     df["anio"] = df["fecha"].dt.year
     df["mes_num"] = df["fecha"].dt.month
-    df = df[~df["tipo"].isin(_TIPOS_EXCLUIR)]
+    df = df[df["tipo"].isin(tipo_meta)]
 
     if df.empty:
         return None
@@ -3283,12 +3287,12 @@ def _render_eventos_mensual_section(
     mes_hoy = date.today().month
     _MESES_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
 
-    tipos = sorted(df["tipo"].unique(), key=lambda t: _SRC_LABEL.get(t, t))
+    tipos = sorted(df["tipo"].unique(), key=lambda t: tipo_meta.get(t, {}).get("label", t))
     charts = []
 
     for tipo in tipos:
-        color = _SRC_COLOR.get(tipo, "#7f8c8d")
-        lbl = _SRC_LABEL.get(tipo, tipo.replace("_", " ").title())
+        color = tipo_meta.get(tipo, {}).get("color", "#7f8c8d")
+        lbl = tipo_meta.get(tipo, {}).get("label", tipo.replace("_", " ").title())
         sub = df[df["tipo"] == tipo]
 
         mes_pivot = sub.groupby(["anio", "mes_num"]).size().reset_index(name="n")
@@ -3503,10 +3507,9 @@ def _render_eventos_mensual_section(
             )
         leyenda = html.Div(legend_blocks, className="d-flex flex-wrap gap-4 mb-2")
 
-        icono = _ICONO_TIPO.get(tipo, "fas fa-calendar-day")
+        icono = tipo_meta.get(tipo, {}).get("icon_cls", "fas fa-calendar-day")
         uid8 = location_uuid[:8]
-        _ev_fk = _TIPO_FEATURE_KEY.get(tipo, "")
-        _ev_tt_text = notas_map.get(_ev_fk, "") if _ev_fk else ""
+        _ev_tt_text = tipo_meta.get(tipo, {}).get("notas", "")
         _ev_tt_id = f"tt-ev-{tipo}-{uid8}"
         _ev_info_els = (
             [
@@ -3559,11 +3562,9 @@ def _render_eventos_mensual_section(
 
 
 def _render_cruceros_section(
-    location_uuid: str, fecha_max, ventana: str = "semana", notas_map: dict | None = None
+    location_uuid: str, fecha_max, ventana: str = "semana", tooltip_text: str = ""
 ) -> html.Div | None:
     """Grouped bar: año anterior (ghost) vs año en curso (tier-colored), eje Ene-Dic."""
-    if notas_map is None:
-        notas_map = {}
     try:
         from src.db.store import get_conn
 
@@ -3909,7 +3910,7 @@ def _render_cruceros_section(
         style={"fontSize": "0.62rem", "color": _C_MUTED, "marginTop": "4px", "lineHeight": "1.4"},
     )
 
-    _cr_tt_text = notas_map.get("n_pasajeros_crucero_oficial", "")
+    _cr_tt_text = tooltip_text
     _cr_tt_id = f"tt-crucero-{location_uuid[:8]}"
     _cr_info_els = (
         [
@@ -3969,6 +3970,7 @@ def _render_senal_contexto_modal(
         from src.db.store import get_conn
 
         conn = get_conn()
+        feature_meta = _load_feature_meta(conn, location_uuid)
         desde = fecha_max - timedelta(days=760)
         ts_rows = conn.execute(
             """SELECT e.feature_key, e.fecha::text, e.value
@@ -3984,23 +3986,6 @@ def _render_senal_contexto_modal(
     except Exception:
         return None
 
-    notas_map: dict[str, str] = {}
-    try:
-        notas_map = {
-            fk: notas
-            for fk, notas in conn.execute(
-                """SELECT fr.feature_key, fr.notas
-                   FROM feature_registry fr
-                   JOIN feature_flags ff ON ff.feature_key = fr.feature_key
-                   WHERE ff.location_uuid = ?
-                     AND ff.status IN ('active', 'contexto')
-                     AND fr.notas IS NOT NULL""",
-                [location_uuid],
-            ).fetchall()
-        }
-    except Exception:
-        pass
-
     _MESES_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
     anio_actual = fecha_max.year
     anio_prev = anio_actual - 1
@@ -4012,13 +3997,16 @@ def _render_senal_contexto_modal(
         df_ts["anio"] = df_ts["fecha"].dt.year
         df_ts["mes_num"] = df_ts["fecha"].dt.month
 
-        keys = [k for k in df_ts["feature_key"].unique() if k not in _UNIVERSAL_KEYS]
-        metro_keys = sorted([k for k in keys if "metro" in k])
-        other_keys = sorted([k for k in keys if k not in metro_keys])
+        yoy_keys = [
+            k
+            for k in df_ts["feature_key"].unique()
+            if feature_meta.get(k, {}).get("display_mode") == "yoy"
+        ]
+        metro_keys = sorted([k for k in yoy_keys if "metro" in k])
+        other_keys = sorted([k for k in yoy_keys if k not in metro_keys])
 
         for fk in metro_keys + other_keys:
-            meta = _FEATURE_META.get(fk, (fk.replace("_", " ").title(), "", "sum", _DEFAULT_COLOR))
-            label, sublabel, agg_fn, color = meta
+            m = feature_meta[fk]
             if "gran_via" in fk:
                 station = "Gran Vía: validaciones diarias"
                 sub = "Línea 1 (azul) · Línea 5 (verde)"
@@ -4026,29 +4014,36 @@ def _render_senal_contexto_modal(
                 station = "Callao: validaciones diarias"
                 sub = "Línea 3 (amarilla) · Línea 5 (verde)"
             else:
-                station, sub = label, sublabel
-            tooltip_text = notas_map.get(fk, "")
+                station, sub = m["label"], m["sublabel"]
             c = _render_signal_yoy_chart(
                 df_ts[df_ts["feature_key"] == fk],
                 fk,
                 station,
                 sub,
-                color,
+                m["color"],
                 uid,
                 anio_actual,
                 anio_prev,
                 _MESES_ES,
-                agg_fn,
+                m["agg_fn"],
                 fecha_max=fecha_max,
                 ventana=ventana,
-                tooltip_text=tooltip_text,
+                tooltip_text=m["notas"],
+                icon_cls=m["icon_cls"],
             )
             if c:
                 charts.append(c)
 
+    # events_count metadata for the eventos section
+    eventos_meta = {fk: m for fk, m in feature_meta.items() if m["display_mode"] == "events_count"}
+    # cruceros notas
+    cruceros_notas = feature_meta.get("n_pasajeros_crucero_oficial", {}).get("notas", "")
+
     cal_section = _render_calendario_eventos_clima(location_uuid, fecha_max)
-    cruceros_section = _render_cruceros_section(location_uuid, fecha_max, ventana, notas_map)
-    eventos_mensual_section = _render_eventos_mensual_section(location_uuid, fecha_max, notas_map)
+    cruceros_section = _render_cruceros_section(location_uuid, fecha_max, ventana, cruceros_notas)
+    eventos_mensual_section = _render_eventos_mensual_section(
+        location_uuid, fecha_max, eventos_meta
+    )
 
     if not charts and not cal_section and not cruceros_section and not eventos_mensual_section:
         return None
