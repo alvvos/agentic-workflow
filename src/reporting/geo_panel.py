@@ -381,6 +381,7 @@ def _render_area_signals(location_uuid: str):
             yaxis=dict(visible=False, showgrid=True, gridcolor="#f0f0f0"),
         )
 
+        _tt_metro_id = f"tt-metro-{location_uuid[:8]}"
         metro_chart_col = dbc.Col(
             [
                 html.Div(
@@ -399,6 +400,19 @@ def _render_area_signals(location_uuid: str):
                                 "letterSpacing": "0.45px",
                                 "fontWeight": "600",
                             },
+                        ),
+                        html.I(
+                            id=_tt_metro_id,
+                            className="fas fa-info-circle ms-2",
+                            style={"color": "#ced4da", "fontSize": "0.72rem", "cursor": "pointer"},
+                        ),
+                        dbc.Tooltip(
+                            "Número de validaciones de tarjeta registradas cada día en cada estación "
+                            "de Metro, según los datos oficiales de Metro de Madrid. Se muestra la "
+                            "media mensual. Es el proxy más fiable de tráfico peatonal en la zona.",
+                            target=_tt_metro_id,
+                            placement="right",
+                            style={"fontSize": "0.76rem", "maxWidth": "300px"},
                         ),
                     ],
                     className="d-flex align-items-center mb-2",
@@ -564,6 +578,25 @@ def _render_area_signals(location_uuid: str):
                             if legend_nodes
                             else []
                         ),
+                        html.I(
+                            id=f"tt-tour-{location_uuid[:8]}",
+                            className="fas fa-info-circle ms-2",
+                            style={"color": "#ced4da", "fontSize": "0.72rem", "cursor": "pointer"},
+                        ),
+                        dbc.Tooltip(
+                            (
+                                "Pasajeros de crucero que desembarcan en el puerto según datos "
+                                "oficiales de la autoridad portuaria. Suma mensual. Alta correlación "
+                                "con tráfico peatonal en un radio de 1-2 km del muelle."
+                                if has_cruise and len(tourist_keys_present) == 1
+                                else "Estimación de turistas presentes en la zona accesible a pie "
+                                "en 0-15 minutos. Derivada de datos de movilidad agregados. "
+                                "Refleja la demanda potencial de visitantes no residentes."
+                            ),
+                            target=f"tt-tour-{location_uuid[:8]}",
+                            placement="left",
+                            style={"fontSize": "0.76rem", "maxWidth": "300px"},
+                        ),
                     ],
                     className="d-flex align-items-center mb-2 flex-wrap",
                 ),
@@ -627,6 +660,15 @@ def _render_area_signals(location_uuid: str):
             xaxis=dict(showgrid=False, tickfont=dict(size=9, color="#8c9199")),
             yaxis=dict(visible=False, range=[0, 110], showgrid=True, gridcolor="#f0f0f0"),
         )
+        _tt_evrank_id = f"tt-evrank-{location_uuid[:8]}"
+        _EV_RANK_TOOLTIPS = {
+            "ev_rank_deportivo": "Score 0-100 de impacto de eventos deportivos en radio 5 km. "
+            "Fuentes: TheSportsDB (fútbol) + Ticketmaster. Score 50+ indica partido de alta afluencia.",
+            "ev_rank_concierto": "Score 0-100 de conciertos y espectáculos en radio 5 km. "
+            "Fuente: Ticketmaster. Escala según capacidad del venue y popularidad del artista.",
+            "ev_rank_festival": "Score 0-100 de festivales y grandes eventos en radio 5 km. "
+            "Fuente: Ticketmaster. Incluye festivales de música y eventos masivos.",
+        }
         ev_rank_row = dbc.Row(
             dbc.Col(
                 [
@@ -645,6 +687,34 @@ def _render_area_signals(location_uuid: str):
                                     "letterSpacing": "0.45px",
                                     "fontWeight": "600",
                                 },
+                            ),
+                            html.I(
+                                id=_tt_evrank_id,
+                                className="fas fa-info-circle ms-2",
+                                style={
+                                    "color": "#ced4da",
+                                    "fontSize": "0.72rem",
+                                    "cursor": "pointer",
+                                },
+                            ),
+                            dbc.Tooltip(
+                                [
+                                    html.Div(
+                                        [
+                                            html.Span(
+                                                f"{'⚽' if 'deportivo' in fk else '🎵' if 'concierto' in fk else '🎪'} "
+                                                f"{_EV_RANK_META[fk][0]}: ",
+                                                style={"fontWeight": "600"},
+                                            ),
+                                            html.Span(_EV_RANK_TOOLTIPS.get(fk, "")),
+                                        ],
+                                        className="mb-1",
+                                    )
+                                    for fk in ev_rank_keys_present
+                                ],
+                                target=_tt_evrank_id,
+                                placement="right",
+                                style={"fontSize": "0.76rem", "maxWidth": "340px"},
                             ),
                         ],
                         className="d-flex align-items-center mb-2",

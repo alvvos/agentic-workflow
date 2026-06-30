@@ -2124,6 +2124,74 @@ _FEATURE_META = {
 }
 _DEFAULT_COLOR = "#0052CC"
 
+_FEATURE_TOOLTIPS: dict[str, str] = {
+    "n_pasajeros_crucero_dia": (
+        "Pasajeros de crucero que desembarcan en el puerto según datos oficiales de la autoridad "
+        "portuaria. Alta correlación con tráfico peatonal en un radio de 1-2 km del muelle."
+    ),
+    "n_turistas_isocrona": (
+        "Estimación de turistas en la zona accesible a pie en 0-15 minutos, derivada de datos de "
+        "movilidad. Refleja demanda potencial de visitantes no residentes."
+    ),
+    "afluencia_metro_gran_via": (
+        "Validaciones de tarjeta metro en la estación Gran Vía (L1 azul · L5 verde), fuente: "
+        "Metro de Madrid. Proxy directo de tráfico peatonal en la zona."
+    ),
+    "afluencia_metro_callao": (
+        "Validaciones de tarjeta metro en la estación Callao (L3 amarilla · L5 verde), fuente: "
+        "Metro de Madrid. Proxy directo de tráfico peatonal en la zona."
+    ),
+    "afluencia_metro_sol": (
+        "Validaciones de tarjeta metro en la estación Sol (L1 · L2 · L3), fuente: Metro de Madrid. "
+        "Una de las estaciones más concurridas de la red — alta sensibilidad a eventos en el centro."
+    ),
+    "ev_rank_deportivo": (
+        "Score 0-100 de impacto de eventos deportivos en un radio de 5 km. Fuentes: TheSportsDB "
+        "(fútbol nacional e internacional) + Ticketmaster. Score 50+ indica partido de alta "
+        "afluencia (Champions, derbi). Se agrega el pico diario por mes."
+    ),
+    "ev_rank_concierto": (
+        "Score 0-100 de impacto de conciertos y espectáculos en un radio de 5 km. Fuente: "
+        "Ticketmaster. La escala refleja la capacidad del venue y popularidad del artista — "
+        "venues grandes (WiZink, Palacio de los Deportes) puntúan más alto."
+    ),
+    "ev_rank_festival": (
+        "Score 0-100 de festivales y grandes eventos en un radio de 5 km. Fuente: Ticketmaster. "
+        "Incluye festivales de música, eventos de ciudad y congregadores masivos. "
+        "Se agrega el pico diario por mes."
+    ),
+    "ev_rank_municipal": (
+        "Score 0-100 de eventos municipales y culturales (ferias, mercados, verbenas) en un radio "
+        "de 5 km. Fuente: agenda local. Captura movimiento generado por eventos de la administración pública."
+    ),
+    "ev_vacaciones_escolares": (
+        "Días del mes con vacaciones escolares activas según el calendario oficial de la comunidad "
+        "autónoma. Periodos vacacionales correlacionan con mayor presencia familiar y aumento de "
+        "compras en centros comerciales."
+    ),
+    "ev_festivo_regional": (
+        "Días del mes con festivo oficial regional o nacional. Fuente: OpenHolidays API. "
+        "Los festivos locales generan picos de afluencia distintos a los nacionales."
+    ),
+    "n_pasajeros_crucero_oficial": (
+        "Pasajeros de crucero que desembarcan en el puerto según datos oficiales de la autoridad "
+        "portuaria (cifra consolidada). Alta correlación con tráfico peatonal en un radio de 1-2 km."
+    ),
+    "llueve": (
+        "Indicador binario de precipitación (1 = llueve, 0 = no llueve) según datos históricos y "
+        "pronóstico de Open-Meteo. La lluvia reduce la afluencia exterior y redistribuye el tráfico "
+        "hacia interiores."
+    ),
+    "temp_max": (
+        "Temperatura máxima diaria en °C. Fuente: Open-Meteo. Temperaturas extremas (>35°C o <5°C) "
+        "correlacionan con cambios de comportamiento: mayor afluencia a espacios climatizados."
+    ),
+    "temp_min": (
+        "Temperatura mínima diaria en °C. Fuente: Open-Meteo. Combinada con temp_max permite "
+        "calcular la amplitud térmica diaria, relevante en zonas con turismo estacional."
+    ),
+}
+
 
 def _render_eventos_externos(location_uuid: str, fecha_max) -> html.Div | None:
     """
@@ -2539,6 +2607,7 @@ def _render_signal_yoy_chart(
     agg_fn,
     fecha_max=None,
     ventana="semana",
+    tooltip_text="",
 ):
     """
     12-month bar chart (Ene-Dic completo) + año anterior translúcido.
@@ -2733,6 +2802,25 @@ def _render_signal_yoy_chart(
         className="d-flex align-items-center gap-3 mb-1",
     )
 
+    tt_id = f"tt-{uid}-{fk[:20]}"
+    info_els = (
+        [
+            html.I(
+                id=tt_id,
+                className="fas fa-info-circle ms-1 me-1",
+                style={"color": "#ced4da", "fontSize": "0.75rem", "cursor": "pointer"},
+            ),
+            dbc.Tooltip(
+                tooltip_text,
+                target=tt_id,
+                placement="right",
+                style={"fontSize": "0.76rem", "maxWidth": "300px", "textAlign": "left"},
+            ),
+        ]
+        if tooltip_text
+        else []
+    )
+
     return html.Div(
         [
             html.Div(
@@ -2746,6 +2834,7 @@ def _render_signal_yoy_chart(
                         className="fw-semibold me-1",
                         style={"fontSize": "0.9rem", "color": _C_DARK},
                     ),
+                    *info_els,
                     html.Span(sublabel, className="text-muted me-2", style={"fontSize": "0.74rem"}),
                     kpi_el,
                 ],
@@ -3935,6 +4024,7 @@ def _render_senal_contexto_modal(
                 sub = "Línea 3 (amarilla) · Línea 5 (verde)"
             else:
                 station, sub = label, sublabel
+            tooltip_text = _FEATURE_TOOLTIPS.get(fk, "")
             c = _render_signal_yoy_chart(
                 df_ts[df_ts["feature_key"] == fk],
                 fk,
@@ -3948,6 +4038,7 @@ def _render_senal_contexto_modal(
                 agg_fn,
                 fecha_max=fecha_max,
                 ventana=ventana,
+                tooltip_text=tooltip_text,
             )
             if c:
                 charts.append(c)
