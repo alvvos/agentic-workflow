@@ -21,6 +21,31 @@ import plotly.graph_objects as go
 from dash import dcc, html
 from dash_extensions.javascript import assign
 
+from src.core.theme import (
+    C_AMBER as _C_AMBER,
+)
+from src.core.theme import (
+    C_DANGER as _C_RED,
+)
+from src.core.theme import (
+    C_DARK as _C_DARK,
+)
+from src.core.theme import (
+    C_GRID as _C_GRID,
+)
+from src.core.theme import (
+    C_MUTED as _C_MUTED,
+)
+from src.core.theme import (
+    C_PRIMARY as _C_PRIMARY,
+)
+from src.core.theme import (
+    C_SUCCESS as _C_GREEN,
+)
+from src.core.theme import (
+    CFG_GRAPH as _CFG,
+)
+from src.core.utils import MESES_ES as _MESES_ES_GEO
 from src.data_processing.geo_enrichment import get_catchment_rings
 
 # ── JS para pines y clusters Leaflet (módulo-nivel — no recrear en callbacks) ──
@@ -60,11 +85,6 @@ _JS_CLUSTER_TO_LAYER = assign(
 }"""
 )
 
-_C_PRIMARY = "#0052CC"
-_C_DARK = "#2c3e50"
-_C_MUTED = "#6c757d"
-_C_GRID = "#f2f2f2"
-
 # Metro de Madrid — logo simplificado (rombo rojo con M blanca)
 _METRO_SVG = (
     b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
@@ -75,104 +95,12 @@ _METRO_SVG = (
 )
 _METRO_LOGO_SRC = "data:image/svg+xml;base64," + base64.b64encode(_METRO_SVG).decode()
 
-# ── Contexto espacial mock por ubicación ──────────────────────────────────────
-# Cada entrada: {lat, lon, label, categoria, valor_relativo (0-1 para tamaño)}
-# categoria: "metro" | "tourist_poi" | "event_venue"
-_SPATIAL_CONTEXT: dict[str, list[dict]] = {
-    # Madrid Gran Vía 48 — footfall CRTM 2025: Sol ~60 k/día, Gran Vía ~32 k, Callao ~24 k
-    "251e7f40-95c7-4678-aa48-df1b90e3461c": [
-        # Estaciones de metro en la isócrona
-        {
-            "lat": 40.4193,
-            "lon": -3.7014,
-            "label": "Gran Vía · Línea 1 (azul) + Línea 5 (verde)",
-            "categoria": "metro",
-            "valor": 1.0,
-            "detalle": "~32 000 validaciones/día · 3 min a pie",
-        },
-        {
-            "lat": 40.4207,
-            "lon": -3.7077,
-            "label": "Callao · Línea 3 (amarilla) + Línea 5 (verde)",
-            "categoria": "metro",
-            "valor": 0.75,
-            "detalle": "~24 000 validaciones/día · 5 min a pie",
-        },
-        {
-            "lat": 40.4168,
-            "lon": -3.7026,
-            "label": "Sol · Línea 1 + Línea 2 + Línea 3 (nodo central)",
-            "categoria": "metro",
-            "valor": 0.95,
-            "detalle": "~60 000 validaciones/día · 1er puesto red · 8 min a pie",
-        },
-        {
-            "lat": 40.4194,
-            "lon": -3.7110,
-            "label": "Santo Domingo · Línea 2 (roja)",
-            "categoria": "metro",
-            "valor": 0.35,
-            "detalle": "~8 000 validaciones/día · 7 min a pie",
-        },
-        # Polos turísticos generadores de afluencia (efecto sonar)
-        {
-            "lat": 40.4155,
-            "lon": -3.7074,
-            "label": "Plaza Mayor",
-            "categoria": "tourist_poi",
-            "valor": 0.9,
-            "detalle": "~18 000 visitas/día · epicentro turístico",
-            "sonar": True,
-        },
-        {
-            "lat": 40.4168,
-            "lon": -3.7038,
-            "label": "Puerta del Sol",
-            "categoria": "tourist_poi",
-            "valor": 1.0,
-            "detalle": "~25 000 turistas/día · km 0 de España",
-            "sonar": True,
-        },
-        {
-            "lat": 40.4152,
-            "lon": -3.7088,
-            "label": "Mercado de San Miguel",
-            "categoria": "tourist_poi",
-            "valor": 0.55,
-            "detalle": "~7 000 visitas/día · mercado gastronómico",
-        },
-        # Espacios de eventos que generan picos de tráfico
-        {
-            "lat": 40.4231,
-            "lon": -3.7086,
-            "label": "Teatro Real",
-            "categoria": "event_venue",
-            "valor": 0.8,
-            "detalle": "Ópera y conciertos · hasta 1 746 asientos",
-        },
-        {
-            "lat": 40.4217,
-            "lon": -3.7059,
-            "label": "Cines Callao (100 años · 1926–2026)",
-            "categoria": "event_venue",
-            "valor": 0.6,
-            "detalle": "Estrenos y premieres · Plaza de Callao",
-        },
-    ],
-}
-
-_SPATIAL_COLORS = {
-    "metro": ("#1abc9c", 16),
-    "tourist_poi": ("#f39c12", 14),
-    "event_venue": ("#9b59b6", 13),
-}
-_SPATIAL_LABELS = {
-    "metro": "Metro",
-    "tourist_poi": "Polo turístico",
-    "event_venue": "Sala de eventos",
-}
-
 # ── Señales externas de área ──────────────────────────────────────────────────
+# El contexto espacial (POIs) y los metadatos visuales por categoría (label,
+# color, icono) viven en location_pois y poi_category_registry.  Ver _get_pois
+# y _load_geo_meta más abajo.
+
+
 _UNIVERSAL_EXT_KEYS = frozenset(
     {
         "ev_festivo_regional",
@@ -184,62 +112,63 @@ _UNIVERSAL_EXT_KEYS = frozenset(
         "temp_min",
     }
 )
-# Colores oficiales líneas Metro de Madrid usados en los gráficos:
-#   L1 azul (#00539B) · L3 amarillo (#F0C832) · L5 verde (#3DAA53)
-_EXT_SERIES_META = {
-    "afluencia_metro_gran_via": ("Gran Vía · L1/L5", "mean", "#00539B"),
-    "afluencia_metro_callao": ("Callao · L3/L5", "mean", "#c8a400"),
-    "n_turistas_isocrona": ("Turistas zona 0-15 min", "mean", "#e67e22"),
-    "n_pasajeros_crucero_dia": ("Pasajeros crucero", "sum", "#1abc9c"),
-}
 _EV_RANK_KEYS = ["ev_rank_deportivo", "ev_rank_concierto", "ev_rank_festival"]
-_EV_RANK_META = {
-    "ev_rank_deportivo": ("Deportivo", "#e74c3c"),
-    "ev_rank_concierto": ("Concierto", "#8e44ad"),
-    "ev_rank_festival": ("Festival", "#2980b9"),
-}
-_EV_KEYS = {
-    "estreno_callao",
-    "manifestacion_gran_via",
-    "concierto_wizink",
-    "festival_madrid",
-    "escala_crucero",
-    "tm_concierto",
-    "tm_festival",
-    "tm_deportivo",
-}
-_EV_ICONS = {
-    "estreno_callao": "fas fa-film",
-    "manifestacion_gran_via": "fas fa-bullhorn",
-    "concierto_wizink": "fas fa-music",
-    "festival_madrid": "fas fa-city",
-    "escala_crucero": "fas fa-ship",
-    "tm_concierto": "fas fa-music",
-    "tm_festival": "fas fa-star",
-    "tm_deportivo": "fas fa-futbol",
-}
-_EV_LABELS = {
-    "estreno_callao": "Estreno",
-    "manifestacion_gran_via": "Marcha",
-    "concierto_wizink": "Concierto",
-    "festival_madrid": "Evento ciudad",
-    "escala_crucero": "Crucero",
-    "tm_concierto": "Concierto",
-    "tm_festival": "Festival",
-    "tm_deportivo": "Deportivo",
-}
-_EV_COLOR = {
-    "estreno_callao": "#e67e22",
-    "manifestacion_gran_via": "#c0392b",
-    "concierto_wizink": "#8e44ad",
-    "festival_madrid": "#2980b9",
-    "escala_crucero": "#16a085",
-    "tm_concierto": "#8e44ad",
-    "tm_festival": "#2980b9",
-    "tm_deportivo": "#e74c3c",
-}
 _IMP_COLOR = {"alto": "#c0392b", "medio": "#d68910", "bajo": "#27ae60"}
-_MESES_ES_GEO = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+
+
+def _load_poi_cat_meta() -> dict:
+    """Atajo: devuelve solo poi_cat_meta con una conexión interna."""
+    try:
+        from src.db.store import get_conn
+
+        _, poi_cat_meta, _ = _load_geo_meta(get_conn())
+        return poi_cat_meta
+    except Exception:
+        return {}
+
+
+def _load_geo_meta(conn) -> tuple[dict, dict, dict]:
+    """
+    Devuelve (feature_meta, poi_cat_meta, norm_tipo).
+
+    feature_meta: {feature_key: {label, icon_cls, color, agg_fn, canonical_type}}
+    poi_cat_meta: {category:    {label, icon_cls, color, badge_color}}
+    norm_tipo:    {raw_key:     canonical_type}  — derivado de
+                  feature_registry.canonical_type para mapear eventos raw a
+                  tipos canónicos del calendario.
+    """
+    feature_meta: dict = {}
+    poi_cat_meta: dict = {}
+    norm_tipo: dict = {}
+    try:
+        rows = conn.execute(
+            "SELECT feature_key, label, icon_cls, color, agg_fn, canonical_type "
+            "FROM feature_registry WHERE label IS NOT NULL"
+        ).fetchall()
+        for fk, lbl, icon, col, agg, canon in rows:
+            feature_meta[fk] = {
+                "label": lbl or fk,
+                "icon_cls": icon or "fas fa-satellite-dish",
+                "color": col or "#0052CC",
+                "agg_fn": agg or "sum",
+            }
+            if canon:
+                norm_tipo[fk] = canon
+        cat_rows = conn.execute(
+            "SELECT category, label, icon_cls, color, badge_color FROM poi_category_registry"
+        ).fetchall()
+        poi_cat_meta = {
+            cat: {
+                "label": lbl,
+                "icon_cls": icon or "fas fa-map-pin",
+                "color": col or "#6c757d",
+                "badge_color": bc or "secondary",
+            }
+            for cat, lbl, icon, col, bc in cat_rows
+        }
+    except Exception:
+        pass
+    return feature_meta, poi_cat_meta, norm_tipo
 
 
 def _render_area_signals(location_uuid: str):
@@ -253,10 +182,13 @@ def _render_area_signals(location_uuid: str):
     hoy = date.today()
 
     cruise_fc_rows: list = []
+    feature_meta: dict = {}
+    poi_cat_meta: dict = {}
     try:
         from src.db.store import get_conn
 
         conn = get_conn()
+        feature_meta, poi_cat_meta, _ = _load_geo_meta(conn)
         ts_rows = conn.execute(
             """SELECT feature_key, fecha::text, value
                FROM   store_features_ext
@@ -309,7 +241,17 @@ def _render_area_signals(location_uuid: str):
         pass
 
     ts_rows = [r for r in ts_rows if r[0] not in _UNIVERSAL_EXT_KEYS]
-    ev_rows = [r for r in ev_rows if r[0] in _EV_KEYS]
+    # Eventos raw: feature_registry con display_mode='raw' (categoría eventos/cruceros).
+    try:
+        _raw_keys = {
+            r[0]
+            for r in conn.execute(
+                "SELECT feature_key FROM feature_registry WHERE display_mode = 'raw'"
+            ).fetchall()
+        }
+    except Exception:
+        _raw_keys = set()
+    ev_rows = [r for r in ev_rows if r[0] in _raw_keys]
 
     if not ts_rows and not ev_rows:
         return None
@@ -327,7 +269,9 @@ def _render_area_signals(location_uuid: str):
 
         fig_m = go.Figure()
         for fk in metro_keys_present:
-            label, _, color = _EXT_SERIES_META[fk]
+            _meta = feature_meta.get(fk, {})
+            label = _meta.get("label", fk)
+            color = _meta.get("color", "#0052CC")
             sub = (
                 df_m[df_m["fk"] == fk]
                 .groupby("mes")["value"]
@@ -370,11 +314,13 @@ def _render_area_signals(location_uuid: str):
                 yref="paper",
                 text="▲",
                 showarrow=False,
-                font=dict(size=9, color=_EV_COLOR.get(ekey, "#888")),
+                font=dict(size=9, color=feature_meta.get(ekey, {}).get("color", "#888")),
                 hovertext=f"<b>{titulo}</b><br>{fi_dt.strftime('%-d %b %Y')}"
                 + (f"<br>{meta.get('asistentes','')} asistentes" if meta.get("asistentes") else ""),
                 hoverlabel=dict(
-                    bgcolor="white", bordercolor=_EV_COLOR.get(ekey, "#888"), font=dict(size=10)
+                    bgcolor="white",
+                    bordercolor=feature_meta.get(ekey, {}).get("color", "#888"),
+                    font=dict(size=10),
                 ),
                 xanchor="center",
                 yanchor="bottom",
@@ -467,7 +413,10 @@ def _render_area_signals(location_uuid: str):
 
         fig_t = go.Figure()
         for fk in tourist_keys_present:
-            label, agg_fn, color = _EXT_SERIES_META[fk]
+            _meta = feature_meta.get(fk, {})
+            label = _meta.get("label", fk)
+            agg_fn = _meta.get("agg_fn", "sum")
+            color = _meta.get("color", "#0052CC")
             sub = (
                 df_t[df_t["fk"] == fk]
                 .groupby("mes")["value"]
@@ -641,7 +590,9 @@ def _render_area_signals(location_uuid: str):
         df_ev["mes"] = df_ev["fecha"].dt.to_period("M").dt.to_timestamp()
         fig_ev = go.Figure()
         for fk in ev_rank_keys_present:
-            label, color = _EV_RANK_META[fk]
+            _meta = feature_meta.get(fk, {})
+            label = _meta.get("label", fk)
+            color = _meta.get("color", "#0052CC")
             sub = (
                 df_ev[df_ev["fk"] == fk]
                 .groupby("mes")["value"]
@@ -712,7 +663,7 @@ def _render_area_signals(location_uuid: str):
                                     html.Div(
                                         [
                                             html.Span(
-                                                f"{_EV_RANK_META[fk][0]}: ",
+                                                f"{feature_meta.get(fk, {}).get('label', fk)}: ",
                                                 style={"fontWeight": "600"},
                                             ),
                                             html.Span(notas_map.get(fk, "")),
@@ -751,13 +702,14 @@ def _render_area_signals(location_uuid: str):
         except Exception:
             meta = {}
         fi_dt = pd.to_datetime(fi)
-        icon_fa = meta.get("icono_fa") or _EV_ICONS.get(ekey, "fas fa-calendar")
+        _ev_meta = feature_meta.get(ekey, {})
+        icon_fa = meta.get("icono_fa") or _ev_meta.get("icon_cls", "fas fa-calendar")
         titulo = meta.get("titulo", ekey)
         desc = meta.get("descripcion", "")
         imp = meta.get("impacto", "")
         asist = meta.get("asistentes", "")
-        cat_lbl = _EV_LABELS.get(ekey, ekey)
-        c_brd = _EV_COLOR.get(ekey, "#adb5bd")
+        cat_lbl = _ev_meta.get("label", ekey)
+        c_brd = _ev_meta.get("color", "#adb5bd")
         c_imp = _IMP_COLOR.get(imp, "#adb5bd")
 
         return html.Div(
@@ -914,14 +866,11 @@ def _render_area_signals(location_uuid: str):
     )
 
 
-_C_GREEN = "#28A745"
-_C_AMBER = "#f39c12"
-_C_RED = "#DC3545"
 _C_TEAL = "#17a2b8"
 _C_PURPLE = "#8e44ad"
 
 _FONT = dict(family="Arial, sans-serif")
-_CFG = {"displayModeBar": False, "responsive": True}
+# _CFG ya importado de src.core.theme al principio del módulo.
 _H_CHART = "400px"
 _H_MID = "340px"
 _H_SM = "280px"
@@ -1910,7 +1859,7 @@ def _get_pois(uuid: str) -> list[dict]:
             ]
     except Exception:
         pass
-    return _SPATIAL_CONTEXT.get(uuid, [])
+    return []
 
 
 def _fig_mapa(vals, lat, lon, uuid):
@@ -1980,6 +1929,7 @@ def _fig_mapa(vals, lat, lon, uuid):
 
     # ── POIs por categoría (pines de color + clustering) ──────────────────────
     spatial_pois = _get_pois(uuid)
+    poi_cat_meta = _load_poi_cat_meta()
     if spatial_pois:
         from itertools import groupby
         from operator import itemgetter
@@ -1987,7 +1937,7 @@ def _fig_mapa(vals, lat, lon, uuid):
         # Sonar: anillos concéntricos para polos de alta afluencia (sin cluster)
         sonar_items = [p for p in spatial_pois if p.get("sonar")]
         for p in sonar_items:
-            color_s = _SPATIAL_COLORS.get(p["categoria"], ("#f39c12", 14))[0]
+            color_s = poi_cat_meta.get(p["categoria"], {}).get("color", "#f39c12")
             for ring_size, ring_alpha in [(44, 0.04), (32, 0.09), (20, 0.18)]:
                 fig.add_trace(
                     go.Scattermap(
@@ -2005,7 +1955,8 @@ def _fig_mapa(vals, lat, lon, uuid):
             sorted(spatial_pois, key=itemgetter("categoria")), key=itemgetter("categoria")
         ):
             items = list(items)
-            color, _ = _SPATIAL_COLORS.get(cat, ("#95a5a6", 12))
+            _cat_meta = poi_cat_meta.get(cat, {})
+            color = _cat_meta.get("color", "#95a5a6")
             lats = [p["lat"] for p in items]
             lons = [p["lon"] for p in items]
             tips = [f"<b>{p['label']}</b><br>{p.get('detalle', '')}<extra></extra>" for p in items]
@@ -2023,7 +1974,7 @@ def _fig_mapa(vals, lat, lon, uuid):
                         step=[-1, 3, 8],
                         maxzoom=16,
                     ),
-                    name=_SPATIAL_LABELS.get(cat, cat),
+                    name=_cat_meta.get("label", cat),
                     hovertemplate=tips,
                 )
             )
@@ -2613,6 +2564,7 @@ def _leaflet_mapa(vals: dict, lat: float, lon: float, uuid: str):
 
     # POIs por categoría con clustering
     spatial_pois = _get_pois(uuid)
+    poi_cat_meta = _load_poi_cat_meta()
     if spatial_pois:
         from itertools import groupby
         from operator import itemgetter
@@ -2621,7 +2573,7 @@ def _leaflet_mapa(vals: dict, lat: float, lon: float, uuid: str):
             sorted(spatial_pois, key=itemgetter("categoria")), key=itemgetter("categoria")
         ):
             items = list(items)
-            color, _ = _SPATIAL_COLORS.get(cat, ("#95a5a6", 12))
+            color = poi_cat_meta.get(cat, {}).get("color", "#95a5a6")
             layers.append(
                 dl.GeoJSON(
                     data={

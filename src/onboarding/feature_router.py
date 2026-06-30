@@ -26,9 +26,6 @@ _PAISES_FESTIVOS = {"ES", "MX", "US", "FR", "DE", "GB", "IT", "PT", "BE", "NL", 
 # Países con cobertura útil en Ticketmaster
 _PAISES_TICKETMASTER = {"ES", "MX", "US", "FR", "DE", "GB"}
 
-# Palabras clave que identifican Málaga en el campo ciudad
-_MALAGA_KEYS = {"malaga", "málaga"}
-
 
 @dataclass
 class RoutingResult:
@@ -61,7 +58,6 @@ def enrutar(location_uuid: str) -> RoutingResult:
         )
 
     nombre, ciudad, pais_codigo, lat, lon = row
-    ciudad_lower = (ciudad or "").lower().strip()
     pais = (pais_codigo or "").upper()
     tiene_coords = bool(lat and lon)
 
@@ -96,10 +92,23 @@ def enrutar(location_uuid: str) -> RoutingResult:
     fuentes.append("thesportsdb")
 
     # ── Cruceros ──────────────────────────────────────────────────────────────
-    if any(k in ciudad_lower for k in _MALAGA_KEYS):
+    # Activamos cruceros si la ubicación tiene una fila activa en
+    # location_source_config con source='cruceros'. El context_scout (o un
+    # admin) decide qué ubicaciones reciben datos de puerto.
+    try:
+        cruceros_row = conn.execute(
+            "SELECT 1 FROM location_source_config "
+            "WHERE location_uuid = ? AND source = 'cruceros' AND activo = TRUE",
+            [location_uuid],
+        ).fetchone()
+    except Exception:
+        cruceros_row = None
+    if cruceros_row:
         fuentes.append("cruceros")
     else:
-        excluidas["cruceros"] = f"ciudad='{ciudad}' — solo activo en Málaga"
+        excluidas["cruceros"] = (
+            "sin source='cruceros' activo en location_source_config " f"(ciudad='{ciudad}')"
+        )
 
     # ── Esri ──────────────────────────────────────────────────────────────────
     if not os.getenv("ESRI_KEY"):

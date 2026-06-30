@@ -10,30 +10,25 @@ from src.core.config import app
 from src.db.queries import get_pois_for_location, upsert_poi
 from src.db.store import get_conn
 
-_CAT_LABELS = {
-    "metro": "Metro / Transporte",
-    "tourist_poi": "Polo turístico",
-    "event_venue": "Sala de eventos",
-    "competitor": "Competidor",
-    "otro": "Otro",
-}
-_CAT_ICONS = {
-    "metro": "fas fa-subway text-primary",
-    "tourist_poi": "fas fa-landmark text-warning",
-    "event_venue": "fas fa-theater-masks text-purple",
-    "competitor": "fas fa-store text-danger",
-    "otro": "fas fa-map-pin text-muted",
-}
-_CAT_COLORS = {
-    "metro": "primary",
-    "tourist_poi": "warning",
-    "event_venue": "info",
-    "competitor": "danger",
-    "otro": "secondary",
-}
-
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+def _load_poi_categories(conn=None) -> dict:
+    """
+    Devuelve {category: {label, icon_cls, color, badge_color}} desde
+    poi_category_registry. Fuente única para los displays de POI.
+    """
+    try:
+        c = conn or get_conn()
+        rows = c.execute(
+            "SELECT category, label, icon_cls, color, badge_color FROM poi_category_registry"
+        ).fetchall()
+        return {
+            cat: {"label": lbl, "icon_cls": icon, "color": col, "badge_color": bc}
+            for cat, lbl, icon, col, bc in rows
+        }
+    except Exception:
+        return {}
 
 
 def _get_loc_options() -> list[dict]:
@@ -56,18 +51,24 @@ def _render_table(location_uuid: str) -> html.Div:
             ),
         )
 
+    poi_cats = _load_poi_categories()
+
     rows = []
     for poi in pois:
         cat = poi["categoria"]
+        cat_meta = poi_cats.get(cat, {})
+        icon_cls = cat_meta.get("icon_cls", "fas fa-map-pin")
+        badge_color = cat_meta.get("badge_color", "secondary")
+        cat_label = cat_meta.get("label", cat)
+        # Combina icono con clase de color Bootstrap (text-<variant>)
+        icon_full = f"{icon_cls} text-{badge_color}"
         rows.append(
             html.Tr(
                 [
                     html.Td(
                         html.Span(
                             [
-                                html.I(
-                                    className=f"{_CAT_ICONS.get(cat, 'fas fa-map-pin text-muted')} me-2"
-                                ),
+                                html.I(className=f"{icon_full} me-2"),
                                 poi["nombre"],
                             ]
                         ),
@@ -75,8 +76,8 @@ def _render_table(location_uuid: str) -> html.Div:
                     ),
                     html.Td(
                         dbc.Badge(
-                            _CAT_LABELS.get(cat, cat),
-                            color=_CAT_COLORS.get(cat, "secondary"),
+                            cat_label,
+                            color=badge_color,
                             pill=True,
                             className="small",
                         ),

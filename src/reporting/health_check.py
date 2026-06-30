@@ -25,6 +25,31 @@ import plotly.graph_objects as go
 from dash import dcc, html
 
 from src.core import data_master as _dm
+from src.core.theme import (
+    C_AMBER as _C_AMBER,
+)
+from src.core.theme import (
+    C_DANGER as _C_DANGER,
+)
+from src.core.theme import (
+    C_DARK as _C_DARK,
+)
+from src.core.theme import (
+    C_MUTED as _C_MUTED,
+)
+from src.core.theme import (
+    C_PRIMARY as _C_PRIMARY,
+)
+from src.core.theme import (
+    C_SUCCESS as _C_SUCCESS,
+)
+from src.core.theme import (
+    CFG_GRAPH as _CFG_GRAPH,
+)
+from src.core.theme import (
+    PALETA_PM as _PALETA_PM,
+)
+from src.core.utils import MESES_ES as _MESES_ES
 from src.data_processing.data_radar import obtener_clima_historico, obtener_info_ubicacion
 from src.data_processing.geo_enrichment import get_geo_snapshot_date, get_geo_vals
 from src.reporting.geo_panel import generar_mapa_contexto, generar_panel_geo_visual
@@ -33,69 +58,98 @@ festivos_espana = holidays.ES(years=[2024, 2025, 2026])
 dias_semana_es = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 dias_corto = ["L", "M", "X", "J", "V", "S", "D"]
 
-_C_PRIMARY = "#0052CC"
-_C_SUCCESS = "#28A745"
-_C_DANGER = "#DC3545"
-_C_AMBER = "#f39c12"
-_C_DARK = "#2c3e50"
-_C_MUTED = "#6c757d"
-_CFG_GRAPH = {"displayModeBar": False, "responsive": True}
+
+# ── Zone helpers — display metadata desde zone_type_registry ─────────────────
 
 
-# ── Zone helpers ──────────────────────────────────────────────────────────────
-
-_PALETA_PM = [
-    "#0052CC",
-    "#E67E22",
-    "#27AE60",
-    "#8E44AD",
-    "#E74C3C",
-    "#17A2B8",
-    "#F39C12",
-    "#2ECC71",
-    "#9B59B6",
-    "#C0392B",
-    "#1ABC9C",
-    "#D35400",
-    "#2980B9",
-    "#16A085",
-    "#7D3C98",
-]
-
-
-def _color_zona(zona):
+def _detect_zone_type(zona: str) -> str:
+    """Mapea el nombre libre de la zona a un zone_type canónico."""
     zl = str(zona).lower()
     if "caja" in zl:
-        return "#8e44ad"
+        return "caja"
     if "tienda" in zl:
-        return "#e67e22"
+        return "tienda"
     if "calle" in zl or "exterior" in zl:
-        return "#2980b9"
-    return _PALETA_PM[hash(zona) % len(_PALETA_PM)]
+        return "exterior"
+    return "default"
 
 
-def _zona_meta(zona):
-    """Returns (badge_label, icon_cls, tooltip)."""
-    zl = str(zona).lower()
-    if "caja" in zl:
-        return (
-            "Cierre de venta",
-            "fas fa-cash-register",
-            "Zona de caja — tráfico vinculado directamente a la conversión en compra.",
-        )
-    if "tienda" in zl:
-        return (
-            "Conversión",
-            "fas fa-store",
-            "Zona interior — indica qué proporción del tráfico exterior accede al establecimiento.",
-        )
-    if "calle" in zl or "exterior" in zl:
-        return (
-            "Captación",
-            "fas fa-walking",
-            "Zona exterior — tráfico peatonal registrado frente al establecimiento.",
-        )
-    return ("Analítica", "fas fa-layer-group", "Zona de medición de tráfico.")
+def _load_zone_meta(conn) -> dict:
+    """Devuelve {zone_type: {label, icon_cls, color, tooltip}} desde DB."""
+    try:
+        rows = conn.execute(
+            "SELECT zone_type, label, icon_cls, color, tooltip FROM zone_type_registry"
+        ).fetchall()
+        return {
+            zt: {"label": lbl, "icon_cls": icon, "color": col, "tooltip": tt or ""}
+            for zt, lbl, icon, col, tt in rows
+        }
+    except Exception:
+        return {}
+
+
+def _zone_display(zona: str, zone_meta: dict) -> dict:
+    """Devuelve {color, label, icon_cls, tooltip} para el nombre de zona dado."""
+    zt = _detect_zone_type(zona)
+    m = zone_meta.get(zt, zone_meta.get("default", {}))
+    color = m.get("color") or _PALETA_PM[hash(zona) % len(_PALETA_PM)]
+    return {
+        "color": color,
+        "label": m.get("label", "Analítica"),
+        "icon_cls": m.get("icon_cls", "fas fa-layer-group"),
+        "tooltip": m.get("tooltip", "Zona de medición de tráfico."),
+    }
+
+
+def _load_narrative_meta(conn) -> tuple[dict, dict, list]:
+    """
+    Devuelve (cat_meta, level_meta, cat_order) desde DB.
+
+    cat_meta:   {category_key: (icon_cls, label)}
+    level_meta: {level_key:    (text_color, bg_color)}
+    cat_order:  lista ordenada por sort_order
+    """
+    cat_meta: dict = {}
+    level_meta: dict = {}
+    cat_order: list = []
+    try:
+        for ck, lbl, icon, _ in conn.execute(
+            "SELECT category_key, label, icon_cls, sort_order "
+            "FROM narrative_category_registry ORDER BY sort_order"
+        ).fetchall():
+            cat_meta[ck] = (icon or "fas fa-circle", lbl or ck)
+            cat_order.append(ck)
+        for lk, tc, bc, _ in conn.execute(
+            "SELECT level_key, text_color, bg_color, sort_order "
+            "FROM alert_level_registry ORDER BY sort_order"
+        ).fetchall():
+            level_meta[lk] = (tc, bc)
+    except Exception:
+        pass
+    return cat_meta, level_meta, cat_order
+
+
+def _color_zona(zona) -> str:
+    """Compat: devuelve el color de una zona usando zone_type_registry."""
+    try:
+        from src.db.store import get_conn
+
+        zm = _load_zone_meta(get_conn())
+    except Exception:
+        zm = {}
+    return _zone_display(zona, zm)["color"]
+
+
+def _load_norm_tipo(conn) -> dict:
+    """Devuelve {raw_event_key: canonical_type} desde feature_registry."""
+    try:
+        rows = conn.execute(
+            "SELECT feature_key, canonical_type FROM feature_registry "
+            "WHERE canonical_type IS NOT NULL"
+        ).fetchall()
+        return {fk: canon for fk, canon in rows}
+    except Exception:
+        return {}
 
 
 # ── Data helpers ──────────────────────────────────────────────────────────────
@@ -1058,30 +1112,22 @@ def _narrativa(
 
 # ── Section renderers ─────────────────────────────────────────────────────────
 
-_CAT_META = {
-    "trafico": ("fas fa-chart-line", "Afluencia"),
-    "experiencia": ("fas fa-store", "Experiencia en tienda"),
-    "integridad": ("fas fa-shield-halved", "Calidad de datos"),
-    "clima": ("fas fa-cloud-sun", "Condiciones climáticas"),
-    "eventos": ("fas fa-calendar-check", "Eventos"),
-}
-
 
 def _render_narrativa(items, extras=None):
     """
     Renderiza los insights del resumen como menú horizontal de tabs (uno por categoría).
     extras: dict {cat_key: html.Component} — contenido adicional (ej. gráficos) por tab.
     Solo aparecen tabs que tengan al menos un insight o extra content.
+
+    Categorías, etiquetas, iconos y colores de nivel se cargan desde
+    narrative_category_registry y alert_level_registry.
     """
-    _LEVEL_COLOR = {
-        "success": (_C_SUCCESS, "#e8f5e9"),
-        "danger": (_C_DANGER, "#fdecea"),
-        "warning": (_C_AMBER, "#fff8e1"),
-        "primary": (_C_PRIMARY, "#e8f0fe"),
-        "secondary": (_C_MUTED, "#f5f5f5"),
-        "info": ("#17a2b8", "#e8f7fa"),
-    }
-    _CAT_ORDER = ["trafico", "experiencia", "clima", "eventos", "integridad"]
+    try:
+        from src.db.store import get_conn
+
+        _CAT_META, _LEVEL_COLOR, _CAT_ORDER = _load_narrative_meta(get_conn())
+    except Exception:
+        _CAT_META, _LEVEL_COLOR, _CAT_ORDER = {}, {}, []
 
     if not items and not extras:
         return html.Div()
@@ -1190,8 +1236,15 @@ def _render_zona_card(
     gap_anterior=False,
 ):
     """Tarjeta de zona: % delta en grande (hero) + visitantes absolutos + sparkline."""
-    color = _color_zona(zona)
-    badge_lbl, _, tooltip_role = _zona_meta(zona)
+    try:
+        from src.db.store import get_conn
+
+        _zone_meta = _load_zone_meta(get_conn())
+    except Exception:
+        _zone_meta = {}
+    _zd = _zone_display(zona, _zone_meta)
+    color = _zd["color"]
+    badge_lbl, tooltip_role = _zd["label"], _zd["tooltip"]
     zone_slug = _slug(zona)
     badge_id = f"pm-z-{zone_slug}-{uid}"
     spark_info_id = f"pm-spark-info-{zone_slug}-{uid}"
@@ -2177,8 +2230,6 @@ def _render_eventos_externos(location_uuid: str, fecha_max) -> html.Div | None:
     df_ext["semana_iso"] = df_ext["fecha"].dt.to_period("W").dt.start_time
     df_ext["mes"] = df_ext["fecha"].dt.to_period("M").dt.to_timestamp()
 
-    _MESES_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
-
     feature_cards = []
     for fk in sorted(keys_loc):
         m = feature_meta.get(
@@ -2382,8 +2433,6 @@ def _render_eventos_signals(
     fmin_act = fmax - timedelta(days=dias_v - 1)
     fmin_ant = fmin_act - timedelta(days=dias_v)
     per_lbl = "mes" if ventana == "mes" else "semana"
-
-    _MESES_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
 
     cards = []
     for fk in sorted(keys_loc):
@@ -3229,28 +3278,18 @@ def _render_calendario_eventos_clima(location_uuid: str, fecha_max) -> html.Div 
     )
 
 
-_NORM_TIPO = {
-    "tm_concierto": "concierto",
-    "tm_festival": "festival",
-    "tm_deportivo": "deportivo",
-    "concierto_wizink": "concierto",
-    "festival_madrid": "festival",
-    "partido_deportivo": "deportivo",
-    "estreno_callao": "concierto",
-    "manifestacion_gran_via": "evento_municipal",
-}
-
-
 def _render_eventos_mensual_section(
     location_uuid: str, fecha_max, tipo_meta: dict | None = None
 ) -> html.Div | None:
     """Monthly event-count bar charts (one per type), same visual pattern as cruise section."""
     if tipo_meta is None:
         tipo_meta = {}
+    norm_tipo: dict = {}
     try:
         from src.db.store import get_conn
 
         conn = get_conn()
+        norm_tipo = _load_norm_tipo(conn)
         desde = fecha_max - timedelta(days=760)
         rows = conn.execute(
             """SELECT evento_key, fecha_inicio::text, metadata
@@ -3267,7 +3306,7 @@ def _render_eventos_mensual_section(
 
     df = pd.DataFrame(rows, columns=["evento_key", "fecha", "metadata"])
     df["fecha"] = pd.to_datetime(df["fecha"])
-    df["tipo"] = df["evento_key"].map(lambda k: _NORM_TIPO.get(k, k))
+    df["tipo"] = df["evento_key"].map(lambda k: norm_tipo.get(k, k))
     df["anio"] = df["fecha"].dt.year
     df["mes_num"] = df["fecha"].dt.month
     df = df[df["tipo"].isin(tipo_meta)]
@@ -3278,7 +3317,6 @@ def _render_eventos_mensual_section(
     anio_actual = fecha_max.year if hasattr(fecha_max, "year") else pd.Timestamp(fecha_max).year
     anio_prev = anio_actual - 1
     mes_hoy = date.today().month
-    _MESES_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
 
     tipos = sorted(df["tipo"].unique(), key=lambda t: tipo_meta.get(t, {}).get("label", t))
     charts = []
@@ -3579,7 +3617,6 @@ def _render_cruceros_section(
     if not yoy_rows:
         return None
 
-    _MESES_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
     color = "#1abc9c"
     today = date.today()
 
@@ -3979,7 +4016,6 @@ def _render_senal_contexto_modal(
     except Exception:
         return None
 
-    _MESES_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
     anio_actual = fecha_max.year
     anio_prev = anio_actual - 1
 

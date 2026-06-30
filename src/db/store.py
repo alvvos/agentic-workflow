@@ -456,6 +456,40 @@ _DDL: list[str] = [
     """
     CREATE INDEX IF NOT EXISTS idx_lsc_source ON location_source_config (source) WHERE activo = TRUE
     """,
+    """
+    CREATE TABLE IF NOT EXISTS poi_category_registry (
+        category    TEXT PRIMARY KEY,
+        label       TEXT NOT NULL,
+        icon_cls    VARCHAR(64),
+        color       VARCHAR(16),
+        badge_color VARCHAR(16)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS zone_type_registry (
+        zone_type   TEXT PRIMARY KEY,
+        label       TEXT NOT NULL,
+        icon_cls    VARCHAR(64),
+        color       VARCHAR(16),
+        tooltip     TEXT
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS narrative_category_registry (
+        category_key TEXT PRIMARY KEY,
+        label        TEXT NOT NULL,
+        icon_cls     VARCHAR(64),
+        sort_order   INT  DEFAULT 99
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS alert_level_registry (
+        level_key  TEXT PRIMARY KEY,
+        text_color VARCHAR(16),
+        bg_color   VARCHAR(16),
+        sort_order INT DEFAULT 99
+    )
+    """,
 ]
 
 _FACT_VISITAS_COLS = [
@@ -491,6 +525,7 @@ def _apply_ddl(conn: PgConn) -> None:
     _migrate_feature_registry_display(conn)
     _migrate_location_pois(conn)
     _migrate_location_source_config(conn)
+    _migrate_registries(conn)
     _sync_users_from_json(conn)
 
 
@@ -743,6 +778,223 @@ def _migrate_feature_registry_display(conn: PgConn) -> None:
             "label=EXCLUDED.label, sublabel=EXCLUDED.sublabel, color=EXCLUDED.color, "
             "icon_cls=EXCLUDED.icon_cls, agg_fn=EXCLUDED.agg_fn, display_mode=EXCLUDED.display_mode",
             [fk, src, cat, stat, lbl, sub, col, icon, agg, "events_count"],
+        )
+
+
+def _migrate_registries(conn: PgConn) -> None:
+    """
+    Siembra los registries de display (POI, zonas, narrativa, alertas) y añade
+    la columna canonical_type a feature_registry. Todos los inserts son
+    ON CONFLICT DO NOTHING salvo los eventos raw, que upsertean el canonical_type
+    y campos visuales para mantenerse alineados con cambios futuros.
+    """
+    # ── poi_category_registry ────────────────────────────────────────────────
+    _POI_CATS = [
+        ("metro", "Metro / Transporte", "fas fa-subway", "#0052CC", "primary"),
+        ("tourist_poi", "Polo turístico", "fas fa-landmark", "#f39c12", "warning"),
+        ("event_venue", "Sala de eventos", "fas fa-theater-masks", "#8e44ad", "info"),
+        ("competitor", "Competidor", "fas fa-store", "#DC3545", "danger"),
+        ("otro", "Otro", "fas fa-map-pin", "#6c757d", "secondary"),
+    ]
+    conn.executemany(
+        "INSERT INTO poi_category_registry (category, label, icon_cls, color, badge_color) "
+        "VALUES (?,?,?,?,?) ON CONFLICT (category) DO NOTHING",
+        _POI_CATS,
+    )
+
+    # ── zone_type_registry ───────────────────────────────────────────────────
+    _ZONE_TYPES = [
+        (
+            "caja",
+            "Cierre de venta",
+            "fas fa-cash-register",
+            "#8e44ad",
+            "Zona orientada al cierre de venta.",
+        ),
+        (
+            "tienda",
+            "Conversión",
+            "fas fa-store",
+            "#e67e22",
+            "Zona de conversión: entrada a tienda.",
+        ),
+        (
+            "exterior",
+            "Captación",
+            "fas fa-person-walking",
+            "#2980b9",
+            "Zona exterior: captación de tráfico.",
+        ),
+        ("default", "Analítica", "fas fa-layer-group", "#0052CC", None),
+    ]
+    conn.executemany(
+        "INSERT INTO zone_type_registry (zone_type, label, icon_cls, color, tooltip) "
+        "VALUES (?,?,?,?,?) ON CONFLICT (zone_type) DO NOTHING",
+        _ZONE_TYPES,
+    )
+
+    # ── narrative_category_registry ──────────────────────────────────────────
+    _NARRATIVE_CATS = [
+        ("trafico", "Tráfico", "fas fa-chart-line", 1),
+        ("experiencia", "Experiencia", "fas fa-star", 2),
+        ("clima", "Clima", "fas fa-cloud-sun", 3),
+        ("eventos", "Eventos", "fas fa-calendar-star", 4),
+        ("integridad", "Integridad", "fas fa-shield-check", 5),
+    ]
+    conn.executemany(
+        "INSERT INTO narrative_category_registry (category_key, label, icon_cls, sort_order) "
+        "VALUES (?,?,?,?) ON CONFLICT (category_key) DO NOTHING",
+        _NARRATIVE_CATS,
+    )
+
+    # ── alert_level_registry ─────────────────────────────────────────────────
+    _ALERT_LEVELS = [
+        ("success", "#155724", "#d4edda", 1),
+        ("danger", "#721c24", "#f8d7da", 2),
+        ("warning", "#856404", "#fff3cd", 3),
+        ("primary", "#004085", "#cce5ff", 4),
+        ("secondary", "#383d41", "#e2e3e5", 5),
+        ("info", "#0c5460", "#d1ecf1", 6),
+    ]
+    conn.executemany(
+        "INSERT INTO alert_level_registry (level_key, text_color, bg_color, sort_order) "
+        "VALUES (?,?,?,?) ON CONFLICT (level_key) DO NOTHING",
+        _ALERT_LEVELS,
+    )
+
+    # ── feature_registry.canonical_type column + raw event seeds ─────────────
+    conn.execute("ALTER TABLE feature_registry ADD COLUMN IF NOT EXISTS canonical_type TEXT")
+
+    _RAW_EVENTS = [
+        (
+            "tm_concierto",
+            "ticketmaster",
+            "eventos",
+            "con_cobertura",
+            "Concierto",
+            None,
+            "#8e44ad",
+            "fas fa-music",
+            "sum",
+            "raw",
+            "concierto",
+        ),
+        (
+            "tm_festival",
+            "ticketmaster",
+            "eventos",
+            "con_cobertura",
+            "Festival",
+            None,
+            "#2980b9",
+            "fas fa-star",
+            "sum",
+            "raw",
+            "festival",
+        ),
+        (
+            "tm_deportivo",
+            "ticketmaster",
+            "eventos",
+            "con_cobertura",
+            "Deportivo",
+            None,
+            "#e74c3c",
+            "fas fa-futbol",
+            "sum",
+            "raw",
+            "deportivo",
+        ),
+        (
+            "concierto_wizink",
+            "manual",
+            "eventos",
+            "con_cobertura",
+            "Concierto",
+            None,
+            "#8e44ad",
+            "fas fa-music",
+            "sum",
+            "raw",
+            "concierto",
+        ),
+        (
+            "estreno_callao",
+            "manual",
+            "eventos",
+            "con_cobertura",
+            "Estreno",
+            None,
+            "#e67e22",
+            "fas fa-film",
+            "sum",
+            "raw",
+            "concierto",
+        ),
+        (
+            "festival_madrid",
+            "manual",
+            "eventos",
+            "con_cobertura",
+            "Festival",
+            None,
+            "#2980b9",
+            "fas fa-city",
+            "sum",
+            "raw",
+            "festival",
+        ),
+        (
+            "manifestacion_gran_via",
+            "manual",
+            "eventos",
+            "con_cobertura",
+            "Marcha",
+            None,
+            "#c0392b",
+            "fas fa-bullhorn",
+            "sum",
+            "raw",
+            "evento_municipal",
+        ),
+        (
+            "partido_deportivo",
+            "manual",
+            "eventos",
+            "con_cobertura",
+            "Deportivo",
+            None,
+            "#e74c3c",
+            "fas fa-futbol",
+            "sum",
+            "raw",
+            "deportivo",
+        ),
+        (
+            "escala_crucero",
+            "puertos_estado",
+            "cruceros",
+            "con_cobertura",
+            "Crucero",
+            None,
+            "#16a085",
+            "fas fa-ship",
+            "sum",
+            "raw",
+            None,
+        ),
+    ]
+    for row in _RAW_EVENTS:
+        conn.execute(
+            "INSERT INTO feature_registry "
+            "(feature_key, source, categoria, status, label, sublabel, color, icon_cls, "
+            " agg_fn, display_mode, canonical_type) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?) "
+            "ON CONFLICT (feature_key) DO UPDATE SET "
+            "canonical_type=EXCLUDED.canonical_type, label=EXCLUDED.label, "
+            "sublabel=EXCLUDED.sublabel, color=EXCLUDED.color, icon_cls=EXCLUDED.icon_cls, "
+            "agg_fn=EXCLUDED.agg_fn, display_mode=EXCLUDED.display_mode",
+            list(row),
         )
 
 

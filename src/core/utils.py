@@ -2,6 +2,25 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 
+# ── Spanish locale constants — duplicated in many render modules ──────────────
+MESES_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+MESES_ES_FULL = [
+    "Enero",
+    "Febrero",
+    "Marzo",
+    "Abril",
+    "Mayo",
+    "Junio",
+    "Julio",
+    "Agosto",
+    "Septiembre",
+    "Octubre",
+    "Noviembre",
+    "Diciembre",
+]
+DIAS_SEMANA_ES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+DIAS_CORTO = ["L", "M", "X", "J", "V", "S", "D"]
+
 
 def filtrar_dataframe_fechas(df, tipo_fecha, start_rango, end_rango, dia_unico):
     hoy = datetime.today().date()
