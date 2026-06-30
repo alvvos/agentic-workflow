@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import dash_bootstrap_components as dbc
 import flask
 from dash import dcc, html
@@ -28,35 +30,55 @@ def serve_layout():
             dbc.Row(
                 [
                     dbc.Col(
-                        [
-                            html.Div(
-                                [html.H2("Operaciones", className="fw-bold text-dark mb-0")],
-                                className="d-flex align-items-center justify-content-center justify-content-md-start",
-                            )
-                        ],
+                        html.Div(
+                            [
+                                html.H2(
+                                    "Operaciones",
+                                    className="fw-bold text-dark mb-0",
+                                    style={"fontSize": "1.5rem", "letterSpacing": "-0.3px"},
+                                ),
+                                html.Span(
+                                    datetime.today().strftime("%-d de %B · %Y"),
+                                    style={
+                                        "fontSize": "0.75rem",
+                                        "color": "#8492a6",
+                                        "fontWeight": "500",
+                                        "marginTop": "2px",
+                                    },
+                                ),
+                            ],
+                            className="d-flex flex-column justify-content-center",
+                        ),
                         xs=12,
                         md=7,
                         className="mb-4 mb-md-0",
                     ),
                     dbc.Col(
-                        [
-                            dbc.Button(
-                                [html.I(className="fas fa-sync-alt me-2"), "Sincronizar"],
-                                id="btn-sync",
-                                color="primary",
-                                outline=True,
-                                className="fw-bold rounded-3 shadow-sm me-2",
-                            ),
-                            (
-                                html.A(
-                                    [html.I(className="fas fa-sign-out-alt me-1"), session_id],
-                                    href="/logout",
-                                    className="btn btn-outline-secondary btn-sm fw-bold rounded-3 shadow-sm",
-                                )
-                                if not MODO_DESARROLLO
-                                else html.Span()
-                            ),
-                        ],
+                        html.Div(
+                            [
+                                dbc.Button(
+                                    [html.I(className="fas fa-sync-alt me-2"), "Sincronizar"],
+                                    id="btn-sync",
+                                    color="primary",
+                                    outline=True,
+                                    size="sm",
+                                    className="fw-bold rounded-3 shadow-sm me-2",
+                                ),
+                                (
+                                    html.A(
+                                        [
+                                            html.I(className="fas fa-user-circle me-1"),
+                                            session_id,
+                                        ],
+                                        href="/logout",
+                                        className="btn btn-outline-secondary btn-sm fw-bold rounded-3 shadow-sm",
+                                    )
+                                    if not MODO_DESARROLLO
+                                    else html.Span()
+                                ),
+                            ],
+                            className="d-flex align-items-center justify-content-center justify-content-md-end",
+                        ),
                         xs=12,
                         md=5,
                         className="text-center text-md-end",

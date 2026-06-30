@@ -87,6 +87,12 @@
     padding: 0 !important;
 }
 
+/* ── Sidebar card — borde superior de acento ────────────────────────────── */
+.sidebar-accent-card {
+    border-top: 3px solid #0052CC !important;
+    border-radius: 0 0 12px 12px !important;
+}
+
 /* ── Chat FAB — hover sutil ──────────────────────────────────────────────── */
 #chat-fab:hover {
     transform: translateY(-2px) !important;
