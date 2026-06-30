@@ -62,6 +62,18 @@ def _cargar_jobs(periodicidad: str) -> dict[str, list[SyncJob]]:
     return dict(groups)
 
 
+def _cargar_sources_lsc() -> set[str]:
+    """Sources con configuración activa en location_source_config."""
+    from src.db.store import get_conn
+
+    rows = (
+        get_conn()
+        .execute("SELECT DISTINCT source FROM location_source_config WHERE activo = TRUE")
+        .fetchall()
+    )
+    return {r[0] for r in rows}
+
+
 def _build_ingestores(hoy: date) -> dict[str, Callable]:
     """
     Auto-descubre ingestores desde src/data_ingestion/mensual/.
@@ -171,6 +183,23 @@ def sync_mensual_flow() -> int:
     except Exception as exc:
         logger.error("Loop mensual FAIL: %s", exc)
         errores += 1
+
+    # ── Bootstrap: ingestores en location_source_config sin feature_flags aún ──
+    # Primera ejecución: feature_flags vacío → el loop no los despacha → bootstrap los
+    # llama con jobs=[] para que auto-registren sus feature_flags. Ejecuciones siguientes:
+    # el set queda vacío porque ya aparecen en jobs_por_source.
+    try:
+        lsc_sources = _cargar_sources_lsc()
+        bootstrap = lsc_sources & set(ingestores.keys()) - set(jobs_por_source.keys())
+        for source in sorted(bootstrap):
+            logger.info("  %-20s bootstrap (sin feature_flags aún)", source)
+            try:
+                _ingestar_source(source, [], hoy)
+            except Exception as exc:
+                logger.error("  %-20s bootstrap FAIL — %s", source, exc)
+                errores += 1
+    except Exception as exc:
+        logger.warning("Bootstrap lsc FAIL: %s", exc)
 
     # ── Calendario cruceros: refresco anual independiente del feature loop ────
     _cruceros_calendario(hoy)

@@ -286,23 +286,27 @@ def _write_month(
 # ── Asegurar feature_registry ─────────────────────────────────────────────────
 
 
-def _ensure_feature_registry(slug: str) -> None:
+def _ensure_feature_registry(slug: str, location_uuid: str) -> None:
     fk = f"afluencia_metro_{slug}"
     conn = get_conn()
-    exists = conn.execute("SELECT 1 FROM feature_registry WHERE feature_key = ?", [fk]).fetchone()
-    if not exists:
-        conn.execute(
-            "INSERT INTO feature_registry "
-            "(feature_key, source, descripcion, categoria, periodicidad, activo) "
-            "VALUES (?,?,?,?,?,TRUE) ON CONFLICT (feature_key) DO NOTHING",
-            [
-                fk,
-                SOURCE,
-                f"Validaciones mensuales estación de metro — {slug.replace('_', ' ').title()}",
-                "movilidad",
-                "mensual",
-            ],
-        )
+    conn.execute(
+        "INSERT INTO feature_registry "
+        "(feature_key, source, descripcion, categoria, periodicidad, activo) "
+        "VALUES (?,?,?,?,?,TRUE) ON CONFLICT (feature_key) DO NOTHING",
+        [
+            fk,
+            SOURCE,
+            f"Validaciones mensuales estación de metro — {slug.replace('_', ' ').title()}",
+            "movilidad",
+            "mensual",
+        ],
+    )
+    conn.execute(
+        "INSERT INTO feature_flags (feature_key, location_uuid, status, periodicidad) "
+        "VALUES (?,?,'contexto','mensual') "
+        "ON CONFLICT (feature_key, location_uuid) DO NOTHING",
+        [fk, location_uuid],
+    )
 
 
 # ── Sync principal ────────────────────────────────────────────────────────────
@@ -329,7 +333,7 @@ def sync_year(
 
     total = 0
     for slug, mes_vals in parsed.items():
-        _ensure_feature_registry(slug)
+        _ensure_feature_registry(slug, location_uuid)
         for mes, validaciones in mes_vals.items():
             total += _write_month(year, mes, validaciones, location_uuid, slug, verbose)
 
