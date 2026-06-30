@@ -49,3 +49,15 @@ Executed by `/demo-prepare` before demos.
 | ONB-7 | _eval_core importable sin depender de src/lab/ | `cd /home/alvaro.salis/agentic-workflow && venv/bin/python -c "from src.onboarding._eval_core import _evaluate_feature, MIN_TRAIN_ROWS; print('ok')"` |
 | ONB-8 | puertos_estado importable y parsea XLSX | `cd /home/alvaro.salis/agentic-workflow && venv/bin/python -c "from src.data_ingestion.prefetch.puertos_estado import parse_xlsx, _get_configured_locations; print('ok')"` |
 | ONB-9 | metro_madrid importable y lee location_source_config | `cd /home/alvaro.salis/agentic-workflow && venv/bin/python -c "from src.data_ingestion.mensual.metro_madrid import _get_configured_locations; print('ok')"` |
+| ONB-10 | theme.py importable (constantes color) | `cd /home/alvaro.salis/agentic-workflow && venv/bin/python -c "from src.core.theme import C_PRIMARY, PALETA_PM; print('ok')"` |
+| ONB-11 | utils.py importable (arrays calendario ES) | `cd /home/alvaro.salis/agentic-workflow && venv/bin/python -c "from src.core.utils import MESES_ES, DIAS_SEMANA_ES; print('ok')"` |
+
+## DB-DISPLAY — Registros de display DB-driven
+
+| ID | Descripción | Comando en servidor |
+|----|-------------|---------------------|
+| DB-4 | poi_category_registry existe | `docker exec agentic-workflow-db-1 psql -U admin -d reporting -t -c "SELECT COUNT(*) FROM poi_category_registry;"` |
+| DB-5 | zone_type_registry existe | `docker exec agentic-workflow-db-1 psql -U admin -d reporting -t -c "SELECT COUNT(*) FROM zone_type_registry;"` |
+| DB-6 | narrative_category_registry existe | `docker exec agentic-workflow-db-1 psql -U admin -d reporting -t -c "SELECT COUNT(*) FROM narrative_category_registry;"` |
+| DB-7 | alert_level_registry existe | `docker exec agentic-workflow-db-1 psql -U admin -d reporting -t -c "SELECT COUNT(*) FROM alert_level_registry;"` |
+| DB-8 | feature_registry tiene columnas display_mode y canonical_type | `docker exec agentic-workflow-db-1 psql -U admin -d reporting -t -c "SELECT display_mode, canonical_type FROM feature_registry LIMIT 1;"` |

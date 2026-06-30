@@ -63,7 +63,8 @@ agentic-workflow/
     │   ├── auth.py                 Autenticación cookie-based, /login, /logout, before_request
     │   ├── data_master.py          mapa_tiendas: {location_uuid: nombre} — caché global
     │   ├── pdf_endpoint.py         /api/html-to-pdf via Playwright headless
-    │   └── utils.py                Helpers compartidos
+    │   ├── theme.py                Constantes de color y config de grafos compartidas (C_PRIMARY, PALETA_PM…)
+    │   └── utils.py                Arrays de calendario ES (MESES_ES, DIAS_SEMANA_ES…) y helpers compartidos
     │
     ├── db/
     │   ├── store.py                Pool psycopg v3, DDL completo (_apply_ddl), PgConn wrapper

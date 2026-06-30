@@ -35,6 +35,7 @@ docker exec -i $(docker ps --filter name=postgres --format "{{.Names}}" | head -
 | Calendario/eventos | `store_calendario_org` |
 | Modelos ML | `model_registry` |
 | Chatbot | `chat_conversaciones`, `chat_mensajes`, `cache_responses` |
+| Registros de display | `poi_category_registry`, `zone_type_registry`, `narrative_category_registry`, `alert_level_registry` |
 
 ---
 
@@ -179,7 +180,7 @@ Features geoespaciales de Esri, versionadas con periodo de validez.
 ---
 
 ### `feature_registry`
-Catálogo global de features. **Fuente de verdad**: tiene `ON DELETE CASCADE` hacia `store_features_ext`, `feature_flags` y `feature_eval_results`.
+Catálogo global de features. **Fuente de verdad**: tiene `ON DELETE CASCADE` hacia `store_features_ext`, `feature_flags` y `feature_eval_results`. Desde v2.2.47 también es la fuente de toda la metadata de display de la capa de render.
 
 | Columna | Tipo | Descripción |
 |---|---|---|
@@ -189,8 +190,15 @@ Catálogo global de features. **Fuente de verdad**: tiene `ON DELETE CASCADE` ha
 | `org_applicability` | JSONB | `"all"` o lista de org UUIDs |
 | `location_applicability` | JSONB | NULL (toda la org) o lista de location UUIDs |
 | `status` | TEXT | `'incompleto'` o `'con_cobertura'` |
-| `notas` | TEXT | Descripción, metodología, caveats |
+| `notas` | TEXT | Descripción, metodología, caveats — **fuente de tooltips en el panel** |
 | `registrado_en` | TIMESTAMP | Cuándo se registró |
+| `label` | TEXT | Etiqueta de display (ej. "Cruceros") |
+| `sublabel` | TEXT | Subtítulo opcional en cards |
+| `color` | VARCHAR(16) | Color hex de la señal en el panel |
+| `icon_cls` | VARCHAR(64) | Clase Font Awesome (ej. `fas fa-ship`) |
+| `agg_fn` | VARCHAR(16) | Función de agregación: `sum` · `mean` · `max` |
+| `display_mode` | TEXT | Componente de render: `'yoy'` · `'events_count'` · `'cruceros'` · `'calendario'` · `'hidden'` |
+| `canonical_type` | TEXT | Tipo canónico para normalización (ej. `tm_concierto → concierto`). NULL = no es un tipo de evento. |
 
 > `incompleto` → hay feature pero faltan datos en `store_features_ext`. `con_cobertura` → promovido automáticamente por `_promote_if_covered()` al final de la ingesta.
 
@@ -315,6 +323,60 @@ Caché de respuestas del chatbot para preguntas frecuentes.
 | `expires_at` | TIMESTAMP NN | TTL (indexado para purga) |
 
 **Índice:** `idx_cache_expires (expires_at)`
+
+---
+
+## Registros de display (DB-driven render layer)
+
+Estas tablas controlan completamente la presentación visual del panel. No hay dicts hardcodeados en Python — toda decisión de label/color/icono viene de aquí.
+
+### `poi_category_registry`
+Metadatos de display para categorías de POIs en el mapa geoespacial.
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `category` | TEXT PK | Clave de categoría (ej. `'competidor'`, `'transporte'`) |
+| `label` | TEXT NN | Etiqueta visible |
+| `icon_cls` | VARCHAR(64) | Clase Font Awesome |
+| `color` | VARCHAR(16) | Color hex del marcador |
+| `badge_color` | VARCHAR(16) | Color del badge en lista lateral |
+
+---
+
+### `zone_type_registry`
+Estilos por tipo de zona de conteo (tienda, caja, calle/exterior).
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `zone_type` | TEXT PK | Tipo: `'tienda'`, `'caja'`, `'exterior'`, `'default'` |
+| `label` | TEXT NN | Etiqueta visible en el panel |
+| `icon_cls` | VARCHAR(64) | Clase Font Awesome |
+| `color` | VARCHAR(16) | Color del encabezado de zona |
+| `tooltip` | TEXT | Texto de tooltip explicativo |
+
+---
+
+### `narrative_category_registry`
+Categorías de la narrativa ejecutiva (acordeón en el Panel PM).
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `category_key` | TEXT PK | Clave interna (ej. `'rendimiento'`, `'contexto'`) |
+| `label` | TEXT NN | Etiqueta en el acordeón |
+| `icon_cls` | VARCHAR(64) | Clase Font Awesome |
+| `sort_order` | INT | Orden de presentación (default 99) |
+
+---
+
+### `alert_level_registry`
+Niveles de alerta para los mensajes de la narrativa.
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `level_key` | TEXT PK | Clave del nivel (ej. `'ok'`, `'warning'`, `'critical'`) |
+| `text_color` | VARCHAR(16) | Color del texto |
+| `bg_color` | VARCHAR(16) | Color de fondo del badge |
+| `sort_order` | INT | Orden visual (default 99) |
 
 ---
 

@@ -1,7 +1,7 @@
 # ARCHITECTURE — Agentic Workflow
 
 **Stack:** Python 3.12 · Dash/Plotly · PostgreSQL 16 (Docker) · XGBoost · Prefect 3 · gunicorn
-**Última revisión:** 2026-06-30 · Versión en producción: v2.2.46
+**Última revisión:** 2026-06-30 · Versión en producción: v2.2.47
 
 ---
 
@@ -199,10 +199,26 @@ ml_predictivo.py → vector de training XGBoost
 - `mentions.py` — detección de @ubicación en mensajes
 - `streaming.py` — SSE para respuestas en tiempo real
 
+### Shared modules (`src/core/`)
+- `src/core/theme.py` — constantes de color (`C_PRIMARY`, `C_SUCCESS`, `C_DANGER`, `C_AMBER`, `C_DARK`, `C_MUTED`, `C_GRID`), `CFG_GRAPH`, `PALETA_PM`. Elimina duplicación de constantes en 5+ ficheros.
+- `src/core/utils.py` — arrays de calendario ES (`MESES_ES`, `MESES_ES_FULL`, `DIAS_SEMANA_ES`, `DIAS_CORTO`). Fuente única compartida entre reporting, callbacks y geo_panel.
+
+### Arquitectura DB-driven de render (`health_check.py`, `geo_panel.py`)
+
+El capa de render es completamente data-driven desde v2.2.47. **No hay dicts hardcodeados en Python**; toda decisión de label/color/icono/routing viene de la DB:
+
+- `_load_feature_meta(conn, location_uuid)` — query única a `feature_registry` devuelve `{feature_key: {label, sublabel, color, icon_cls, agg_fn, display_mode, notas}}`. El campo `display_mode` controla el componente de render: `'yoy'` (gráfico tendencia) · `'events_count'` (contador mensual) · `'cruceros'` (tabla escalas) · `'calendario'` (grid calendario) · `'hidden'`.
+- `_load_zone_meta(conn)` — query a `zone_type_registry` para estilos por tipo de zona.
+- `_load_narrative_meta(conn)` — query a `narrative_category_registry` + `alert_level_registry` para categorías y niveles de la narrativa ejecutiva.
+- `_load_norm_tipo(conn)` — query a `feature_registry WHERE canonical_type IS NOT NULL` reemplaza `_NORM_TIPO` Python dict (ej. `tm_concierto → concierto`).
+- `_load_geo_meta(conn)` en `geo_panel.py` — query a `poi_category_registry` para estilos de POIs.
+
+**Contrato de escalabilidad:** añadir una señal nueva = `INSERT INTO feature_registry` + `INSERT INTO feature_flags`. Cero cambios en Python.
+
 ### Geo (Esri)
 - `src/data_ingestion/esri_client.py` — `fetch_enrich()` real + mock (si no hay `ESRI_KEY`)
 - `src/data_processing/geo_enrichment.py` — `get_geo_vals()`, `enriquecer_con_geo()`, `GEO_FEATURE_COLS` (47 features)
-- `src/reporting/geo_panel.py` — Panel visual geo (tarjetas AIS + mapa)
+- `src/reporting/geo_panel.py` — Panel visual geo (tarjetas AIS + mapa). POIs leídos de `location_pois` DB (no hardcodeados).
 - `scripts/enriquecer_esri.py` — script one-shot para enriquecer ubicaciones
 
 ### Auth

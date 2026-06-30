@@ -2,48 +2,67 @@
 
 ## Estado general
 
-Versión en producción: **v2.2.46**. Pipeline de onboarding 5 agentes completo y funcionando. Miniso Madrid Gran Vía con datos de metro operativos en "señal de contexto". Nuevas tablas `location_pois` y `location_source_config` en DB.
+Versión en producción: **v2.2.47**. Refactor DB-driven completo: toda la capa de render del panel utiliza la DB como única fuente de verdad para labels, colores, iconos y routing de componentes. Cero dicts hardcodeados en Python para display.
 
 ---
 
 ## Cambios de esta sesión
 
-### Bug fix: `_GV_UUID` apuntaba a UUID incorrecto (`store.py`, `geo_panel.py`)
+### Principio arquitectónico establecido
 
-`_GV_UUID` tenía el UUID de "Showroom" (`faf7d203-...`) en lugar de Madrid Gran Vía (`251e7f40-95c7-4678-aa48-df1b90e3461c`). Corregido en `store.py` (líneas 746 y 782) y en `geo_panel.py` (dict `_SPATIAL_CONTEXT`). Además se migró en DB los 1460 rows de `store_features_ext` ya escritos bajo el UUID incorrecto.
+"Todo debe venir explícito de la DB. La DB está para llenarla de información y datos, no para hardcodear en el código." Este principio se aplicó como un barrido completo sobre todo el codebase.
 
-### Bug fix: señal de contexto no mostraba features `status='contexto'` (`health_check.py`)
+### Refactor DB-driven — `health_check.py`
 
-`_render_senal_contexto_modal()` tenía `AND f.status = 'active'` en el JOIN con `feature_flags`. Las features de metro tienen `status = 'contexto'` deliberadamente (visibles en panel, excluidas del modelo). Cambiado a `AND f.status IN ('active', 'contexto')`. Ahora los datos de metro aparecen en el acordeón.
+Eliminados completamente:
+- `_UNIVERSAL_KEYS`, `_FEATURE_META`, `_FEATURE_FA_ICONS`, `_icon_for_feature()`
+- `_ICONO_TIPO`, `_TIPO_FEATURE_KEY`, `_TIPOS_EXCLUIR`
+- `_C_PRIMARY`, `_C_DARK`, `_C_MUTED` (movidos a `src/core/theme.py`)
+- `_MESES_ES` (movido a `src/core/utils.py`)
 
-### Mapa de isócronas más grande (`geo_panel.py`)
+Añadidos:
+- `_load_feature_meta(conn, location_uuid)` — query única a `feature_registry` devuelve todo lo necesario para renderizar cualquier señal
+- `_load_zone_meta(conn)` — estilos de zona desde `zone_type_registry`
+- `_load_narrative_meta(conn)` — categorías/niveles desde `narrative_category_registry` + `alert_level_registry`
+- `_load_norm_tipo(conn)` — `canonical_type` desde `feature_registry` reemplaza `_NORM_TIPO` Python dict
 
-Altura del mapa en `generar_mapa_contexto()` aumentada de `340px` a `520px`.
+`display_mode` en `feature_registry` controla el componente de render: `'yoy'` · `'events_count'` · `'cruceros'` · `'calendario'` · `'hidden'`. Añadir señal nueva = solo INSERT en DB.
 
-### Stubs ingestores mensuales — `src/data_ingestion/mensual/`
+### Refactor DB-driven — `geo_panel.py`
 
-Directorio nuevo con ingestores mensuales de señales de movilidad/turismo. `metro_madrid.py` es funcional (descarga Excel Metro Madrid, parsea validaciones por estación, escribe en `store_features_ext`). El resto son stubs documentados con catálogo y contrato de `location_source_config`:
+Eliminados: `_SPATIAL_CONTEXT` (POIs hardcodeados para Madrid Gran Vía), `_SPATIAL_COLORS`, `_SPATIAL_LABELS`, `_EV_RANK_META`, `_EV_KEYS`, `_EV_ICONS`, `_EV_LABELS`, `_EV_COLOR`, `_EXT_SERIES_META`.
 
-| Fichero | Fuente | Estado |
-|---|---|---|
-| `metro_madrid.py` | Excel validaciones Metro Madrid | ✅ Funcional |
-| `aena.py` | Excel pasajeros aeropuerto AENA | 🔲 Stub |
-| `cercanias_renfe.py` | CSV viajeros Cercanías RENFE | 🔲 Stub |
-| `metro_barcelona.py` | TMB open data | 🔲 Stub |
-| `metro_bilbao.py` | Metro Bilbao open data | 🔲 Stub |
-| `metro_sevilla.py` | Metro Sevilla open data | 🔲 Stub |
-| `metro_valencia.py` | Metrovalencia open data | 🔲 Stub |
-| `ine_eoh.py` | INE Encuesta Ocupación Hotelera | 🔲 Stub |
+Añadido: `_load_geo_meta(conn)` — query a `feature_registry` + `poi_category_registry` + `canonical_type`. POIs leídos de `location_pois` DB.
 
-Todos exponen `sync(jobs, fecha)` y `run(location_uuid, ...)` para integrarse con `sync_mensual.py`.
+### Módulos compartidos nuevos
 
-### docker-compose: adminer → pgweb
+- `src/core/theme.py` — `C_PRIMARY`, `C_SUCCESS`, `C_DANGER`, `C_AMBER`, `C_DARK`, `C_MUTED`, `C_GRID`, `CFG_GRAPH`, `PALETA_PM`
+- `src/core/utils.py` — `MESES_ES`, `MESES_ES_FULL`, `DIAS_SEMANA_ES`, `DIAS_CORTO`
 
-`docker-compose.yml` reemplaza el contenedor Adminer por pgweb (interfaz web PostgreSQL más ligera, puerto 8081). Alias `pgweb-tunnel` disponible en `~/.config/zsh/.zshrc`.
+### Nuevas tablas en DB (migración `_migrate_registries`)
 
-### Pre-commit: ruff excluye `src/lab/`
+| Tabla | Propósito |
+|---|---|
+| `poi_category_registry` | Display metadata de categorías de POIs |
+| `zone_type_registry` | Estilos por tipo de zona (tienda/caja/exterior) |
+| `narrative_category_registry` | Categorías del acordeón narrativo |
+| `alert_level_registry` | Niveles de alerta (ok/warning/critical) |
 
-`.pre-commit-config.yaml` ahora excluye `src/lab/` del hook ruff (E402/E701 en celdas Jupyter no aplican). Black sí sigue actuando sobre lab/.
+Columnas nuevas en `feature_registry`: `label`, `sublabel`, `color`, `icon_cls`, `agg_fn`, `display_mode`, `canonical_type`.
+
+`canonical_type` registrado para: `tm_concierto→concierto`, `tm_festival→festival`, `tm_deportivo→deportivo`, `concierto_wizink→concierto`, `estreno_callao→concierto`, `festival_madrid→festival`, `manifestacion_gran_via→evento_municipal`, `partido_deportivo→deportivo`.
+
+### Refactor `admin_pois.py`
+
+Eliminados `_CAT_LABELS`, `_CAT_ICONS`, `_CAT_COLORS`. Añadido `_load_poi_categories(conn)` desde `poi_category_registry`.
+
+### Refactor `feature_router.py`
+
+Eliminado `_MALAGA_KEYS = {"malaga", "málaga"}` city name matching. Cruceros ahora activados por `location_source_config WHERE source='cruceros' AND activo=TRUE`.
+
+### Tooltips DB-driven
+
+Tooltips en secciones `ev_rank`, `cruceros` y `eventos` del panel PM provienen de `feature_registry.notas`. No hay `_FEATURE_TOOLTIPS` Python dict. Para añadir/editar un tooltip: `UPDATE feature_registry SET notas='...' WHERE feature_key='...'`.
 
 ---
 
@@ -51,24 +70,26 @@ Todos exponen `sync(jobs, fecha)` y `run(location_uuid, ...)` para integrarse co
 
 | Feature | Status global | Notas |
 |---|---|---|
-| `n_pasajeros_crucero_oficial` | `con_cobertura` para Málaga Muelle 1 | Puertos del Estado XLSX. Otros puertos: añadir en `location_source_config` |
-| `n_pasajeros_crucero_dia` | `con_cobertura` para Málaga Muelle 1 | Puerto de Málaga API (previsión) |
+| `n_pasajeros_crucero_oficial` | `con_cobertura` para Málaga Muelle 1 | Puertos del Estado XLSX |
+| `n_pasajeros_crucero_dia` | `con_cobertura` para Málaga Muelle 1 | Puerto de Málaga API |
 | `open_meteo.*` | `active` todas ubicaciones | Clima histórico + forecast |
-| `afluencia_metro_gran_via` | `contexto` para Madrid Gran Vía | Metro Madrid Excel. Datos disponibles en señal de contexto ✅ |
+| `afluencia_metro_gran_via` | `contexto` para Madrid Gran Vía | Metro Madrid Excel ✅ |
 | `afluencia_metro_callao` | `contexto` para Madrid Gran Vía | Metro Madrid Excel ✅ |
-| Features Context Scout | `contexto` según ubicación | Stubs implementados; ingestores pendientes de conectar a sync_mensual |
+| Features `events_count` | display_mode solo, no en feature_flags | `concierto`, `festival`, `deportivo`, `evento_municipal` |
 
 ---
 
 ## Próximos pasos
 
-1. **Conectar ingestores mensual a `sync_mensual.py`** — añadir los stubs funcionales (`metro_madrid`, etc.) a `_build_ingestores()` en `sync_mensual.py`. Primero completar el stub AENA.
+1. **Poblar registros de display** — `zone_type_registry`, `narrative_category_registry`, `alert_level_registry` están creadas con DDL pero vacías. Rellenar con los valores correctos via SQL o panel admin.
 
-2. **Verificar estación "Sol" en Metro Madrid Excel** — durante la ingesta, "Sol" no matchó en el Excel. Investigar el nombre exacto de la columna (puede ser "Sol (Metro)" o similar).
+2. **Conectar ingestores mensual a `sync_mensual.py`** — añadir `metro_madrid` (y los stubs que se vayan completando) a `_build_ingestores()`.
 
-3. **INE pernoctaciones hoteleras** — pendiente investigar granularidad ciudad vs. provincia. Stub `ine_eoh.py` creado. Para Gran Vía, proxy adecuado podría ser municipio Madrid.
+3. **Verificar estación "Sol"** en Metro Madrid Excel — puede ser "Sol (Metro)" o variante. Investigar nombre exacto de columna.
 
-4. **Más autoridades portuarias** — `puertos_estado.py` es data-driven. Para añadir Barcelona, Palma, etc.: insertar en `location_source_config (location_uuid, 'puertos_estado', '{"port_authority": "<nombre exacto en XLSX>"}')`.
+4. **INE pernoctaciones hoteleras** — stub `ine_eoh.py` listo. Investigar granularidad ciudad vs. provincia.
+
+5. **Validar impacto geo en modelo** — comparar WMAPE antes/después de primeras entregas Esri en Málaga y Madrid Gran Vía.
 
 ---
 
