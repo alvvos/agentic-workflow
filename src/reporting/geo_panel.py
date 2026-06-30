@@ -290,6 +290,24 @@ def _render_area_signals(location_uuid: str):
     except Exception:
         return None
 
+    notas_map: dict[str, str] = {}
+    try:
+        all_keys = list(
+            {r[0] for r in ts_rows}
+            | set(_EV_RANK_KEYS)
+            | {"afluencia_metro_gran_via", "afluencia_metro_callao", "n_pasajeros_crucero_oficial"}
+        )
+        notas_map = {
+            fk: notas
+            for fk, notas in conn.execute(
+                f"SELECT feature_key, notas FROM feature_registry "
+                f"WHERE feature_key = ANY(ARRAY[{','.join(['%s']*len(all_keys))}]) AND notas IS NOT NULL",
+                all_keys,
+            ).fetchall()
+        }
+    except Exception:
+        pass
+
     ts_rows = [r for r in ts_rows if r[0] not in _UNIVERSAL_EXT_KEYS]
     ev_rows = [r for r in ev_rows if r[0] in _EV_KEYS]
 
@@ -407,9 +425,10 @@ def _render_area_signals(location_uuid: str):
                             style={"color": "#ced4da", "fontSize": "0.72rem", "cursor": "pointer"},
                         ),
                         dbc.Tooltip(
-                            "Número de validaciones de tarjeta registradas cada día en cada estación "
-                            "de Metro, según los datos oficiales de Metro de Madrid. Se muestra la "
-                            "media mensual. Es el proxy más fiable de tráfico peatonal en la zona.",
+                            notas_map.get(
+                                metro_keys_present[0],
+                                "Validaciones diarias de tarjeta metro por estación. Fuente: Metro de Madrid.",
+                            ),
                             target=_tt_metro_id,
                             placement="right",
                             style={"fontSize": "0.76rem", "maxWidth": "300px"},
@@ -584,14 +603,13 @@ def _render_area_signals(location_uuid: str):
                             style={"color": "#ced4da", "fontSize": "0.72rem", "cursor": "pointer"},
                         ),
                         dbc.Tooltip(
-                            (
-                                "Pasajeros de crucero que desembarcan en el puerto según datos "
-                                "oficiales de la autoridad portuaria. Suma mensual. Alta correlación "
-                                "con tráfico peatonal en un radio de 1-2 km del muelle."
-                                if has_cruise and len(tourist_keys_present) == 1
-                                else "Estimación de turistas presentes en la zona accesible a pie "
-                                "en 0-15 minutos. Derivada de datos de movilidad agregados. "
-                                "Refleja la demanda potencial de visitantes no residentes."
+                            notas_map.get(
+                                (
+                                    "n_pasajeros_crucero_oficial"
+                                    if has_cruise and len(tourist_keys_present) == 1
+                                    else tourist_keys_present[0]
+                                ),
+                                "",
                             ),
                             target=f"tt-tour-{location_uuid[:8]}",
                             placement="left",
@@ -661,14 +679,6 @@ def _render_area_signals(location_uuid: str):
             yaxis=dict(visible=False, range=[0, 110], showgrid=True, gridcolor="#f0f0f0"),
         )
         _tt_evrank_id = f"tt-evrank-{location_uuid[:8]}"
-        _EV_RANK_TOOLTIPS = {
-            "ev_rank_deportivo": "Score 0-100 de impacto de eventos deportivos en radio 5 km. "
-            "Fuentes: TheSportsDB (fútbol) + Ticketmaster. Score 50+ indica partido de alta afluencia.",
-            "ev_rank_concierto": "Score 0-100 de conciertos y espectáculos en radio 5 km. "
-            "Fuente: Ticketmaster. Escala según capacidad del venue y popularidad del artista.",
-            "ev_rank_festival": "Score 0-100 de festivales y grandes eventos en radio 5 km. "
-            "Fuente: Ticketmaster. Incluye festivales de música y eventos masivos.",
-        }
         ev_rank_row = dbc.Row(
             dbc.Col(
                 [
@@ -702,15 +712,15 @@ def _render_area_signals(location_uuid: str):
                                     html.Div(
                                         [
                                             html.Span(
-                                                f"{'⚽' if 'deportivo' in fk else '🎵' if 'concierto' in fk else '🎪'} "
                                                 f"{_EV_RANK_META[fk][0]}: ",
                                                 style={"fontWeight": "600"},
                                             ),
-                                            html.Span(_EV_RANK_TOOLTIPS.get(fk, "")),
+                                            html.Span(notas_map.get(fk, "")),
                                         ],
                                         className="mb-1",
                                     )
                                     for fk in ev_rank_keys_present
+                                    if notas_map.get(fk)
                                 ],
                                 target=_tt_evrank_id,
                                 placement="right",
