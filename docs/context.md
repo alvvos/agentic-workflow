@@ -1,29 +1,49 @@
-# Context — Handoff sesión 2026-06-26
+# Context — Handoff sesión 2026-06-30
 
 ## Estado general
 
-Versión en producción: **v2.2.38**. Pipeline de onboarding 5 agentes completo y funcionando. Demo org Gran Vía (`Demo Madrid Gran Vía (ficticia)`) activa con coordenadas correctas (40.420797, -3.706425, CP 28013).
+Versión en producción: **v2.2.46**. Pipeline de onboarding 5 agentes completo y funcionando. Miniso Madrid Gran Vía con datos de metro operativos en "señal de contexto". Nuevas tablas `location_pois` y `location_source_config` en DB.
 
 ---
 
 ## Cambios de esta sesión
 
-### `puertos_estado.py` — data-driven
+### Bug fix: `_GV_UUID` apuntaba a UUID incorrecto (`store.py`, `geo_panel.py`)
 
-Reescrito desde cero para eliminar hardcoding de Málaga. Ahora lee `port_authority` de `location_source_config WHERE source='puertos_estado'`. Interfaz `sync(jobs, fecha)` compatible con `sync_mensual.py`. Añadir una AP nueva = insertar fila en `location_source_config`, sin tocar código.
+`_GV_UUID` tenía el UUID de "Showroom" (`faf7d203-...`) en lugar de Madrid Gran Vía (`251e7f40-95c7-4678-aa48-df1b90e3461c`). Corregido en `store.py` (líneas 746 y 782) y en `geo_panel.py` (dict `_SPATIAL_CONTEXT`). Además se migró en DB los 1460 rows de `store_features_ext` ya escritos bajo el UUID incorrecto.
 
-### `src/onboarding/_eval_core.py` — nuevo fichero (bug fix producción)
+### Bug fix: señal de contexto no mostraba features `status='contexto'` (`health_check.py`)
 
-`feature_eval.py` importaba `from src.lab.eval_features import ...` — pero `src/lab/` está en `.gitignore` y no existe en producción. Solución: extraer las funciones de producción a `src/onboarding/_eval_core.py` (tracked) y actualizar el import.
+`_render_senal_contexto_modal()` tenía `AND f.status = 'active'` en el JOIN con `feature_flags`. Las features de metro tienen `status = 'contexto'` deliberadamente (visibles en panel, excluidas del modelo). Cambiado a `AND f.status IN ('active', 'contexto')`. Ahora los datos de metro aparecen en el acordeón.
 
-### Context Scout (Agente 3) — dos cambios
+### Mapa de isócronas más grande (`geo_panel.py`)
 
-1. **Strip markdown**: Claude a veces devuelve JSON envuelto en ` ```json ``` `. Añadido strip defensivo antes de `json.loads()`.
-2. **Escala de directitud A→D**: catálogo actualizado para priorizar AENA (pasajeros aeropuerto) e INE pernoctaciones hoteleras (nivel A) sobre ICM y SEPE (nivel C). Criterio 7-DIRECTITUD añadido al prompt: no incluir señales D si ya hay A o B.
+Altura del mapa en `generar_mapa_contexto()` aumentada de `340px` a `520px`.
 
-### Gráfico de cruceros (health_check.py)
+### Stubs ingestores mensuales — `src/data_ingestion/mensual/`
 
-Revertido de timeline 24 meses continuo (v2.2.37, rechazado por el usuario) a **barras agrupadas 12 meses**: eje X = Ene-Dic, dos series (año anterior ghost + año en curso tier-colored), `barmode="group"`, línea "hoy" en mes actual, leyenda de barcos separada por año.
+Directorio nuevo con ingestores mensuales de señales de movilidad/turismo. `metro_madrid.py` es funcional (descarga Excel Metro Madrid, parsea validaciones por estación, escribe en `store_features_ext`). El resto son stubs documentados con catálogo y contrato de `location_source_config`:
+
+| Fichero | Fuente | Estado |
+|---|---|---|
+| `metro_madrid.py` | Excel validaciones Metro Madrid | ✅ Funcional |
+| `aena.py` | Excel pasajeros aeropuerto AENA | 🔲 Stub |
+| `cercanias_renfe.py` | CSV viajeros Cercanías RENFE | 🔲 Stub |
+| `metro_barcelona.py` | TMB open data | 🔲 Stub |
+| `metro_bilbao.py` | Metro Bilbao open data | 🔲 Stub |
+| `metro_sevilla.py` | Metro Sevilla open data | 🔲 Stub |
+| `metro_valencia.py` | Metrovalencia open data | 🔲 Stub |
+| `ine_eoh.py` | INE Encuesta Ocupación Hotelera | 🔲 Stub |
+
+Todos exponen `sync(jobs, fecha)` y `run(location_uuid, ...)` para integrarse con `sync_mensual.py`.
+
+### docker-compose: adminer → pgweb
+
+`docker-compose.yml` reemplaza el contenedor Adminer por pgweb (interfaz web PostgreSQL más ligera, puerto 8081). Alias `pgweb-tunnel` disponible en `~/.config/zsh/.zshrc`.
+
+### Pre-commit: ruff excluye `src/lab/`
+
+`.pre-commit-config.yaml` ahora excluye `src/lab/` del hook ruff (E402/E701 en celdas Jupyter no aplican). Black sí sigue actuando sobre lab/.
 
 ---
 
@@ -34,23 +54,26 @@ Revertido de timeline 24 meses continuo (v2.2.37, rechazado por el usuario) a **
 | `n_pasajeros_crucero_oficial` | `con_cobertura` para Málaga Muelle 1 | Puertos del Estado XLSX. Otros puertos: añadir en `location_source_config` |
 | `n_pasajeros_crucero_dia` | `con_cobertura` para Málaga Muelle 1 | Puerto de Málaga API (previsión) |
 | `open_meteo.*` | `active` todas ubicaciones | Clima histórico + forecast |
-| Features Context Scout | `contexto` según ubicación | Sin ingestores implementados todavía |
+| `afluencia_metro_gran_via` | `contexto` para Madrid Gran Vía | Metro Madrid Excel. Datos disponibles en señal de contexto ✅ |
+| `afluencia_metro_callao` | `contexto` para Madrid Gran Vía | Metro Madrid Excel ✅ |
+| Features Context Scout | `contexto` según ubicación | Stubs implementados; ingestores pendientes de conectar a sync_mensual |
 
 ---
 
 ## Próximos pasos
 
-1. **AENA pasajeros** — ingestor pendiente. Context Scout ya lo descubre y registra como `contexto`. Fuente: Excel mensual de `aena.es`, sin auth, ~día 20 del mes siguiente. Feature key: `aena_pasajeros_{iata_snake}`.
+1. **Conectar ingestores mensual a `sync_mensual.py`** — añadir los stubs funcionales (`metro_madrid`, etc.) a `_build_ingestores()` en `sync_mensual.py`. Primero completar el stub AENA.
 
-2. **INE pernoctaciones hoteleras** — pendiente investigar granularidad ciudad vs. provincia. Para Gran Vía, proxy adecuado podría ser municipio Madrid. Context Scout lo registra como `ine_pernoctaciones_hoteleras_{provincia_snake}`.
+2. **Verificar estación "Sol" en Metro Madrid Excel** — durante la ingesta, "Sol" no matchó en el Excel. Investigar el nombre exacto de la columna (puede ser "Sol (Metro)" o similar).
 
-3. **Hotelería Gran Vía** — el usuario preguntó por costes promedio en hotelería urbana. Fuente natural: INE Encuesta Ocupación Hotelera (ADR, RevPAR, ocupación). Granularidad: provincia/municipio, no barrio. Alternativa: STR/AirDNA si hay acceso.
+3. **INE pernoctaciones hoteleras** — pendiente investigar granularidad ciudad vs. provincia. Stub `ine_eoh.py` creado. Para Gran Vía, proxy adecuado podría ser municipio Madrid.
 
-4. **Más autoridades portuarias** — `puertos_estado.py` ahora es data-driven. Para añadir Barcelona, Palma, etc.: insertar en `location_source_config (location_uuid, 'puertos_estado', '{"port_authority": "<nombre exacto en XLSX>"}')`.
+4. **Más autoridades portuarias** — `puertos_estado.py` es data-driven. Para añadir Barcelona, Palma, etc.: insertar en `location_source_config (location_uuid, 'puertos_estado', '{"port_authority": "<nombre exacto en XLSX>"}')`.
 
 ---
 
-## Bugs conocidos (pre-existentes, no introducidos esta sesión)
+## Bugs conocidos
 
 - `src/models/anomalys.py` (`generar_panel_bi_completo`) — WIP, RuntimeError si se alcanza esa ruta en analytics.
-- `src/data_processing/constructor_master.py` — lee `loc.get('latitude', ...)` pero el JSON usa `lat`. Bug pre-existente, no bloqueante (no se toca en los requests normales del panel).
+- `src/data_processing/constructor_master.py` — lee `loc.get('latitude', ...)` pero el JSON usa `lat`. Bug pre-existente, no bloqueante.
+- **Tenerife CC Nivaria** — sin coordenadas en `dim_ubicaciones`. Excluida de todo prefetch.

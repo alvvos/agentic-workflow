@@ -3,7 +3,7 @@
 **Motor:** PostgreSQL 16 (Docker Compose)
 **Conexión:** `src/db/store.py` → pool psycopg v3, thread-local, autocommit
 **DDL:** se aplica automáticamente en el primer `get_conn()` de cada proceso (`_apply_ddl`)
-**Última revisión:** 2026-06-21
+**Última revisión:** 2026-06-30
 
 ---
 
@@ -318,7 +318,51 @@ Caché de respuestas del chatbot para preguntas frecuentes.
 
 ---
 
-## Estado actual del feature registry (2026-06-21)
+## Tablas de configuración por ubicación/fuente
+
+### `location_pois`
+Puntos de interés geoespaciales ligados a una ubicación (competidores, transporte, etc.). Datos Esri Places + manuales.
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `id` | SERIAL PK | — |
+| `org_uuid` | TEXT NN | Organización |
+| `location_uuid` | TEXT NN → `dim_ubicaciones` | Tienda |
+| `nombre` | TEXT NN | Nombre del POI |
+| `lat` / `lon` | DOUBLE NN | Coordenadas |
+| `categoria` | TEXT NN | `'competidor'`, `'transporte'`, `'ocio'`, etc. |
+| `valor_relativo` | DOUBLE | Score de importancia (0–1, default 0.5) |
+| `detalle` | TEXT | Info extra (ej. línea de metro) |
+| `radio_m` | INT | Radio de búsqueda usado al descubrir el POI |
+| `isocrona_minutos` | INT | Isócrona a pie en minutos |
+| `isocrona_geojson` | JSONB | GeoJSON de la isócrona (Esri Network Analysis) |
+| `fuente` | TEXT | `'manual'`, `'esri_places'`, etc. |
+| `activo` | BOOLEAN | Default TRUE |
+| `created_at` | TIMESTAMP | — |
+
+**Unique:** `(location_uuid, nombre, categoria)`
+
+---
+
+### `location_source_config`
+Configuración por ubicación y fuente de datos externa. PK compuesta `(location_uuid, source)`. Los ingestores leen aquí sus parámetros específicos (p.ej., `port_authority` para Puertos del Estado, `estaciones` + `iata` para metro/AENA).
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `id` | SERIAL PK | — |
+| `location_uuid` | TEXT NN | Tienda |
+| `source` | TEXT NN | Identificador de la fuente (`'metro_madrid'`, `'puertos_estado'`, `'aena'`, etc.) |
+| `params` | JSONB NN | Parámetros específicos. Ver `docs/source_params_contract.md` |
+| `activo` | BOOLEAN NN | Default TRUE. FALSE = ingestor la ignora |
+| `created_at` | TIMESTAMP NN | — |
+
+**Unique:** `(location_uuid, source)`
+
+**Cómo añadir una fuente nueva:** `INSERT INTO location_source_config (location_uuid, source, params) VALUES ('...', 'nueva_fuente', '{"clave": "valor"}')`. Sin tocar código de ingestores.
+
+---
+
+## Estado actual del feature registry (2026-06-30)
 
 | Fuente | Features | Status | Notas |
 |---|---|---|---|
@@ -327,5 +371,8 @@ Caché de respuestas del chatbot para preguntas frecuentes.
 | `predicthq` | 7 | `con_cobertura` / inactive | Sin cobertura histórica en tier gratuito |
 | `cruceros` | 1 | `con_cobertura` / active (Málaga) | `n_pasajeros_crucero_dia` |
 | `esri` | 47 | `con_cobertura` / inactive | Datos estáticos, no aportan varianza temporal al forecast |
+| `metro_madrid` | 2+ | `contexto` para Madrid Gran Vía | `afluencia_metro_gran_via`, `afluencia_metro_callao`. Visibles en señal de contexto, no entran al modelo |
 
 **Vector de producción (active):** ~19 features base + 15 supercalendario + 3 clima + 1 cruceros (Málaga)
+
+> Features con `status='contexto'` son visibles en el panel "Señal del contexto exterior" pero no entran al modelo ML. `_render_senal_contexto_modal()` usa `AND f.status IN ('active', 'contexto')` para incluirlas.

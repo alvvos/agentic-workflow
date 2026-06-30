@@ -1,7 +1,7 @@
 # ARCHITECTURE — Agentic Workflow
 
 **Stack:** Python 3.12 · Dash/Plotly · PostgreSQL 16 (Docker) · XGBoost · Prefect 3 · gunicorn
-**Última revisión:** 2026-06-26 · Versión en producción: v2.2.38
+**Última revisión:** 2026-06-30 · Versión en producción: v2.2.46
 
 ---
 
@@ -120,7 +120,9 @@ loop source in jobs:
 Geo/Esri: listar_estado() (audit only)
 ```
 
-Fuentes mensuales actualmente registradas: `puertos_estado` (n_pasajeros_crucero_oficial via Puertos del Estado XLSX oficial).
+Fuentes mensuales actualmente registradas: `puertos_estado` (n_pasajeros_crucero_oficial via Puertos del Estado XLSX oficial), `metro_madrid` (validaciones por estación, Excel Metro Madrid — feature_key: `afluencia_metro_{slug}`).
+
+**Ingestores mensual pendientes de conectar a `sync_mensual.py`:** `aena`, `cercanias_renfe`, `metro_barcelona`, `metro_bilbao`, `metro_sevilla`, `metro_valencia`, `ine_eoh`. Los stubs están en `src/data_ingestion/mensual/` con la misma interfaz `sync(jobs, fecha)`.
 
 ---
 
@@ -181,7 +183,7 @@ ml_predictivo.py → vector de training XGBoost
 
 **Estados `feature_flags.status`:**
 - `active` → entra al modelo ML
-- `contexto` → registrada por Context Scout, aún sin ingestor implementado; timer mensual la rellena cuando esté disponible
+- `contexto` → visible en panel "Señal del contexto exterior", **no** entra al modelo. `_render_senal_contexto_modal()` usa `IN ('active', 'contexto')` para mostrarlas. Caso de uso: datos de metro.
 - `inactive` → evaluada, no mejora el modelo
 
 ---

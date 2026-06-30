@@ -9,7 +9,7 @@ Executed by `/demo-prepare` before demos.
 
 | ID | Descripción | Comando en servidor |
 |----|-------------|---------------------|
-| INF-1 | Docker: db, adminer y prefect-server activos | `docker ps --format '{{.Names}}' \| sort` |
+| INF-1 | Docker: db, pgweb y prefect-server activos | `docker ps --format '{{.Names}}' \| sort` |
 | INF-2 | Gunicorn (app) activo vía systemd | `systemctl is-active gunicorn` |
 | INF-3 | prefect-flows service activo | `systemctl is-active prefect-flows` |
 | INF-4 | sync-noche.timer activo (ingesta nocturna) | `systemctl is-active sync-noche.timer` |
@@ -48,3 +48,4 @@ Executed by `/demo-prepare` before demos.
 | ONB-6 | smoke_test importable sin errores | `cd /home/alvaro.salis/agentic-workflow && venv/bin/python -c "from src.onboarding.smoke_test import ejecutar; print('ok')"` |
 | ONB-7 | _eval_core importable sin depender de src/lab/ | `cd /home/alvaro.salis/agentic-workflow && venv/bin/python -c "from src.onboarding._eval_core import _evaluate_feature, MIN_TRAIN_ROWS; print('ok')"` |
 | ONB-8 | puertos_estado importable y parsea XLSX | `cd /home/alvaro.salis/agentic-workflow && venv/bin/python -c "from src.data_ingestion.prefetch.puertos_estado import parse_xlsx, _get_configured_locations; print('ok')"` |
+| ONB-9 | metro_madrid importable y lee location_source_config | `cd /home/alvaro.salis/agentic-workflow && venv/bin/python -c "from src.data_ingestion.mensual.metro_madrid import _get_configured_locations; print('ok')"` |

@@ -1,7 +1,7 @@
 # FILE_TREE — Agentic Workflow
 
 Árbol anotado del repositorio. Solo archivos relevantes (excluye `__pycache__`, `venv`, `.git`).
-**Última revisión:** 2026-06-26
+**Última revisión:** 2026-06-30
 
 ---
 
@@ -14,7 +14,7 @@ agentic-workflow/
 ├── pytest.ini
 ├── CLAUDE.md                       Instrucciones para Claude Code.
 ├── .pre-commit-config.yaml         Hooks: trailing-whitespace, end-of-file-fixer, black (100 chars), ruff (E/F/I/W/UP)
-├── docker-compose.yml              Levanta PostgreSQL 16 + Adminer + prefect-server
+├── docker-compose.yml              Levanta PostgreSQL 16 + pgweb (puerto 8081) + prefect-server
 │
 ├── assets/
 │   ├── render_guard.js             MutationObserver + plotly_afterplot overlay (anti-flash loader).
@@ -98,6 +98,15 @@ agentic-workflow/
     │   ├── actualizar_arbol_ubicaciones.py  Sync árbol Aitanna → dim_* + geocodificación Nominatim
     │   ├── esri_client.py          fetch_enrich() Esri GeoEnrichment real + mock (sin ESRI_KEY)
     │   ├── ingesta_geo.py          ingestar_snapshot_esri(), listar_estado_geo()
+    │   ├── mensual/                Ingestores de señales mensuales de movilidad/turismo
+    │   │   ├── metro_madrid.py     ✅ Funcional — Excel validaciones Metro Madrid → store_features_ext
+    │   │   ├── aena.py             🔲 Stub — pasajeros aeropuerto AENA por IATA
+    │   │   ├── cercanias_renfe.py  🔲 Stub — viajeros Cercanías RENFE
+    │   │   ├── metro_barcelona.py  🔲 Stub — TMB open data
+    │   │   ├── metro_bilbao.py     🔲 Stub — Metro Bilbao open data
+    │   │   ├── metro_sevilla.py    🔲 Stub — Metro Sevilla open data
+    │   │   ├── metro_valencia.py   🔲 Stub — Metrovalencia open data
+    │   │   └── ine_eoh.py          🔲 Stub — INE Encuesta Ocupación Hotelera
     │   └── prefetch/               Scripts de prefetch de señales externas
     │       ├── _common.py          get_active_locations(), helpers compartidos
     │       ├── run_all.py          Orquestador: lanza todos los prefetch (con skip set)
