@@ -300,9 +300,9 @@ def _render_area_signals(location_uuid: str):
         notas_map = {
             fk: notas
             for fk, notas in conn.execute(
-                f"SELECT feature_key, notas FROM feature_registry "
-                f"WHERE feature_key = ANY(ARRAY[{','.join(['%s']*len(all_keys))}]) AND notas IS NOT NULL",
-                all_keys,
+                "SELECT feature_key, notas FROM feature_registry "
+                "WHERE feature_key = ANY(?) AND notas IS NOT NULL",
+                [all_keys],
             ).fetchall()
         }
     except Exception:
