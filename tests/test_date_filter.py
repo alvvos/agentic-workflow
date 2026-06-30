@@ -2,10 +2,12 @@
 Tests de filtrar_dataframe_fechas — la función que recorta el DataFrame
 según el selector de periodo del sidebar.
 """
-import os, sys
-import pandas as pd
-import pytest
+
+import os
+import sys
 from datetime import date, timedelta
+
+import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -19,7 +21,6 @@ def _df(start="2025-01-01", days=60):
 
 
 def test_ayer_devuelve_un_dia():
-    df = _df()
     ayer = date.today() - timedelta(days=1)
     df_test = pd.DataFrame({"fecha": pd.to_datetime([ayer]), "value": [1]})
     result, s, e = filtrar_dataframe_fechas(df_test, "ayer", None, None, None)
@@ -49,10 +50,9 @@ def test_tipo_invalido_devuelve_none():
 
 def test_dia_concreto():
     target = "2025-03-15"
-    df = pd.DataFrame({
-        "fecha": pd.to_datetime(["2025-03-14", "2025-03-15", "2025-03-16"]),
-        "value": [1, 2, 3]
-    })
+    df = pd.DataFrame(
+        {"fecha": pd.to_datetime(["2025-03-14", "2025-03-15", "2025-03-16"]), "value": [1, 2, 3]}
+    )
     result, s, e = filtrar_dataframe_fechas(df, "dia", None, None, target)
     assert result is not None
     assert len(result) == 1

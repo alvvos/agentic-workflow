@@ -13,6 +13,7 @@ Privilegios requeridos en la API key (location.arcgis.com):
   - premium:user:networkanalysis ← solo necesario para NetworkServiceArea
   - premium:user:places          ← para fase 2 (competidores/POI)
 """
+
 import json
 import os
 import random
@@ -37,22 +38,24 @@ _SERVICE_AREA_URL = (
 # Travel mode JSON explícito para pedestres.
 # El parámetro `impedance=WalkTime` no es suficiente — la API usa DriveTime por defecto
 # a menos que se especifique travelMode con type="WALK" y useHierarchy=false.
-_WALK_TRAVEL_MODE = json.dumps({
-    "attributeParameterValues": [],
-    "description": "Suitable for pedestrian activity.",
-    "distanceAttributeName": "WalkTime",
-    "id": "caFAgoThrvUpkFBW",
-    "impedanceAttributeName": "WalkTime",
-    "name": "Walking",
-    "restrictionAttributeNames": [
-        "Avoid Roads Unsuitable for Pedestrians",
-        "Avoid Roads Prohibited for Pedestrians",
-    ],
-    "timeAttributeName": "WalkTime",
-    "type": "WALK",
-    "useHierarchy": False,
-    "uturnAtJunctions": "esriNFSBAllowBacktrack",
-})
+_WALK_TRAVEL_MODE = json.dumps(
+    {
+        "attributeParameterValues": [],
+        "description": "Suitable for pedestrian activity.",
+        "distanceAttributeName": "WalkTime",
+        "id": "caFAgoThrvUpkFBW",
+        "impedanceAttributeName": "WalkTime",
+        "name": "Walking",
+        "restrictionAttributeNames": [
+            "Avoid Roads Unsuitable for Pedestrians",
+            "Avoid Roads Prohibited for Pedestrians",
+        ],
+        "timeAttributeName": "WalkTime",
+        "type": "WALK",
+        "useHierarchy": False,
+        "uturnAtJunctions": "esriNFSBAllowBacktrack",
+    }
+)
 
 # Ring buffers en metros — proxy para 5/10/15 min peatonal (~80 m/min)
 _RING_BUFFERS = [400, 800, 1200]
@@ -61,68 +64,69 @@ _RING_BUFFERS = [400, 800, 1200]
 USE_MOCK = not bool(os.environ.get("ESRI_KEY", ""))
 
 _MOCK_RANGES: dict = {
-    "poblacion_5min":                  (800,     8_000),
-    "poblacion_10min":                 (3_000,  25_000),
-    "poblacion_15min":                 (8_000,  60_000),
-    "pob_0_4":                         (80,      1_500),
-    "pob_5_9":                         (80,      1_500),
-    "pob_10_14":                       (80,      1_500),
-    "pob_15_19":                       (100,     2_000),
-    "pob_20_24":                       (100,     2_000),
-    "pob_25_29":                       (100,     2_000),
-    "pob_30_34":                       (100,     2_000),
-    "pob_35_39":                       (100,     2_000),
-    "pob_40_44":                       (120,     2_200),
-    "pob_45_49":                       (120,     2_200),
-    "pob_50_54":                       (120,     2_200),
-    "pob_55_59":                       (110,     2_100),
-    "pob_60_64":                       (110,     2_100),
-    "pob_65_69":                       (90,      1_800),
-    "pob_70_74":                       (80,      1_600),
-    "pob_75_79":                       (60,      1_200),
-    "pob_80_84":                       (40,        900),
-    "pob_85_plus":                     (20,        500),
-    "renta_hogar_anual":               (20_000, 55_000),
-    "renta_hogar_mensual":             (1_600,   4_500),
-    "renta_per_capita":                (8_000,  25_000),
-    "n_hogares_total":                 (500,    15_000),
-    "tamanio_medio_hogar":             (2.1,      3.2),
-    "hogares_renta_alta":              (200,     3_000),
-    "hogares_renta_media_alta":        (150,     2_500),
-    "hogares_jovenes_solos":           (10,        500),
-    "hogares_parejas_jovenes":         (50,        800),
-    "hogares_parejas_adultas":         (100,     2_000),
-    "hogares_familias_hijos":          (100,     1_500),
-    "hogares_monoparentales":          (30,        600),
-    "puede_afrontar_imprevistos_pct":  (200,     3_000),
-    "llega_mes_con_facilidad_pct":     (100,     2_000),
-    "en_riesgo_pobreza_pct":           (50,      1_000),
-    "gasto_ropa_calzado":              (800,     2_500),
-    "gasto_ropa":                      (550,     1_800),
-    "gasto_calzado":                   (200,       700),
-    "gasto_cuidado_personal":          (300,     1_200),
-    "gasto_ocio_cultura":              (900,     2_800),
-    "gasto_vacaciones":                (300,     2_000),
-    "gasto_restaurantes":              (1_500,   5_000),
-    "gasto_alimentacion":              (3_000,   8_000),
-    "gasto_transporte":                (1_000,   4_000),
-    "gasto_comunicaciones":            (500,     1_500),
-    "tasa_desempleo":                  (200,     3_000),
-    "tasa_desempleo_jovenes":          (50,      1_000),
-    "empleados_por_hogar":             (100,     2_500),
-    "tasa_riesgo_pobreza":             (0.05,     0.35),
-    "pct_compras_online":              (100,     3_000),
-    "online_ropa_deporte_pct":         (30,        800),
-    "online_ultimo_mes_pct":           (50,      1_500),
-    "densidad_comercial_score":        (0.10,     1.00),
-    "indice_movilidad_peatonal":       (0.10,     1.00),
-    "dist_transporte_min_m":           (50,        800),
-    "n_competidores_500m":             (0,          12),
-    "dist_competidor_cercano_m":       (30,        500),
+    "poblacion_5min": (800, 8_000),
+    "poblacion_10min": (3_000, 25_000),
+    "poblacion_15min": (8_000, 60_000),
+    "pob_0_4": (80, 1_500),
+    "pob_5_9": (80, 1_500),
+    "pob_10_14": (80, 1_500),
+    "pob_15_19": (100, 2_000),
+    "pob_20_24": (100, 2_000),
+    "pob_25_29": (100, 2_000),
+    "pob_30_34": (100, 2_000),
+    "pob_35_39": (100, 2_000),
+    "pob_40_44": (120, 2_200),
+    "pob_45_49": (120, 2_200),
+    "pob_50_54": (120, 2_200),
+    "pob_55_59": (110, 2_100),
+    "pob_60_64": (110, 2_100),
+    "pob_65_69": (90, 1_800),
+    "pob_70_74": (80, 1_600),
+    "pob_75_79": (60, 1_200),
+    "pob_80_84": (40, 900),
+    "pob_85_plus": (20, 500),
+    "renta_hogar_anual": (20_000, 55_000),
+    "renta_hogar_mensual": (1_600, 4_500),
+    "renta_per_capita": (8_000, 25_000),
+    "n_hogares_total": (500, 15_000),
+    "tamanio_medio_hogar": (2.1, 3.2),
+    "hogares_renta_alta": (200, 3_000),
+    "hogares_renta_media_alta": (150, 2_500),
+    "hogares_jovenes_solos": (10, 500),
+    "hogares_parejas_jovenes": (50, 800),
+    "hogares_parejas_adultas": (100, 2_000),
+    "hogares_familias_hijos": (100, 1_500),
+    "hogares_monoparentales": (30, 600),
+    "puede_afrontar_imprevistos_pct": (200, 3_000),
+    "llega_mes_con_facilidad_pct": (100, 2_000),
+    "en_riesgo_pobreza_pct": (50, 1_000),
+    "gasto_ropa_calzado": (800, 2_500),
+    "gasto_ropa": (550, 1_800),
+    "gasto_calzado": (200, 700),
+    "gasto_cuidado_personal": (300, 1_200),
+    "gasto_ocio_cultura": (900, 2_800),
+    "gasto_vacaciones": (300, 2_000),
+    "gasto_restaurantes": (1_500, 5_000),
+    "gasto_alimentacion": (3_000, 8_000),
+    "gasto_transporte": (1_000, 4_000),
+    "gasto_comunicaciones": (500, 1_500),
+    "tasa_desempleo": (200, 3_000),
+    "tasa_desempleo_jovenes": (50, 1_000),
+    "empleados_por_hogar": (100, 2_500),
+    "tasa_riesgo_pobreza": (0.05, 0.35),
+    "pct_compras_online": (100, 3_000),
+    "online_ropa_deporte_pct": (30, 800),
+    "online_ultimo_mes_pct": (50, 1_500),
+    "densidad_comercial_score": (0.10, 1.00),
+    "indice_movilidad_peatonal": (0.10, 1.00),
+    "dist_transporte_min_m": (50, 800),
+    "n_competidores_500m": (0, 12),
+    "dist_competidor_cercano_m": (30, 500),
 }
 
 
 # ── API pública ───────────────────────────────────────────────────────────────
+
 
 def fetch_enrich(
     location_uuid: str,
@@ -166,8 +170,8 @@ def cargar_todas_ubicaciones(
     dry_run         Si True, imprime qué haría sin escribir nada en el store.
     """
     from src.data_ingestion.prefetch.geo import ingestar_snapshot_esri
-
     from src.db.store import get_conn
+
     conn = get_conn()
     org_rows = conn.execute(
         "SELECT org_uuid, nombre FROM dim_organizaciones ORDER BY nombre"
@@ -176,14 +180,11 @@ def cargar_todas_ubicaciones(
         "SELECT location_uuid, org_uuid, nombre, lat, lon FROM dim_ubicaciones WHERE activa = TRUE"
     ).fetchall()
     locs_by_org: dict = {}
-    for l in loc_rows:
-        locs_by_org.setdefault(l[1], []).append(
-            {"uuid": l[0], "name": l[2], "lat": l[3], "lon": l[4]}
+    for loc in loc_rows:
+        locs_by_org.setdefault(loc[1], []).append(
+            {"uuid": loc[0], "name": loc[2], "lat": loc[3], "lon": loc[4]}
         )
-    orgs = [
-        {"uuid": o[0], "name": o[1], "locations": locs_by_org.get(o[0], [])}
-        for o in org_rows
-    ]
+    orgs = [{"uuid": o[0], "name": o[1], "locations": locs_by_org.get(o[0], [])} for o in org_rows]
 
     resultados = []
     for org in orgs:
@@ -191,10 +192,10 @@ def cargar_todas_ubicaciones(
         if org_filter and org_filter.lower() not in org_name.lower():
             continue
         for loc in org.get("locations", []):
-            uuid   = loc["uuid"]
+            uuid = loc["uuid"]
             nombre = loc.get("name", uuid)
-            lat    = loc.get("lat")
-            lon    = loc.get("lon")
+            lat = loc.get("lat")
+            lon = loc.get("lon")
 
             valores = fetch_enrich(uuid, lat=lat, lon=lon)
 
@@ -208,8 +209,10 @@ def cargar_todas_ubicaciones(
             resultado = ingestar_snapshot_esri(uuid, valores, fecha_entrega)
             resultado["name"] = nombre
             resultados.append(resultado)
-            print(f"[ok] {nombre} — {resultado['snapshots_creados']} snapshot(s), "
-                  f"{len(resultado['features_registradas'])} features")
+            print(
+                f"[ok] {nombre} — {resultado['snapshots_creados']} snapshot(s), "
+                f"{len(resultado['features_registradas'])} features"
+            )
 
     return resultados
 
@@ -231,6 +234,7 @@ def fetch_service_area_isochrones(lat: float, lon: float) -> list | None:
 
 # ── Internals ─────────────────────────────────────────────────────────────────
 
+
 def _fetch_service_area_isochrones(lat: float, lon: float, token: str) -> list | None:
     """
     Llama a ArcGIS ServiceArea con impedance=WalkTime para 5/10/15 min.
@@ -238,16 +242,18 @@ def _fetch_service_area_isochrones(lat: float, lon: float, token: str) -> list |
     Retorna lista de 3 dicts [{lats, lons}] ordenados [5 min, 10 min, 15 min]
     (anillo exterior de cada polígono, sin huecos), o None en caso de error.
     """
-    params = urllib.parse.urlencode({
-        "facilities":      json.dumps({"features": [{"geometry": {"x": lon, "y": lat}}]}),
-        "defaultBreaks":   "5,10,15",
-        "travelDirection": "esriNATravelDirectionToFacility",
-        "travelMode":      _WALK_TRAVEL_MODE,
-        "returnPolygons":  "true",
-        "outSR":           "4326",
-        "f":               "json",
-        "token":           token,
-    }).encode("utf-8")
+    params = urllib.parse.urlencode(
+        {
+            "facilities": json.dumps({"features": [{"geometry": {"x": lon, "y": lat}}]}),
+            "defaultBreaks": "5,10,15",
+            "travelDirection": "esriNATravelDirectionToFacility",
+            "travelMode": _WALK_TRAVEL_MODE,
+            "returnPolygons": "true",
+            "outSR": "4326",
+            "f": "json",
+            "token": token,
+        }
+    ).encode("utf-8")
 
     req = urllib.request.Request(_SERVICE_AREA_URL, data=params, method="POST")
     req.add_header("Content-Type", "application/x-www-form-urlencoded")
@@ -261,7 +267,7 @@ def _fetch_service_area_isochrones(lat: float, lon: float, token: str) -> list |
     if "error" in data:
         return None
 
-    polys    = data.get("saPolygons") or data.get("polygons") or {}
+    polys = data.get("saPolygons") or data.get("polygons") or {}
     features = polys.get("features", []) if isinstance(polys, dict) else []
     if len(features) != 3:
         return None
@@ -277,10 +283,7 @@ def _fetch_service_area_isochrones(lat: float, lon: float, token: str) -> list |
         # First ring is the outer boundary; subsequent rings are holes (e.g. sea/coast cut-outs).
         # Store all so the renderer can punch holes correctly.
         outer = geom_rings[0]
-        holes = [
-            {"lons": [pt[0] for pt in r], "lats": [pt[1] for pt in r]}
-            for r in geom_rings[1:]
-        ]
+        holes = [{"lons": [pt[0] for pt in r], "lats": [pt[1] for pt in r]} for r in geom_rings[1:]]
         entry = {
             "lons": [pt[0] for pt in outer],
             "lats": [pt[1] for pt in outer],
@@ -300,7 +303,9 @@ def _mock_enrich(location_uuid: str, variables: list) -> dict:
             result[col] = None
             continue
         lo, hi = _MOCK_RANGES[col]
-        result[col] = round(rng.uniform(lo, hi), 4) if isinstance(lo, float) else rng.randint(lo, hi)
+        result[col] = (
+            round(rng.uniform(lo, hi), 4) if isinstance(lo, float) else rng.randint(lo, hi)
+        )
     return result
 
 
@@ -340,21 +345,27 @@ def _llamar_enrich_real(
             seen.add(qualified)
             analysis_vars.append(qualified)
 
-    study_areas = json.dumps([{
-        "geometry": {"x": lon, "y": lat},
-        "areaType": "RingBuffer",
-        "bufferUnits": "Meters",
-        "bufferRadii": _RING_BUFFERS,
-    }])
+    study_areas = json.dumps(
+        [
+            {
+                "geometry": {"x": lon, "y": lat},
+                "areaType": "RingBuffer",
+                "bufferUnits": "Meters",
+                "bufferRadii": _RING_BUFFERS,
+            }
+        ]
+    )
 
     def _call_enrich(vars_list: list) -> dict:
-        params = urllib.parse.urlencode({
-            "studyAreas":        study_areas,
-            "analysisVariables": json.dumps(vars_list),
-            "returnGeometry":    "true",
-            "f":                 "json",
-            "token":             token,
-        }).encode("utf-8")
+        params = urllib.parse.urlencode(
+            {
+                "studyAreas": study_areas,
+                "analysisVariables": json.dumps(vars_list),
+                "returnGeometry": "true",
+                "f": "json",
+                "token": token,
+            }
+        ).encode("utf-8")
         req = urllib.request.Request(_ENRICH_URL, data=params, method="POST")
         req.add_header("Content-Type", "application/x-www-form-urlencoded")
         with urllib.request.urlopen(req, timeout=60) as resp:
@@ -371,6 +382,7 @@ def _llamar_enrich_real(
         desc = errors[0].get("description", "")
         # Algunas variables no existen para ciertos países — reintento sin ellas
         import re as _re2
+
         undefined = _re2.findall(r"\w+\.\w+", desc)
         if undefined and "not defined" in desc.lower():
             pruned = [v for v in analysis_vars if v not in undefined]
@@ -379,7 +391,9 @@ def _llamar_enrich_real(
                 msgs2 = data.get("messages", [])
                 errors2 = [m for m in msgs2 if m.get("type") == "esriJobMessageTypeError"]
                 if errors2:
-                    raise RuntimeError(f"Esri error [{location_uuid}]: {errors2[0].get('description')}")
+                    raise RuntimeError(
+                        f"Esri error [{location_uuid}]: {errors2[0].get('description')}"
+                    )
             else:
                 raise RuntimeError(f"Esri error [{location_uuid}]: {desc}")
         else:
@@ -391,7 +405,7 @@ def _llamar_enrich_real(
     for col in variables:
         entry = ESRI_VAR_MAP.get(col)
         if entry is None:
-            result[col] = None   # fase 2, no disponible aún
+            result[col] = None  # fase 2, no disponible aún
             continue
         var_id, radius_idx = entry
         attrs = features[radius_idx]["attributes"]
@@ -427,10 +441,12 @@ def _llamar_enrich_real(
             geom = feat.get("geometry")
             if geom and "rings" in geom and geom["rings"]:
                 outer = geom["rings"][0]
-                catchment_rings.append({
-                    "lons": [pt[0] for pt in outer],
-                    "lats": [pt[1] for pt in outer],
-                })
+                catchment_rings.append(
+                    {
+                        "lons": [pt[0] for pt in outer],
+                        "lats": [pt[1] for pt in outer],
+                    }
+                )
             else:
                 catchment_rings.append(None)
         if any(r is not None for r in catchment_rings):

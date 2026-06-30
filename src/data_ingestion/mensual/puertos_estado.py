@@ -72,6 +72,12 @@ CATALOG_ENTRY = {
         "Requiere configurar port_authority en location_source_config con el nombre "
         "exacto de la Autoridad Portuaria tal como aparece en la hoja XLSX."
     ),
+    "params_schema": (
+        "{'port_authority': '<nombre exacto de la Autoridad Portuaria en el XLSX de Puertos del Estado>'}. "
+        "Valores válidos: Málaga, Barcelona, Valencia, Palma, Baleares, Sevilla, Las Palmas, "
+        "Santa Cruz de Tenerife, Cádiz, Cartagena, Almería, Motril, Alicante, Tarragona."
+    ),
+    "params_ejemplo": {"port_authority": "Málaga"},
 }
 
 _SOURCE = SOURCE

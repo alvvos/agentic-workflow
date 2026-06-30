@@ -419,22 +419,34 @@ Documenta el motivo en 'fuentes_descartadas' para que el equipo pueda revisarlo.
 
 Responde ÚNICAMENTE con JSON válido. Sin markdown, sin texto antes ni después del JSON.
 
+Para cada fuente seleccionada debes generar el campo `params` con los valores concretos \
+para ESTA ubicación, siguiendo el `params_schema` de la fuente. Usa tu conocimiento \
+geográfico (coordenadas, ciudad, provincia) para resolver:
+  - Código IATA del aeropuerto más cercano con tráfico turístico relevante.
+  - Estaciones de metro/cercanías a ≤800 m de las coordenadas (nombre exacto + slug snake_case).
+  - Nombre de la Autoridad Portuaria tal como aparece en los datos oficiales.
+  - Nombre de provincia INE (fragmento exacto usado en las series).
+
+Si no puedes determinar un campo requerido con certeza razonable, usa null como valor \
+(el operador revisará manualmente). Nunca omitas el campo `params`.
+
 {{
   "fuentes_seleccionadas": [
     {{
-      "feature_key": "ine_icm_minorista_zaragoza",
-      "source": "ine",
-      "categoria": "macroeconomia",
+      "feature_key": "aena_pasajeros_agp",
+      "source": "aena",
+      "params": {{"iata": "AGP", "aeropuerto_nombre": "Málaga-Costa del Sol"}},
+      "categoria": "turismo",
       "periodicidad": "mensual",
-      "url": "https://servicios.ine.es/wstempus/js/ES/DATOS_TABLA/2688?tip=AM",
-      "notas": "Índice de Comercio Minorista INE a nivel provincial (Zaragoza). Mide directamente el volumen de ventas en comercio al por menor. Publicado ~45 días después del mes de referencia. Usar serie IRA (ajustada estacionalmente). API JSON sin autenticación.",
-      "razon_inclusion": "Zaragoza tiene dato ICM provincial propio. Alta correlación esperada con afluencia en retail — cuando el índice cae, el gasto en tiendas físicas de la provincia cae con él."
+      "url": "https://www.aena.es/es/corporativa/estadisticas.html",
+      "notas": "Aeropuerto AGP sirve directamente a Málaga. Pasajeros nivel A: cuenta personas reales.",
+      "razon_inclusion": "Ubicación en centro de Málaga — turistas de AGP son componente principal del tráfico retail."
     }}
   ],
   "fuentes_descartadas": [
     {{
-      "feature_key": "ine_turismo_hotelero_zaragoza",
-      "razon_descarte": "Zaragoza no es destino turístico de primer orden. La ocupación hotelera no está causalmente vinculada a la afluencia en retail de conveniencia/moda en esta ciudad."
+      "feature_key": "n_pasajeros_crucero_oficial",
+      "razon_descarte": "La ubicación está en Madrid — ciudad sin puerto de cruceros activo."
     }}
   ]
 }}
@@ -453,6 +465,7 @@ class ContextSource:
     url: str
     notas: str
     razon_inclusion: str
+    params: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -508,7 +521,14 @@ def _build_catalog_block(pais: str) -> str:
         )
         lines.append(f"      descripcion:  {e['descripcion']}")
         lines.append(f"      notas_tecn.:  {e['notas_tecnicas']}")
-        lines.append(f"      url_descarga: {e['url_descarga']}")
+        if e.get("url_descarga"):
+            lines.append(f"      url_descarga: {e['url_descarga']}")
+        if e.get("params_schema"):
+            lines.append(f"      params_schema: {e['params_schema']}")
+        if e.get("params_ejemplo"):
+            lines.append(
+                f"      params_ejemplo: {json.dumps(e['params_ejemplo'], ensure_ascii=False)}"
+            )
     return "\n".join(lines)
 
 
@@ -591,6 +611,7 @@ def descubrir_fuentes(location_uuid: str) -> ScoutResult:
             url=s.get("url", ""),
             notas=s.get("notas", ""),
             razon_inclusion=s.get("razon_inclusion", ""),
+            params=s.get("params") or {},
         )
         for s in data.get("fuentes_seleccionadas", [])
     ]
@@ -693,6 +714,23 @@ def registrar_fuentes(result: ScoutResult) -> ScoutResult:
                 src.periodicidad,
             )
             n += 1
+
+        # location_source_config — registra params generados por el scout
+        # ON CONFLICT DO NOTHING: no sobreescribe configuración manual existente
+        conn.execute(
+            """
+            INSERT INTO location_source_config (location_uuid, source, params)
+            VALUES (?, ?, ?)
+            ON CONFLICT (location_uuid, source) DO NOTHING
+            """,
+            [result.location_uuid, src.source, json.dumps(src.params)],
+        )
+        log.info(
+            "location_source_config INSERT: %s / %s — params=%s",
+            result.location_uuid,
+            src.source,
+            src.params,
+        )
 
     result.n_registradas = n
     return result

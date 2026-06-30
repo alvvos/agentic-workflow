@@ -4,21 +4,19 @@ Tests de actualizar_arbol_ubicaciones.py:
   - _candidatos_query()  — generación de queries Nominatim en orden correcto
   - _cargar_memorias()   — preservación de lat/lon y zoneType desde JSON existente
 """
-import json
-import sys
+
 import os
-import pytest
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from src.data_ingestion.actualizar_arbol_ubicaciones import (
-    _limpiar,
     _candidatos_query,
-    _cargar_memorias,
+    _limpiar,
 )
 
-
 # ── _limpiar ──────────────────────────────────────────────────────────────────
+
 
 def test_limpiar_elimina_nbsp():
     assert _limpiar("San Jaime\xa07\xa0") == "San Jaime 7"
@@ -37,6 +35,7 @@ def test_limpiar_strip_bordes():
 
 
 # ── _candidatos_query ─────────────────────────────────────────────────────────
+
 
 def test_candidatos_query_incluye_todos_los_campos():
     qs = _candidatos_query("Tienda", "Calle Mayor 1", "Madrid", "28013", "España")
@@ -68,49 +67,6 @@ def test_candidatos_query_todo_vacio_devuelve_lista_vacia():
     assert qs == []
 
 
-# ── _cargar_memorias ──────────────────────────────────────────────────────────
-
-def _json_fixture(tmp_path, data):
-    p = tmp_path / "ubicaciones.json"
-    p.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-    return str(p)
-
-
-def test_cargar_memorias_preserva_lat_lon(tmp_path):
-    datos = [{"uuid": "org1", "name": "Org", "locations": [
-        {"uuid": "loc1", "name": "Tienda", "lat": 40.4, "lon": -3.7,
-         "address": "Calle 1", "zones": []}
-    ]}]
-    ruta = _json_fixture(tmp_path, datos)
-    locs, zones = _cargar_memorias(ruta)
-    assert "loc1" in locs
-    assert locs["loc1"]["lat"] == 40.4
-    assert locs["loc1"]["lon"] == -3.7
-
-
-def test_cargar_memorias_preserva_zonetype(tmp_path):
-    datos = [{"uuid": "org1", "name": "Org", "locations": [
-        {"uuid": "loc1", "name": "Tienda", "address": "x", "zones": [
-            {"uuid": "z1", "zoneName": "Caja", "zoneType": "last_zone"},
-            {"uuid": "z2", "zoneName": "Exterior"},
-        ]}
-    ]}]
-    ruta = _json_fixture(tmp_path, datos)
-    locs, zones = _cargar_memorias(ruta)
-    assert zones["z1"] == "last_zone"
-    assert "z2" not in zones
-
-
-def test_cargar_memorias_sin_geo_no_registra_loc(tmp_path):
-    datos = [{"uuid": "org1", "name": "Org", "locations": [
-        {"uuid": "loc1", "name": "Tienda", "address": "x", "zones": []}
-    ]}]
-    ruta = _json_fixture(tmp_path, datos)
-    locs, _ = _cargar_memorias(ruta)
-    assert "loc1" not in locs
-
-
-def test_cargar_memorias_archivo_inexistente():
-    locs, zones = _cargar_memorias("/tmp/no_existe_nunca.json")
-    assert locs == {}
-    assert zones == {}
+# ── _cargar_memorias — eliminada en migración a PostgreSQL ────────────────────
+# Los tests de esta función se eliminaron porque _cargar_memorias fue reemplazada
+# por consultas directas a dim_ubicaciones/dim_zonas en la BD.

@@ -76,6 +76,18 @@ CATALOG_ENTRY = {
         "Cada entrada necesita 'nombre' (exacto en el Excel) y 'slug' para el feature_key. "
         "Si el URL del Excel cambia, actualiza 'anyo_url' en location_source_config."
     ),
+    "params_schema": (
+        "{'estaciones': [{'nombre': '<nombre exacto en el Excel de Metro Madrid>', "
+        "'slug': '<snake_case del nombre>'}], "
+        "'anyo_url': '<opcional — URL pattern con {year}>'}. "
+        "Incluir las 2-4 estaciones de Metro de Madrid a ≤800 m de las coordenadas."
+    ),
+    "params_ejemplo": {
+        "estaciones": [
+            {"nombre": "Gran Vía", "slug": "gran_via"},
+            {"nombre": "Callao", "slug": "callao"},
+        ]
+    },
 }
 
 _TIMEOUT = 30

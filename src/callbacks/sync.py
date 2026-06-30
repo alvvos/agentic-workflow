@@ -1,13 +1,15 @@
 import threading
 from datetime import datetime, timedelta
+
 import dash
-from dash import Output, Input, State, html
+from dash import Input, Output, State, html
+
 from src.core.config import app
 from src.data_ingestion.sincronizador import actualizar_datos
 
 # ── Estado en memoria (single-worker gunicorn) ───────────────────────────────
-_sync_threads: dict = {}   # session_id → threading.Event (cancel)
-_sync_status:  dict = {}   # session_id → {status, current, total, error}
+_sync_threads: dict = {}  # session_id → threading.Event (cancel)
+_sync_status: dict = {}  # session_id → {status, current, total, error}
 _sync_lock = threading.Lock()
 
 
@@ -44,6 +46,7 @@ def _run_sync(session_id, locs):
 
 # ── Alerta de datos obsoletos ────────────────────────────────────────────────
 
+
 @app.callback(
     Output("btn-sync", "children"),
     Output("btn-sync", "color"),
@@ -59,26 +62,40 @@ def actualizar_alerta_sync(session_id, _data_v, _tick, locs):
         return _normal
     try:
         from src.db.queries import get_ultima_fecha_por_location
+
         ultima_por_loc = get_ultima_fecha_por_location()
         if not ultima_por_loc:
-            return ([html.I(className="fas fa-exclamation-circle me-2"), "Sin datos — sincronizar"],
-                    "danger", False)
-        fechas_locs = [ultima_por_loc[l] for l in (locs or []) if l in ultima_por_loc]
+            return (
+                [html.I(className="fas fa-exclamation-circle me-2"), "Sin datos — sincronizar"],
+                "danger",
+                False,
+            )
+        fechas_locs = [ultima_por_loc[loc] for loc in (locs or []) if loc in ultima_por_loc]
         if not fechas_locs:
-            return ([html.I(className="fas fa-exclamation-circle me-2"), "Sin datos — sincronizar"],
-                    "danger", False)
+            return (
+                [html.I(className="fas fa-exclamation-circle me-2"), "Sin datos — sincronizar"],
+                "danger",
+                False,
+            )
         fecha_mas_atrasada = min(pd.to_datetime(f).date() for f in fechas_locs)
         ayer = datetime.today().date() - timedelta(days=1)
         dias = (ayer - fecha_mas_atrasada).days
         if dias > 1:
-            return ([html.I(className="fas fa-exclamation-triangle me-2"),
-                     f"Sincronizar · {dias}d sin datos"], "primary", False)
+            return (
+                [
+                    html.I(className="fas fa-exclamation-triangle me-2"),
+                    f"Sincronizar · {dias}d sin datos",
+                ],
+                "primary",
+                False,
+            )
     except Exception:
         pass
     return _normal
 
 
 # ── Abrir modal ──────────────────────────────────────────────────────────────
+
 
 @app.callback(
     Output("modal-sync", "is_open"),
@@ -91,6 +108,7 @@ def abrir_modal_carga(n_clicks):
 
 
 # ── Lanzar sync en hilo background ──────────────────────────────────────────
+
 
 @app.callback(
     Output("interval-sync-poll", "disabled"),
@@ -122,6 +140,7 @@ def ejecutar_sincronizacion(trigger, locs, session_id):
 
 
 # ── Polling de progreso ──────────────────────────────────────────────────────
+
 
 @app.callback(
     Output("modal-sync", "is_open", allow_duplicate=True),
@@ -156,17 +175,34 @@ def poll_sync_progress(_, session_id):
     _sync_status.pop(session_id, None)
 
     if status == "done":
-        return (False, True, "Datos sincronizados correctamente.",
-                "success", "Sincronización finalizada",
-                datetime.now().timestamp(), True, "", 100)
+        return (
+            False,
+            True,
+            "Datos sincronizados correctamente.",
+            "success",
+            "Sincronización finalizada",
+            datetime.now().timestamp(),
+            True,
+            "",
+            100,
+        )
     if status == "cancelled":
-        return (False, True, "Sincronización cancelada.",
-                "warning", "Cancelado", _no, True, "", 0)
-    return (False, True, f"Error: {data.get('error', 'desconocido')}",
-            "danger", "Error de sincronización", _no, True, "", 0)
+        return (False, True, "Sincronización cancelada.", "warning", "Cancelado", _no, True, "", 0)
+    return (
+        False,
+        True,
+        f"Error: {data.get('error', 'desconocido')}",
+        "danger",
+        "Error de sincronización",
+        _no,
+        True,
+        "",
+        0,
+    )
 
 
 # ── Cancelar sincronización ──────────────────────────────────────────────────
+
 
 @app.callback(
     Output("sync-progress-text", "children", allow_duplicate=True),
@@ -179,7 +215,6 @@ def cancelar_sincronizacion(_, session_id):
     if ev:
         ev.set()
     return "Cancelando… finalizando ubicación actual."
-
 
 
 import pandas as pd  # noqa: E402 — needed by actualizar_alerta_sync

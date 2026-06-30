@@ -75,6 +75,13 @@ CATALOG_ENTRY = {
         "Tabla por defecto: 2078 (viajeros+pernoctaciones por provincias). "
         "Para datos de municipio capital usar tabla específica de la operación EOH."
     ),
+    "params_schema": (
+        "{'provincia_nombre': '<fragmento exacto del nombre de provincia en series INE — "
+        "ej. Madrid, Málaga, Barcelona, Valencia, Sevilla, Alicante, Baleares>', "
+        "'tabla_viajeros': <int, opcional, default 2078>, "
+        "'municipio_codigo': '<código INE municipio, opcional>'}."
+    ),
+    "params_ejemplo": {"provincia_nombre": "Málaga"},
 }
 
 _BASE = "https://servicios.ine.es/wstempus/js/ES"

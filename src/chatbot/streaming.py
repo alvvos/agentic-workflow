@@ -8,6 +8,7 @@ Estado en caché (TTL 5 min):
         "tool":   str | None  # etiqueta del tool activo
     }
 """
+
 import json
 import os
 import re as _re
@@ -15,57 +16,65 @@ import threading
 import uuid as _uuid_mod
 from pathlib import Path
 
-_UUID_RE = _re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", _re.I
-)
+_UUID_RE = _re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", _re.I)
 
-import anthropic
-import diskcache
+import anthropic  # noqa: E402
+import diskcache  # noqa: E402
 
-from src.chatbot.cache import set_cached
-from src.chatbot.client import _TOOL_DEFINITIONS, _system_prompt
-from src.chatbot.tools import (
-    get_pm_data, get_gis_data, get_weather_holidays,
-    get_forecast, get_anomalies, get_hourly_breakdown, compare_locations,
-    get_location_info, get_active_features, get_external_features,
-    get_calendar_events, get_cruise_calls, get_model_metrics, get_ev_ranks,
+from src.chatbot.cache import set_cached  # noqa: E402
+from src.chatbot.client import _TOOL_DEFINITIONS, _system_prompt  # noqa: E402
+from src.chatbot.tools import (  # noqa: E402
+    compare_locations,
+    get_active_features,
+    get_anomalies,
+    get_calendar_events,
+    get_cruise_calls,
+    get_ev_ranks,
+    get_external_features,
+    get_forecast,
+    get_gis_data,
+    get_hourly_breakdown,
+    get_location_info,
+    get_model_metrics,
+    get_pm_data,
+    get_weather_holidays,
 )
 
 _CACHE_DIR = Path(__file__).parent.parent / "data" / ".stream_cache"
 _dc = diskcache.Cache(str(_CACHE_DIR))
 
 _TOOL_LABELS = {
-    "get_pm_data":           "Consultando datos de tráfico…",
-    "get_gis_data":          "Consultando perfil geoespacial…",
-    "get_weather_holidays":  "Consultando clima y festivos…",
-    "get_forecast":          "Ejecutando modelo predictivo…",
-    "get_anomalies":         "Analizando anomalías…",
-    "get_hourly_breakdown":  "Calculando perfil horario…",
-    "compare_locations":     "Comparando ubicaciones…",
-    "get_location_info":     "Consultando datos de la ubicación…",
-    "get_active_features":   "Consultando features externas activas…",
+    "get_pm_data": "Consultando datos de tráfico…",
+    "get_gis_data": "Consultando perfil geoespacial…",
+    "get_weather_holidays": "Consultando clima y festivos…",
+    "get_forecast": "Ejecutando modelo predictivo…",
+    "get_anomalies": "Analizando anomalías…",
+    "get_hourly_breakdown": "Calculando perfil horario…",
+    "compare_locations": "Comparando ubicaciones…",
+    "get_location_info": "Consultando datos de la ubicación…",
+    "get_active_features": "Consultando features externas activas…",
     "get_external_features": "Consultando series externas…",
-    "get_calendar_events":   "Consultando calendario de eventos…",
-    "get_cruise_calls":      "Consultando escalas de cruceros…",
-    "get_model_metrics":     "Consultando métricas del modelo…",
-    "get_ev_ranks":          "Consultando scores de eventos…",
+    "get_calendar_events": "Consultando calendario de eventos…",
+    "get_cruise_calls": "Consultando escalas de cruceros…",
+    "get_model_metrics": "Consultando métricas del modelo…",
+    "get_ev_ranks": "Consultando scores de eventos…",
 }
 
 _TOOL_FN = {
-    "get_pm_data":            lambda args: get_pm_data(**args),
-    "get_gis_data":           lambda args: get_gis_data(**args),
-    "get_weather_holidays":   lambda args: get_weather_holidays(**args),
-    "get_forecast":           lambda args: get_forecast(**args),
-    "get_anomalies":          lambda args: get_anomalies(**args),
-    "get_hourly_breakdown":   lambda args: get_hourly_breakdown(**args),
-    "compare_locations":      lambda args: compare_locations(**args),
-    "get_location_info":      lambda args: get_location_info(**args),
-    "get_active_features":    lambda args: get_active_features(**args),
-    "get_external_features":  lambda args: get_external_features(**args),
-    "get_calendar_events":    lambda args: get_calendar_events(**args),
-    "get_cruise_calls":       lambda args: get_cruise_calls(**args),
-    "get_model_metrics":      lambda args: get_model_metrics(**args),
-    "get_ev_ranks":           lambda args: get_ev_ranks(**args),
+    "get_pm_data": lambda args: get_pm_data(**args),
+    "get_gis_data": lambda args: get_gis_data(**args),
+    "get_weather_holidays": lambda args: get_weather_holidays(**args),
+    "get_forecast": lambda args: get_forecast(**args),
+    "get_anomalies": lambda args: get_anomalies(**args),
+    "get_hourly_breakdown": lambda args: get_hourly_breakdown(**args),
+    "compare_locations": lambda args: compare_locations(**args),
+    "get_location_info": lambda args: get_location_info(**args),
+    "get_active_features": lambda args: get_active_features(**args),
+    "get_external_features": lambda args: get_external_features(**args),
+    "get_calendar_events": lambda args: get_calendar_events(**args),
+    "get_cruise_calls": lambda args: get_cruise_calls(**args),
+    "get_model_metrics": lambda args: get_model_metrics(**args),
+    "get_ev_ranks": lambda args: get_ev_ranks(**args),
 }
 
 
@@ -90,19 +99,40 @@ def _set(sid: str, **kw) -> None:
 
 # Injection sets — defined once at module level, not per-loop-iteration
 _TOOLS_UUID_PARAM = {
-    "get_gis_data", "get_forecast", "get_anomalies", "get_hourly_breakdown",
-    "get_location_info", "get_active_features", "get_external_features",
-    "get_calendar_events", "get_cruise_calls", "get_model_metrics", "get_ev_ranks",
+    "get_gis_data",
+    "get_forecast",
+    "get_anomalies",
+    "get_hourly_breakdown",
+    "get_location_info",
+    "get_active_features",
+    "get_external_features",
+    "get_calendar_events",
+    "get_cruise_calls",
+    "get_model_metrics",
+    "get_ev_ranks",
 }
-_TOOLS_ID_PARAM    = {"get_pm_data", "get_weather_holidays"}
-_TOOLS_SESSION     = {"get_pm_data", "get_forecast", "get_anomalies", "get_hourly_breakdown", "compare_locations"}
-_TOOLS_ZONE_INJECT = {"get_forecast", "get_anomalies", "get_hourly_breakdown", "get_pm_data", "get_model_metrics"}
+_TOOLS_ID_PARAM = {"get_pm_data", "get_weather_holidays"}
+_TOOLS_SESSION = {
+    "get_pm_data",
+    "get_forecast",
+    "get_anomalies",
+    "get_hourly_breakdown",
+    "compare_locations",
+}
+_TOOLS_ZONE_INJECT = {
+    "get_forecast",
+    "get_anomalies",
+    "get_hourly_breakdown",
+    "get_pm_data",
+    "get_model_metrics",
+}
 
 
 class _NumpySafeEncoder(json.JSONEncoder):
     def default(self, o):
         try:
             import numpy as np
+
             if isinstance(o, (np.integer,)):
                 return int(o)
             if isinstance(o, (np.floating,)):
@@ -128,7 +158,7 @@ def _safe_json(obj) -> str:
 def _exec_tool(block, location_uuid, zone_uuid, session_id: str) -> str:
     """Execute a single tool_use block and return its JSON result string."""
     try:
-        fn   = _TOOL_FN.get(block.name)
+        fn = _TOOL_FN.get(block.name)
         args = dict(block.input)
 
         if location_uuid:
@@ -155,10 +185,18 @@ def _exec_tool(block, location_uuid, zone_uuid, session_id: str) -> str:
         return _safe_json({"error": f"Error ejecutando {block.name}: {exc}"})
 
 
-def _run(sid: str, messages: list, location_uuid, zone_uuid, session_id: str, api_key: str, extra_mentions=None) -> None:
-    client    = anthropic.Anthropic(api_key=api_key)
-    history   = list(messages)
-    system    = _system_prompt(location_uuid, zone_uuid, extra_mentions)
+def _run(
+    sid: str,
+    messages: list,
+    location_uuid,
+    zone_uuid,
+    session_id: str,
+    api_key: str,
+    extra_mentions=None,
+) -> None:
+    client = anthropic.Anthropic(api_key=api_key)
+    history = list(messages)
+    system = _system_prompt(location_uuid, zone_uuid, extra_mentions)
     last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
     last_text = ""  # preserves partial answer across turns
 
@@ -221,9 +259,9 @@ def _run(sid: str, messages: list, location_uuid, zone_uuid, session_id: str, ap
                 history.append({"role": "assistant", "content": final_msg.content})
                 results = [
                     {
-                        "type":        "tool_result",
+                        "type": "tool_result",
                         "tool_use_id": block.id,
-                        "content":     _exec_tool(block, location_uuid, zone_uuid, session_id),
+                        "content": _exec_tool(block, location_uuid, zone_uuid, session_id),
                     }
                     for block in final_msg.content
                     if block.type == "tool_use"
@@ -261,7 +299,9 @@ def start(
     sid = _uuid_mod.uuid4().hex
     _dc.set(sid, {"status": "pending", "text": "", "tool": None}, expire=300)
     threading.Thread(
-        target=_run, args=(sid, messages, location_uuid, zone_uuid, session_id, api_key, extra_mentions), daemon=True
+        target=_run,
+        args=(sid, messages, location_uuid, zone_uuid, session_id, api_key, extra_mentions),
+        daemon=True,
     ).start()
     return sid
 

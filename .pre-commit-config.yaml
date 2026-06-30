@@ -31,3 +31,4 @@ repos:
           - --select=E,F,I,W,UP
           - --ignore=E501   # longitud de línea la gestiona black
           - --line-length=100
+        exclude: ^src/lab/
