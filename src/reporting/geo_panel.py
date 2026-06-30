@@ -40,9 +40,8 @@ _METRO_LOGO_SRC = "data:image/svg+xml;base64," + base64.b64encode(_METRO_SVG).de
 # Cada entrada: {lat, lon, label, categoria, valor_relativo (0-1 para tamaño)}
 # categoria: "metro" | "tourist_poi" | "event_venue"
 _SPATIAL_CONTEXT: dict[str, list[dict]] = {
-    # Showroom — Gran Vía 48, Madrid
-    # Footfall CRTM 2025: Sol ~60 k/día (1er puesto), Gran Vía ~32 k, Callao ~24 k
-    "faf7d203-342e-44c6-96e3-1ed64d8252c3": [
+    # Madrid Gran Vía 48 — footfall CRTM 2025: Sol ~60 k/día, Gran Vía ~32 k, Callao ~24 k
+    "251e7f40-95c7-4678-aa48-df1b90e3461c": [
         # Estaciones de metro en la isócrona
         {
             "lat": 40.4193,

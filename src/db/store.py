@@ -743,7 +743,7 @@ def _migrate_location_source_config(conn: PgConn) -> None:
     """Siembra config por defecto para Gran Vía (esri_places, metro_madrid, ine_eoh)."""
     import json as _json
 
-    _GV_UUID = "faf7d203-342e-44c6-96e3-1ed64d8252c3"
+    _GV_UUID = "251e7f40-95c7-4678-aa48-df1b90e3461c"
 
     _ROWS = [
         (
@@ -779,7 +779,7 @@ def _migrate_location_source_config(conn: PgConn) -> None:
 
 def _migrate_location_pois(conn: PgConn) -> None:
     """Siembra los POIs de Gran Vía si la tabla está vacía para esa ubicación."""
-    _GV_UUID = "faf7d203-342e-44c6-96e3-1ed64d8252c3"
+    _GV_UUID = "251e7f40-95c7-4678-aa48-df1b90e3461c"
     already = conn.execute(
         "SELECT 1 FROM location_pois WHERE location_uuid = ? LIMIT 1", [_GV_UUID]
     ).fetchone()
