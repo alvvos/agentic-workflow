@@ -12,11 +12,13 @@ services:
     ports:
       - "5432:5432"
 
-  adminer:
-    image: adminer
+  pgweb:
+    image: sosedoff/pgweb
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "8081:8081"
+    environment:
+      DATABASE_URL: "postgres://admin:Echegaray1%40%232026@db:5432/reporting?sslmode=disable"
     depends_on:
       - db
 
