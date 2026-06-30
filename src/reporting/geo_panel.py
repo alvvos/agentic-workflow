@@ -15,11 +15,50 @@ import math
 import random
 
 import dash_bootstrap_components as dbc
+import dash_leaflet as dl
 import pandas as pd
 import plotly.graph_objects as go
 from dash import dcc, html
+from dash_extensions.javascript import assign
 
 from src.data_processing.geo_enrichment import get_catchment_rings
+
+# ── JS para pines y clusters Leaflet (módulo-nivel — no recrear en callbacks) ──
+_JS_POINT_TO_LAYER = assign(
+    """function(feature, latlng, ctx) {
+    const c = feature.properties.color || '#3388ff';
+    const icon = L.divIcon({
+        className: '',
+        html: '<svg width="22" height="32" viewBox="0 0 22 32" xmlns="http://www.w3.org/2000/svg">' +
+              '<path d="M11 0C4.9 0 0 4.9 0 11c0 8.3 11 21 11 21s11-12.7 11-21C22 4.9 17.1 0 11 0z"' +
+              ' fill="' + c + '" stroke="white" stroke-width="1.5"/>' +
+              '<circle cx="11" cy="11" r="4.5" fill="white" opacity="0.75"/></svg>',
+        iconSize: [22, 32], iconAnchor: [11, 32], popupAnchor: [0, -34]
+    });
+    return L.marker(latlng, {icon}).bindTooltip(
+        '<b>' + feature.properties.name + '</b>' +
+        (feature.properties.detalle ? '<br>' + feature.properties.detalle : ''),
+        {direction: 'top', offset: [0, -30]}
+    );
+}"""
+)
+
+_JS_CLUSTER_TO_LAYER = assign(
+    """function(feature, latlng, index, ctx) {
+    const count = feature.properties.point_count;
+    const c = (ctx.props.hideout && ctx.props.hideout.color) ? ctx.props.hideout.color : '#3388ff';
+    const label = count > 9 ? '+' + count : String(count);
+    const icon = L.divIcon({
+        className: '',
+        html: '<div style="background:' + c + ';color:white;border-radius:50%;width:32px;' +
+              'height:32px;display:flex;align-items:center;justify-content:center;' +
+              'font-weight:700;font-size:12px;border:2px solid white;' +
+              'box-shadow:0 2px 6px rgba(0,0,0,.3)">' + label + '</div>',
+        iconSize: [32, 32], iconAnchor: [16, 16]
+    });
+    return L.marker(latlng, {icon});
+}"""
+)
 
 _C_PRIMARY = "#0052CC"
 _C_DARK = "#2c3e50"
@@ -137,9 +176,6 @@ _SPATIAL_LABELS = {
 _UNIVERSAL_EXT_KEYS = frozenset(
     {
         "ev_festivo_regional",
-        "ev_rank_concierto",
-        "ev_rank_deportivo",
-        "ev_rank_festival",
         "ev_rank_municipal",
         "ev_rank_total",
         "ev_vacaciones_escolares",
@@ -156,12 +192,21 @@ _EXT_SERIES_META = {
     "n_turistas_isocrona": ("Turistas zona 0-15 min", "mean", "#e67e22"),
     "n_pasajeros_crucero_dia": ("Pasajeros crucero", "sum", "#1abc9c"),
 }
+_EV_RANK_KEYS = ["ev_rank_deportivo", "ev_rank_concierto", "ev_rank_festival"]
+_EV_RANK_META = {
+    "ev_rank_deportivo": ("Deportivo", "#e74c3c"),
+    "ev_rank_concierto": ("Concierto", "#8e44ad"),
+    "ev_rank_festival": ("Festival", "#2980b9"),
+}
 _EV_KEYS = {
     "estreno_callao",
     "manifestacion_gran_via",
     "concierto_wizink",
     "festival_madrid",
     "escala_crucero",
+    "tm_concierto",
+    "tm_festival",
+    "tm_deportivo",
 }
 _EV_ICONS = {
     "estreno_callao": "fas fa-film",
@@ -169,6 +214,9 @@ _EV_ICONS = {
     "concierto_wizink": "fas fa-music",
     "festival_madrid": "fas fa-city",
     "escala_crucero": "fas fa-ship",
+    "tm_concierto": "fas fa-music",
+    "tm_festival": "fas fa-star",
+    "tm_deportivo": "fas fa-futbol",
 }
 _EV_LABELS = {
     "estreno_callao": "Estreno",
@@ -176,6 +224,9 @@ _EV_LABELS = {
     "concierto_wizink": "Concierto",
     "festival_madrid": "Evento ciudad",
     "escala_crucero": "Crucero",
+    "tm_concierto": "Concierto",
+    "tm_festival": "Festival",
+    "tm_deportivo": "Deportivo",
 }
 _EV_COLOR = {
     "estreno_callao": "#e67e22",
@@ -183,6 +234,9 @@ _EV_COLOR = {
     "concierto_wizink": "#8e44ad",
     "festival_madrid": "#2980b9",
     "escala_crucero": "#16a085",
+    "tm_concierto": "#8e44ad",
+    "tm_festival": "#2980b9",
+    "tm_deportivo": "#e74c3c",
 }
 _IMP_COLOR = {"alto": "#c0392b", "medio": "#d68910", "bajo": "#27ae60"}
 _MESES_ES_GEO = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
@@ -525,7 +579,87 @@ def _render_area_signals(location_uuid: str):
         )
 
     chart_cols = [c for c in [metro_chart_col, tourist_chart_col] if c is not None]
-    chart_row = dbc.Row(chart_cols, className="g-3 mb-4") if chart_cols else None
+    chart_row = dbc.Row(chart_cols, className="g-3 mb-3") if chart_cols else None
+
+    # ── Gráfico ev_rank (deportivo / concierto / festival) ────────────────────
+    ev_rank_row = None
+    ev_rank_keys_present = [k for k in _EV_RANK_KEYS if any(r[0] == k for r in ts_rows)]
+    if ev_rank_keys_present:
+        df_ev = pd.DataFrame(ts_rows, columns=["fk", "fecha", "value"])
+        df_ev["fecha"] = pd.to_datetime(df_ev["fecha"])
+        df_ev["mes"] = df_ev["fecha"].dt.to_period("M").dt.to_timestamp()
+        fig_ev = go.Figure()
+        for fk in ev_rank_keys_present:
+            label, color = _EV_RANK_META[fk]
+            sub = (
+                df_ev[df_ev["fk"] == fk]
+                .groupby("mes")["value"]
+                .max()
+                .reset_index()
+                .sort_values("mes")
+            )
+            if sub.empty:
+                continue
+            m_lbls = [_MESES_ES_GEO[r.month - 1] for r in sub["mes"].dt.date]
+            fig_ev.add_trace(
+                go.Bar(
+                    x=m_lbls,
+                    y=sub["value"].tolist(),
+                    name=label,
+                    marker_color=color,
+                    opacity=0.85,
+                )
+            )
+        fig_ev.update_layout(
+            barmode="group",
+            plot_bgcolor="white",
+            paper_bgcolor="white",
+            margin=dict(t=28, b=4, l=4, r=4),
+            height=180,
+            legend=dict(
+                orientation="h",
+                x=1,
+                xanchor="right",
+                y=1.12,
+                font=dict(size=10, color=_C_DARK),
+                bgcolor="rgba(0,0,0,0)",
+            ),
+            xaxis=dict(showgrid=False, tickfont=dict(size=9, color="#8c9199")),
+            yaxis=dict(visible=False, range=[0, 110], showgrid=True, gridcolor="#f0f0f0"),
+        )
+        ev_rank_row = dbc.Row(
+            dbc.Col(
+                [
+                    html.Div(
+                        [
+                            html.I(
+                                className="fas fa-ticket-alt me-2",
+                                style={"color": "#8e44ad", "fontSize": "0.72rem"},
+                            ),
+                            html.Span(
+                                "Ranking de eventos · pico mensual (0 – 100)",
+                                style={
+                                    "fontSize": "0.66rem",
+                                    "color": _C_MUTED,
+                                    "textTransform": "uppercase",
+                                    "letterSpacing": "0.45px",
+                                    "fontWeight": "600",
+                                },
+                            ),
+                        ],
+                        className="d-flex align-items-center mb-2",
+                    ),
+                    dcc.Graph(
+                        id=f"ext-evrank-{location_uuid[:8]}",
+                        figure=fig_ev,
+                        config=_CFG,
+                        style={"height": "180px"},
+                    ),
+                ],
+                xs=12,
+            ),
+            className="g-3 mb-4",
+        )
 
     # ── Feed de eventos ───────────────────────────────────────────────────────
     pasados = [(ek, fi, ff, m) for ek, fi, ff, m in ev_rows if fi <= str(hoy)]
@@ -674,6 +808,8 @@ def _render_area_signals(location_uuid: str):
     children = []
     if chart_row:
         children.append(chart_row)
+    if ev_rank_row:
+        children.append(ev_rank_row)
     children.append(feed_row)
 
     return html.Div(
@@ -1705,32 +1841,29 @@ def _fig_mapa(vals, lat, lon, uuid):
     pob5 = vals.get("poblacion_5min")
     comp_seed = int(uuid.replace("-", ""), 16) % (2**31)
 
-    # Isócronas reales Esri ServiceArea — índices [0]=5 min, [1]=10 min, [2]=15 min
     catchment = get_catchment_rings(uuid)
     usa_geo_real = catchment is not None and len(catchment) == 3
 
     fig = go.Figure()
 
-    # Anillos: dibujamos del mayor al menor para que los menores queden encima
+    # ── Isócronas ────────────────────────────────────────────────────────────────
     ring_specs = [
         (2, "rgba(0,82,204,0.07)", "rgba(0,82,204,0.28)", "Isócrona 0-15 min"),
         (1, "rgba(243,156,18,0.10)", "rgba(243,156,18,0.42)", "Isócrona 0-10 min"),
         (0, "rgba(40,167,69,0.15)", "rgba(40,167,69,0.65)", "Isócrona 0-5 min"),
     ]
-
     if usa_geo_real:
         for idx, fill_col, line_col, name in ring_specs:
             ring = catchment[idx]
             if ring is None:
                 continue
-            # Build coordinate arrays: outer ring + any holes (holes separated by None).
             lats = list(ring["lats"])
             lons = list(ring["lons"])
             for hole in ring.get("holes", []):
                 lats += [None] + list(hole["lats"])
                 lons += [None] + list(hole["lons"])
             fig.add_trace(
-                go.Scattermapbox(
+                go.Scattermap(
                     lat=lats,
                     lon=lons,
                     mode="lines",
@@ -1742,33 +1875,42 @@ def _fig_mapa(vals, lat, lon, uuid):
                 )
             )
 
+    # ── Competidores (pines rojos con clustering) ─────────────────────────────
     if n_comp > 0:
         comps = _mock_competitors(lat, lon, n_comp, dist_near, comp_seed)
         fig.add_trace(
-            go.Scattermapbox(
+            go.Scattermap(
                 lat=[c[0] for c in comps],
                 lon=[c[1] for c in comps],
                 mode="markers",
-                marker=dict(size=11, color=_C_RED, opacity=0.85),
+                marker=dict(size=14, color=_C_RED, opacity=0.90),
+                cluster=dict(
+                    enabled=True,
+                    color=_C_RED,
+                    opacity=0.80,
+                    size=22,
+                    step=[-1, 5, 15],
+                    maxzoom=16,
+                ),
                 name=f"Competidores ({n_comp})",
                 customdata=[c[2] for c in comps],
                 hovertemplate="<b>Competidor</b><br>a ~%{customdata:,.0f} m<extra></extra>",
             )
         )
 
-    # Contexto espacial externo — POIs desde DB (fallback a hardcoded)
+    # ── POIs por categoría (pines de color + clustering) ──────────────────────
     spatial_pois = _get_pois(uuid)
     if spatial_pois:
         from itertools import groupby
         from operator import itemgetter
 
-        # Efecto sonar: anillos concéntricos para polos de alta afluencia
+        # Sonar: anillos concéntricos para polos de alta afluencia (sin cluster)
         sonar_items = [p for p in spatial_pois if p.get("sonar")]
         for p in sonar_items:
             color_s = _SPATIAL_COLORS.get(p["categoria"], ("#f39c12", 14))[0]
             for ring_size, ring_alpha in [(44, 0.04), (32, 0.09), (20, 0.18)]:
                 fig.add_trace(
-                    go.Scattermapbox(
+                    go.Scattermap(
                         lat=[p["lat"]],
                         lon=[p["lon"]],
                         mode="markers",
@@ -1778,33 +1920,41 @@ def _fig_mapa(vals, lat, lon, uuid):
                     )
                 )
 
-        # Marcadores principales agrupados por categoría
+        # Pines agrupados por categoría con clustering por zoom
         for cat, items in groupby(
             sorted(spatial_pois, key=itemgetter("categoria")), key=itemgetter("categoria")
         ):
             items = list(items)
-            color, base_size = _SPATIAL_COLORS.get(cat, ("#95a5a6", 12))
+            color, _ = _SPATIAL_COLORS.get(cat, ("#95a5a6", 12))
             lats = [p["lat"] for p in items]
             lons = [p["lon"] for p in items]
-            sizes = [max(9, int(base_size * p.get("valor", 0.5))) for p in items]
             tips = [f"<b>{p['label']}</b><br>{p.get('detalle', '')}<extra></extra>" for p in items]
             fig.add_trace(
-                go.Scattermapbox(
+                go.Scattermap(
                     lat=lats,
                     lon=lons,
                     mode="markers",
-                    marker=dict(size=sizes, color=color, opacity=0.90),
+                    marker=dict(size=14, color=color, opacity=0.92),
+                    cluster=dict(
+                        enabled=True,
+                        color=color,
+                        opacity=0.85,
+                        size=24,
+                        step=[-1, 3, 8],
+                        maxzoom=16,
+                    ),
                     name=_SPATIAL_LABELS.get(cat, cat),
                     hovertemplate=tips,
                 )
             )
 
+    # ── Marcador de la tienda (pin azul grande, sin cluster) ──────────────────
     store_tip = "<b>Tu ubicación</b>"
     if pob5:
         store_tip += f"<br>{pob5:,.0f} hab. en isócrona 0-5 min"
     store_tip += "<extra></extra>"
     fig.add_trace(
-        go.Scattermapbox(
+        go.Scattermap(
             lat=[lat],
             lon=[lon],
             mode="markers",
@@ -1814,10 +1964,10 @@ def _fig_mapa(vals, lat, lon, uuid):
         )
     )
 
-    # Campo vectorial de flujo peatonal — capa activable vía leyenda
-    vf_lats, vf_lons = _flow_vectors(lat, lon, spatial_pois)
+    # ── Campo vectorial de flujo peatonal (activable desde leyenda) ───────────
+    vf_lats, vf_lons = _flow_vectors(lat, lon, spatial_pois if spatial_pois else [])
     fig.add_trace(
-        go.Scattermapbox(
+        go.Scattermap(
             lat=vf_lats,
             lon=vf_lons,
             mode="lines",
@@ -1830,7 +1980,7 @@ def _fig_mapa(vals, lat, lon, uuid):
     )
 
     fig.update_layout(
-        mapbox=dict(style="carto-positron", center=dict(lat=lat, lon=lon), zoom=14),
+        map=dict(style="carto-positron", center=dict(lat=lat, lon=lon), zoom=14),
         margin=dict(t=0, b=0, l=0, r=0),
         showlegend=True,
         legend=dict(
@@ -2333,6 +2483,115 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
     )
 
 
+# ── Mapa Leaflet (pines + clustering) ────────────────────────────────────────
+
+
+def _leaflet_mapa(vals: dict, lat: float, lon: float, uuid: str):
+    """Mapa dash-leaflet con pines SVG por categoría y clustering por zoom."""
+    pob5 = vals.get("poblacion_5min")
+
+    layers = [
+        dl.TileLayer(
+            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+            attribution="© OpenStreetMap contributors © CARTO",
+            maxZoom=19,
+        )
+    ]
+
+    # Isócronas — del mayor al menor para que los menores queden encima
+    catchment = get_catchment_rings(uuid)
+    ring_styles = [
+        (2, "#0052CC", 0.07, 0.30),
+        (1, "#f39c12", 0.10, 0.45),
+        (0, "#28A745", 0.15, 0.65),
+    ]
+    if catchment and len(catchment) == 3:
+        for idx, color_hex, fill_op, stroke_op in ring_styles:
+            ring = catchment[idx]
+            if ring is None:
+                continue
+            coords = [list(zip(ring["lons"], ring["lats"]))]
+            for hole in ring.get("holes", []):
+                coords.append(list(zip(hole["lons"], hole["lats"])))
+            layers.append(
+                dl.GeoJSON(
+                    data={
+                        "type": "Feature",
+                        "properties": {},
+                        "geometry": {"type": "Polygon", "coordinates": coords},
+                    },
+                    style={
+                        "color": color_hex,
+                        "weight": 2,
+                        "opacity": stroke_op,
+                        "fillColor": color_hex,
+                        "fillOpacity": fill_op,
+                    },
+                    id=f"ring-{idx}-{uuid[:8]}",
+                )
+            )
+
+    # POIs por categoría con clustering
+    spatial_pois = _get_pois(uuid)
+    if spatial_pois:
+        from itertools import groupby
+        from operator import itemgetter
+
+        for cat, items in groupby(
+            sorted(spatial_pois, key=itemgetter("categoria")), key=itemgetter("categoria")
+        ):
+            items = list(items)
+            color, _ = _SPATIAL_COLORS.get(cat, ("#95a5a6", 12))
+            layers.append(
+                dl.GeoJSON(
+                    data={
+                        "type": "FeatureCollection",
+                        "features": [
+                            {
+                                "type": "Feature",
+                                "geometry": {"type": "Point", "coordinates": [p["lon"], p["lat"]]},
+                                "properties": {
+                                    "name": p["label"],
+                                    "detalle": p.get("detalle", ""),
+                                    "color": color,
+                                },
+                            }
+                            for p in items
+                        ],
+                    },
+                    cluster=True,
+                    pointToLayer=_JS_POINT_TO_LAYER,
+                    zoomToBoundsOnClick=True,
+                    superClusterOptions={"radius": 80, "maxZoom": 15},
+                    id=f"poi-{cat}-{uuid[:8]}",
+                )
+            )
+
+    # Marcador de la tienda
+    store_tip = "Tu ubicación"
+    if pob5:
+        store_tip += f" · {pob5:,.0f} hab. en 5 min"
+    layers.append(
+        dl.CircleMarker(
+            center=[lat, lon],
+            radius=12,
+            color="white",
+            weight=3,
+            fillColor=_C_PRIMARY,
+            fillOpacity=1.0,
+            children=[dl.Tooltip(store_tip)],
+        )
+    )
+
+    return dl.MapContainer(
+        layers,
+        center=[lat, lon],
+        zoom=14,
+        style={"height": "520px", "width": "100%"},
+        id=f"leaflet-map-{uuid[:8]}",
+    )
+
+
 # ── Mapa standalone (visible sin abrir acordeón) ──────────────────────────────
 
 
@@ -2346,9 +2605,6 @@ def generar_mapa_contexto(location_uuid: str, vals: dict) -> html.Div | None:
         return None
 
     activos = {k: v for k, v in vals.items() if v is not None}
-    fig = _fig_mapa(activos, lat, lon, location_uuid)
-    if fig is None:
-        return None
 
     catchment = get_catchment_rings(location_uuid)
     leyenda_rings = []
@@ -2390,11 +2646,7 @@ def generar_mapa_contexto(location_uuid: str, vals: dict) -> html.Div | None:
                 ],
                 className="d-flex align-items-center px-3 py-2 border-bottom bg-white",
             ),
-            dcc.Graph(
-                figure=fig,
-                config={"displayModeBar": False, "scrollZoom": True},
-                style={"height": "520px"},
-            ),
+            _leaflet_mapa(activos, lat, lon, location_uuid),
         ],
         className="border-0 shadow-sm rounded-4 overflow-hidden mb-3 bg-white",
     )
