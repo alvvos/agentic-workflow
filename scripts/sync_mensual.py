@@ -40,35 +40,35 @@ class SyncJob(NamedTuple):
 
 
 def _cargar_jobs(periodicidad: str) -> dict[str, list[SyncJob]]:
-    """Lee feature_flags y devuelve {source: [SyncJob, ...]} para la periodicidad dada."""
+    """Lee activacion_señales y devuelve {fuente: [SyncJob, ...]} para la periodicidad dada."""
     from src.db.store import get_conn
 
     conn = get_conn()
     filas = conn.execute(
         """
-        SELECT ff.feature_key, ff.location_uuid, fr.source, ff.periodicidad
-          FROM feature_flags ff
-          JOIN feature_registry fr ON fr.feature_key = ff.feature_key
+        SELECT ff.señal_id, ff.ubicacion_id, fr.fuente, ff.periodicidad
+          FROM activacion_señales ff
+          JOIN señales fr ON fr.señal_id = ff.señal_id
          WHERE ff.status IN ('contexto', 'active')
            AND ff.periodicidad = ?
-         ORDER BY fr.source, ff.location_uuid
+         ORDER BY fr.fuente, ff.ubicacion_id
         """,
         [periodicidad],
     ).fetchall()
 
     groups: dict[str, list[SyncJob]] = defaultdict(list)
-    for feature_key, location_uuid, source, per in filas:
-        groups[source].append(SyncJob(feature_key, location_uuid, per))
+    for señal_id, ubicacion_id, fuente, per in filas:
+        groups[fuente].append(SyncJob(señal_id, ubicacion_id, per))
     return dict(groups)
 
 
 def _cargar_sources_lsc() -> set[str]:
-    """Sources con configuración activa en location_source_config."""
+    """Sources con configuración activa en config_fuentes."""
     from src.db.store import get_conn
 
     rows = (
         get_conn()
-        .execute("SELECT DISTINCT source FROM location_source_config WHERE activo = TRUE")
+        .execute("SELECT DISTINCT fuente FROM config_fuentes WHERE activo = TRUE")
         .fetchall()
     )
     return {r[0] for r in rows}
@@ -76,35 +76,50 @@ def _cargar_sources_lsc() -> set[str]:
 
 def _build_ingestores(hoy: date) -> dict[str, Callable]:
     """
-    Auto-descubre ingestores desde src/data_ingestion/mensual/.
-
-    Para añadir una señal nueva:
-      1. Crear src/data_ingestion/mensual/<source>.py con SOURCE, sync() y CATALOG_ENTRY.
-      2. Nada más — el scanner lo registra automáticamente aquí y en Context Scout.
+    Construye {source: adapter_fn} leyendo las fuentes mensuales activas de la DB.
+    Cada adapter_fn acepta (jobs, fecha) y delega en el conector correspondiente.
     """
-    from src.data_ingestion.sync_mensual import _HANDLERS
+    import importlib
 
-    # Devuelve {source: sync_fn} usando la interfaz sync(jobs, fecha) de cada handler.
-    # Los handlers en sync_mensual usan la firma (loc_uuid, params, max_age_hours, verbose),
-    # por lo que construimos adaptadores compatibles con la interfaz sync(jobs, fecha).
-    def _make_sync_adapter(handler_fn):
-        from src.data_ingestion._common import get_configured_locations
+    from src.data_ingestion._common import get_configured_locations, get_source_config
+    from src.db.store import get_conn
+
+    rows = (
+        get_conn()
+        .execute(
+            "SELECT fuente, config FROM fuentes WHERE periodicidad = 'mensual' AND activo = TRUE"
+        )
+        .fetchall()
+    )
+
+    def _make_adapter(fuente_nombre: str, config: dict) -> Callable | None:
+        tipo = config.get("tipo_conector") if config else None
+        if not tipo:
+            return None
+        try:
+            conector = importlib.import_module(f"src.conectores.{tipo}")
+        except ModuleNotFoundError:
+            return None
 
         def _adapter(jobs, fecha):
-            from src.data_ingestion.sync_mensual import _HANDLERS as _h  # noqa: F401
-
-            # Descubrir el source de este handler
-            source = next((k for k, v in _h.items() if v is handler_fn), None)
-            if source is None:
-                return 0
             total = 0
-            for lu, params in get_configured_locations(source):
-                total += handler_fn(lu, params, 0, True)
+            for lu, params in get_configured_locations(fuente_nombre):
+                cfg = get_source_config(fuente_nombre, params)
+                try:
+                    total += conector.sync(lu, cfg, True)
+                except Exception as e:
+                    log = logging.getLogger("sync_mensual")
+                    log.warning("  [%s] %s ERROR — %s", fuente_nombre, lu, e)
             return total
 
         return _adapter
 
-    return {src: _make_sync_adapter(fn) for src, fn in _HANDLERS.items()}
+    ingestores = {}
+    for fuente_nombre, config in rows:
+        adapter = _make_adapter(fuente_nombre, config)
+        if adapter is not None:
+            ingestores[fuente_nombre] = adapter
+    return ingestores
 
 
 # ── Tasks Prefect ─────────────────────────────────────────────────────────────

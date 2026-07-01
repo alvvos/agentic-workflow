@@ -532,6 +532,7 @@ def _apply_ddl(conn: PgConn) -> None:
     _migrate_config_fuentes(conn)
     _migrate_registries(conn)
     _migrate_fuentes(conn)
+    _migrar_tipo_conector(conn)
     _sync_users_from_json(conn)
 
 
@@ -1735,6 +1736,32 @@ def _migrate_fuentes(conn: PgConn) -> None:
                 _json.dumps(entry["params_ejemplo"], ensure_ascii=False),
                 _json.dumps(entry["config"], ensure_ascii=False),
             ],
+        )
+
+
+def _migrar_tipo_conector(conn: PgConn) -> None:
+    """
+    Añade tipo_conector (y modulo/modo donde aplique) al campo config de cada fuente.
+    Idempotente: usa jsonb merge (||) — si el campo ya existe, lo sobreescribe con el mismo valor.
+    """
+    import json as _json
+
+    mapeo = {
+        "weather": {"tipo_conector": "meteorologia"},
+        "open_holidays": {"tipo_conector": "festivos_calendario"},
+        "ticketmaster": {"tipo_conector": "eventos_api", "modulo": "ticketmaster"},
+        "thesportsdb": {"tipo_conector": "eventos_api", "modulo": "thesportsdb"},
+        "agenda_es": {"tipo_conector": "eventos_api", "modulo": "agenda_es"},
+        "cruceros": {"tipo_conector": "agenda_ajax_tabla"},
+        "metro_madrid": {"tipo_conector": "excel_mensual", "modo": "url"},
+        "puertos_estado": {"tipo_conector": "excel_mensual", "modo": "listado"},
+        "ine_eoh": {"tipo_conector": "series_estadisticas"},
+        "esri_places": {"tipo_conector": "pois_radio"},
+    }
+    for fuente, extra_config in mapeo.items():
+        conn.execute(
+            "UPDATE fuentes SET config = config || %s::jsonb WHERE fuente = %s",
+            [_json.dumps(extra_config), fuente],
         )
 
 
