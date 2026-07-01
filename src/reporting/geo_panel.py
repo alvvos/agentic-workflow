@@ -97,7 +97,7 @@ _METRO_LOGO_SRC = "data:image/svg+xml;base64," + base64.b64encode(_METRO_SVG).de
 
 # ── Señales externas de área ──────────────────────────────────────────────────
 # El contexto espacial (POIs) y los metadatos visuales por categoría (label,
-# color, icono) viven en location_pois y poi_category_registry.  Ver _get_pois
+# color, icono) viven en location_pois y categorias_poi. Ver _get_pois
 # y _load_geo_meta más abajo.
 
 

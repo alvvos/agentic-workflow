@@ -16,7 +16,7 @@ from src.db.store import get_conn
 def _load_poi_categories(conn=None) -> dict:
     """
     Devuelve {category: {label, icon_cls, color, badge_color}} desde
-    poi_category_registry. Fuente única para los displays de POI.
+    categorias_poi. Fuente única para los displays de POI.
     """
     try:
         c = conn or get_conn()

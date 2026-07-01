@@ -85,7 +85,7 @@ dias_semana_es = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado
 dias_corto = ["L", "M", "X", "J", "V", "S", "D"]
 
 
-# ── Zone helpers — display metadata desde zone_type_registry ─────────────────
+# ── Zone helpers — display metadata desde tipos_zona ─────────────────────────
 
 
 def _detect_zone_type(zona: str) -> str:
@@ -104,7 +104,7 @@ def _load_zone_meta(conn) -> dict:
     """Devuelve {zone_type: {label, icon_cls, color, tooltip}} desde DB."""
     try:
         rows = conn.execute(
-            "SELECT zone_type, label, icon_cls, color, tooltip FROM zone_type_registry"
+            "SELECT zone_type, label, icon_cls, color, tooltip FROM tipos_zona"
         ).fetchall()
         return {
             zt: {"label": lbl, "icon_cls": icon, "color": col, "tooltip": tt or ""}
@@ -156,7 +156,7 @@ def _load_narrative_meta(conn) -> tuple[dict, dict, list]:
 
 
 def _color_zona(zona) -> str:
-    """Compat: devuelve el color de una zona usando zone_type_registry."""
+    """Compat: devuelve el color de una zona usando tipos_zona."""
     try:
         from src.db.store import get_conn
 
@@ -1143,7 +1143,7 @@ def _render_narrativa(items, extras=None):
     Solo aparecen tabs que tengan al menos un insight o extra content.
 
     Categorías, etiquetas, iconos y colores de nivel se cargan desde
-    narrative_category_registry y alert_level_registry.
+    categorias_narrativa y niveles_alerta.
     """
     try:
         from src.db.store import get_conn
