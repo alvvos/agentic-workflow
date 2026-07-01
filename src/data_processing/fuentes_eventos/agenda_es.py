@@ -66,3 +66,29 @@ def fetch_agenda_ciudad(
     if source["format"] == "madrid_egob":
         return _parse_madrid_egob(data, date_from, date_to)
     return []
+
+
+def sync(ubicacion: dict, cfg: dict, date_from: date, date_to: date) -> tuple[dict, list]:
+    ciudad = ubicacion.get("city", "")
+    if not ciudad:
+        return {}, []
+    ubicacion_id = ubicacion["ubicacion_id"]
+    events = fetch_agenda_ciudad(ciudad, date_from, date_to)
+    daily: dict[date, dict] = {}
+    raw_rows: list[dict] = []
+    for ev in events:
+        d = ev["fecha"]
+        if d not in daily:
+            daily[d] = {"ev_rank_municipal": 0}
+        daily[d]["ev_rank_municipal"] = max(daily[d]["ev_rank_municipal"], ev["score"])
+        raw_rows.append(
+            {
+                "evento_key": "evento_municipal",
+                "fecha_inicio": d,
+                "fecha_fin": d,
+                "fuente": "agenda_opendata",
+                "source_key": f"muni:{ubicacion_id}:{ev['source_key']}",
+                "metadata": {"titulo": ev["titulo"], "categoria": ev["categoria"]},
+            }
+        )
+    return daily, raw_rows

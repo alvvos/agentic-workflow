@@ -211,3 +211,21 @@ def events_to_raw_rows(events: list[dict], location_uuid: str) -> list[dict]:
         rows.append(r)
 
     return rows
+
+
+def sync(ubicacion: dict, cfg: dict, date_from: date, date_to: date) -> tuple[dict, list]:
+    if not _key():
+        return {}, []
+    raw = fetch_events_raw(ubicacion["lat"], ubicacion["lon"], date_from, date_to)
+    scores = events_to_daily_scores(raw)
+    rows = events_to_raw_rows(raw, ubicacion["ubicacion_id"])
+    daily = {
+        d: {
+            "ev_rank_deportivo": cats.get("deportivo", 0),
+            "ev_rank_concierto": cats.get("concierto", 0),
+            "ev_rank_festival": cats.get("festival", 0),
+        }
+        for d, cats in scores.items()
+        if date_from <= d <= date_to
+    }
+    return daily, rows

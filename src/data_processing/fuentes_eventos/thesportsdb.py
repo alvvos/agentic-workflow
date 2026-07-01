@@ -323,3 +323,36 @@ def get_events_for_city(
         _process_events(_fetch_past_league(league_id))
 
     return results
+
+
+def sync(ubicacion: dict, cfg: dict, date_from: date, date_to: date) -> tuple[dict, list]:
+    ciudad = ubicacion.get("city", "")
+    if not ciudad:
+        return {}, []
+    ubicacion_id = ubicacion["ubicacion_id"]
+    pais_codigo = ubicacion["pais_codigo"]
+    events = get_events_for_city(ciudad, pais_codigo, date_from, date_to)
+    daily: dict[date, dict] = {}
+    raw_rows: list[dict] = []
+    for ev in events:
+        d = ev["fecha"]
+        if d not in daily:
+            daily[d] = {"ev_rank_deportivo": 0}
+        daily[d]["ev_rank_deportivo"] = max(daily[d]["ev_rank_deportivo"], ev["score"])
+        raw_rows.append(
+            {
+                "evento_key": "partido_deportivo",
+                "fecha_inicio": d,
+                "fecha_fin": d,
+                "fuente": ev["fuente"],
+                "source_key": f"tsdb:{ubicacion_id}:{ev['source_key']}",
+                "metadata": {
+                    "evento": ev["evento"],
+                    "liga": ev["liga"],
+                    "sede": ev.get("sede", ""),
+                    "ciudad_sede": ev.get("ciudad_sede", ""),
+                    "es_local": ev.get("es_local", True),
+                },
+            }
+        )
+    return daily, raw_rows
