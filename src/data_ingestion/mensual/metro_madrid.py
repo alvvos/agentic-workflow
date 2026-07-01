@@ -23,7 +23,7 @@ Configuración en location_source_config (source = 'metro_madrid'):
     "anyo_url": "https://www.metromadrid.es/export/sites/metro/comun/documentos/viajeros/Estadistica_{year}.xlsx"
   }
 
-El campo "anyo_url" es opcional — si no se especifica se usa _DEFAULT_URL_PATTERN.
+El campo "anyo_url" es obligatorio en location_source_config — sin él la ubicación se omite.
 
 Escribe en store_features_ext con periodicidad diaria (valor mensual distribuido
 uniformemente en los días del mes).
@@ -79,7 +79,7 @@ CATALOG_ENTRY = {
     "params_schema": (
         "{'estaciones': [{'nombre': '<nombre exacto en el Excel de Metro Madrid>', "
         "'slug': '<snake_case del nombre>'}], "
-        "'anyo_url': '<opcional — URL pattern con {year}>'}. "
+        "'anyo_url': '<URL pattern con {year}, ej: https://www.metromadrid.es/.../Estadistica_{year}.xlsx>'}. "
         "Incluir las 2-4 estaciones de Metro de Madrid a ≤800 m de las coordenadas."
     ),
     "params_ejemplo": {
@@ -91,10 +91,6 @@ CATALOG_ENTRY = {
 }
 
 _TIMEOUT = 30
-_DEFAULT_URL_PATTERN = (
-    "https://www.metromadrid.es/export/sites/metro/comun/documentos/viajeros/"
-    "Estadistica_{year}.xlsx"
-)
 
 _MESES_COL = [
     "enero",
@@ -130,8 +126,8 @@ def _get_configured_locations() -> list[tuple[str, list[dict], str]]:
     for loc_uuid, params_raw in rows:
         params = params_raw if isinstance(params_raw, dict) else json.loads(params_raw or "{}")
         estaciones = params.get("estaciones", [])
-        url_pattern = params.get("anyo_url") or _DEFAULT_URL_PATTERN
-        if estaciones:
+        url_pattern = params.get("anyo_url")
+        if estaciones and url_pattern:
             result.append((loc_uuid, estaciones, url_pattern))
     return result
 
