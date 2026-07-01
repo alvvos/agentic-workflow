@@ -54,12 +54,12 @@ def main() -> int:
         errores += 1
 
     # ── Fase B: Contexto exterior (periodicidad=diaria) ───────────────
-    log.info("Fase B — Prefetch contexto (excluye cruceros)")
+    log.info("Fase B — Prefetch contexto")
     try:
         from src.data_ingestion.prefetch.run_all import run as prefetch_run
 
         results = prefetch_run(
-            skip={"cruceros"},
+            skip=set(),
             max_age_hours=20,  # salta si ya corrió en las últimas 20h
             verbose=True,
         )
