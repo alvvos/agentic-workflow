@@ -1801,7 +1801,7 @@ def _migrar_config_thesportsdb(conn: PgConn) -> None:
     import json as _json
 
     ya_migrado = conn.execute(
-        "SELECT config ? 'ligas' FROM fuentes WHERE fuente = 'thesportsdb'"
+        "SELECT (config -> 'ligas') IS NOT NULL FROM fuentes WHERE fuente = 'thesportsdb'"
     ).fetchone()
     if ya_migrado and ya_migrado[0]:
         return
