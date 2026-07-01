@@ -1,5 +1,5 @@
 """
-Helpers compartidos para todos los scripts de prefetch.
+Helpers compartidos para todos los ingestores diarios y mensuales.
 
 Cada source usa un sync marker (_sync_{source}) para rastrear su última ejecución
 de forma unívoca — sin depender del nombre de columna ML (que es compartido entre sources).

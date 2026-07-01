@@ -169,7 +169,7 @@ def cargar_todas_ubicaciones(
     fecha_entrega   Fecha ISO 8601 de la entrega. None → hoy.
     dry_run         Si True, imprime qué haría sin escribir nada en el store.
     """
-    from src.data_ingestion.prefetch.geo import ingestar_snapshot_esri
+    from src.data_ingestion.geo import ingestar_snapshot_esri
     from src.db.store import get_conn
 
     conn = get_conn()

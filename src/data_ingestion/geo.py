@@ -7,8 +7,8 @@ Los datos llegan de Esri y se ingresan via ingestar_snapshot_esri().
 run() devuelve el estado actual de features geo por location (auditoría).
 
 CLI:
-    python -m src.data_ingestion.prefetch.geo                  # estado de todas
-    python -m src.data_ingestion.prefetch.geo --location UUID  # solo una
+    python -m src.data_ingestion.geo                  # estado de todas
+    python -m src.data_ingestion.geo --location UUID  # solo una
 """
 
 from __future__ import annotations
@@ -287,7 +287,7 @@ def run(
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    from src.data_ingestion.prefetch._common import make_parser
+    from src.data_ingestion.diaria._common import make_parser
 
     parser = make_parser("geoespacial Esri (auditoría de store_geo_snapshots)")
     # max-age y force no aplican, pero se incluyen por convención

@@ -34,8 +34,6 @@ CLI:
 
 from __future__ import annotations
 
-import calendar
-import json
 import sys
 from datetime import date
 from pathlib import Path
@@ -44,8 +42,12 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from src.data_ingestion.prefetch._common import is_fresh, write_sync_marker
-from src.db.store import get_conn
+from src.data_ingestion.diaria._common import is_fresh, write_sync_marker
+from src.data_ingestion.mensual._common import (
+    ensure_feature_registry,
+    get_configured_locations,
+    write_month_uniform,
+)
 
 # ── Declaraciones de paquete mensual ─────────────────────────────────────────
 
@@ -97,21 +99,7 @@ _FK_PERNOCTACIONES = "ine_pernoctaciones_hoteleras"
 
 
 def _get_configured_locations() -> list[tuple[str, dict]]:
-    rows = (
-        get_conn()
-        .execute(
-            "SELECT location_uuid, params "
-            "FROM location_source_config "
-            "WHERE source = 'ine_eoh' AND activo = TRUE"
-        )
-        .fetchall()
-    )
-    result = []
-    for loc_uuid, params_raw in rows:
-        params = params_raw if isinstance(params_raw, dict) else json.loads(params_raw or "{}")
-        if params.get("provincia_nombre"):
-            result.append((loc_uuid, params))
-    return result
+    return [(lu, p) for lu, p in get_configured_locations(SOURCE) if p.get("provincia_nombre")]
 
 
 # ── INE API helpers ───────────────────────────────────────────────────────────
@@ -169,51 +157,6 @@ def _find_series(
 # ── Escritura en DB ───────────────────────────────────────────────────────────
 
 
-def _ensure_feature_registry(feature_key: str, descripcion: str) -> None:
-    conn = get_conn()
-    conn.execute(
-        "INSERT INTO feature_registry "
-        "(feature_key, source, notas, categoria) "
-        "VALUES (?,?,?,?) ON CONFLICT (feature_key) DO NOTHING",
-        [feature_key, SOURCE, descripcion, "turismo"],
-    )
-
-
-def _write_month(
-    year: int,
-    month: int,
-    total: float,
-    location_uuid: str,
-    feature_key: str,
-    verbose: bool = False,
-) -> int:
-    if total <= 0:
-        return 0
-    today = date.today()
-    last_day = calendar.monthrange(year, month)[1]
-    if date(year, month, last_day) >= today:
-        return 0
-
-    val_per_day = total / last_day
-    rows = [
-        (str(date(year, month, d)), location_uuid, feature_key, val_per_day)
-        for d in range(1, last_day + 1)
-    ]
-    get_conn().executemany(
-        "INSERT INTO store_features_ext (fecha, location_uuid, feature_key, value) "
-        "VALUES (?,?,?,?) "
-        "ON CONFLICT (fecha, location_uuid, feature_key) "
-        "DO UPDATE SET value = excluded.value, ingested_at = NOW()",
-        rows,
-    )
-    if verbose:
-        print(
-            f"  [ine_eoh] {feature_key} {month:02d}/{year}: "
-            f"{total:,.0f} → {val_per_day:.1f}/día"
-        )
-    return len(rows)
-
-
 # ── Sync principal ────────────────────────────────────────────────────────────
 
 
@@ -250,12 +193,14 @@ def sync_location(
                     for yr, mes, val in _parse_serie_mensual(s):
                         agg[(yr, mes)] = val  # total directo
 
-            _ensure_feature_registry(
+            ensure_feature_registry(
                 _FK_VIAJEROS,
+                SOURCE,
+                "turismo",
                 f"Viajeros hoteleros estimados — {provincia} (INE EOH)",
             )
             for (yr, mes), val in sorted(agg.items()):
-                total += _write_month(yr, mes, val, location_uuid, _FK_VIAJEROS, verbose)
+                total += write_month_uniform(yr, mes, val, location_uuid, _FK_VIAJEROS, verbose)
     except Exception as e:
         if verbose:
             print(f"  [ine_eoh] viajeros ERROR — {e}")
@@ -278,12 +223,16 @@ def sync_location(
                 for yr, mes, val in _parse_serie_mensual(s):
                     agg_p[(yr, mes)] = val
 
-            _ensure_feature_registry(
+            ensure_feature_registry(
                 _FK_PERNOCTACIONES,
+                SOURCE,
+                "turismo",
                 f"Pernoctaciones hoteleras estimadas — {provincia} (INE EOH)",
             )
             for (yr, mes), val in sorted(agg_p.items()):
-                total += _write_month(yr, mes, val, location_uuid, _FK_PERNOCTACIONES, verbose)
+                total += write_month_uniform(
+                    yr, mes, val, location_uuid, _FK_PERNOCTACIONES, verbose
+                )
     except Exception as e:
         if verbose:
             print(f"  [ine_eoh] pernoctaciones ERROR — {e}")

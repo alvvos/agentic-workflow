@@ -104,7 +104,7 @@ def _cruceros_calendario(hoy: date) -> int:
     """Refresca el calendario completo de escalas (ene año-anterior → dic año-actual)."""
     logger = get_run_logger()
     try:
-        from src.data_ingestion.prefetch.cruceros import sync_months
+        from src.data_ingestion.diaria.cruceros import sync_months
 
         n = sync_months(desde=(1, hoy.year - 1), hasta=(12, hoy.year))
         logger.info("cruceros-calendario — %d escalas", n)
@@ -118,7 +118,7 @@ def _cruceros_calendario(hoy: date) -> int:
 def _geo_audit() -> list[str]:
     logger = get_run_logger()
     try:
-        from src.data_ingestion.prefetch.geo import listar_estado
+        from src.data_ingestion.geo import listar_estado
 
         estado = listar_estado(verbose=False)
         sin_datos = [e["nombre"] for e in estado if not e.get("tiene_datos")]

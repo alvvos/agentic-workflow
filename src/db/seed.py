@@ -241,7 +241,7 @@ def seed_feature_registry() -> int:
     ]:
         entries.append((key, "open_meteo", "clima", '"all"', None, "con_cobertura", None, nota))
 
-    # Port data — Málaga Muelle 1 only (prefetch: src/data_ingestion/prefetch/cruceros.py)
+    # Port data — Málaga Muelle 1 only (prefetch: src/data_ingestion/diaria/cruceros.py)
     entries.append(
         (
             "n_pasajeros_crucero_dia",
@@ -252,7 +252,7 @@ def seed_feature_registry() -> int:
             "con_cobertura",
             None,
             "Escalas de cruceros en Puerto Málaga. Fuente: puertomalaga.com WP-AJAX. "
-            "Prefetch automático en src/data_ingestion/prefetch/cruceros.py.",
+            "Prefetch automático en src/data_ingestion/diaria/cruceros.py.",
         )
     )
 

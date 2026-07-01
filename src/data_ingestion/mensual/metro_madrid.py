@@ -36,9 +36,7 @@ CLI:
 
 from __future__ import annotations
 
-import calendar
 import io
-import json
 import sys
 import warnings
 from datetime import date
@@ -48,7 +46,12 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from src.data_ingestion.prefetch._common import is_fresh, write_sync_marker
+from src.data_ingestion.diaria._common import is_fresh, write_sync_marker
+from src.data_ingestion.mensual._common import (
+    ensure_feature_registry,
+    get_configured_locations,
+    write_month_uniform,
+)
 from src.db.store import get_conn
 
 # ── Declaraciones de paquete mensual ─────────────────────────────────────────
@@ -113,18 +116,8 @@ _MESES_COL = [
 
 def _get_configured_locations() -> list[tuple[str, list[dict], str]]:
     """Returns [(location_uuid, estaciones, url_pattern), ...]."""
-    rows = (
-        get_conn()
-        .execute(
-            "SELECT location_uuid, params "
-            "FROM location_source_config "
-            "WHERE source = 'metro_madrid' AND activo = TRUE"
-        )
-        .fetchall()
-    )
     result = []
-    for loc_uuid, params_raw in rows:
-        params = params_raw if isinstance(params_raw, dict) else json.loads(params_raw or "{}")
+    for loc_uuid, params in get_configured_locations(SOURCE):
         estaciones = params.get("estaciones", [])
         url_pattern = params.get("anyo_url")
         if estaciones and url_pattern:
@@ -243,61 +236,15 @@ def _parse_excel_year(
 # ── Escritura en DB ───────────────────────────────────────────────────────────
 
 
-def _write_month(
-    year: int,
-    month: int,
-    total_validaciones: int,
-    location_uuid: str,
-    slug: str,
-    verbose: bool = False,
-) -> int:
-    if total_validaciones <= 0:
-        return 0
-    today = date.today()
-    last_day = calendar.monthrange(year, month)[1]
-    if date(year, month, last_day) >= today:
-        return 0
-
-    feature_key = f"afluencia_metro_{slug}"
-    val_per_day = total_validaciones / last_day
-    rows = [
-        (str(date(year, month, d)), location_uuid, feature_key, val_per_day)
-        for d in range(1, last_day + 1)
-    ]
-    get_conn().executemany(
-        "INSERT INTO store_features_ext (fecha, location_uuid, feature_key, value) "
-        "VALUES (?,?,?,?) "
-        "ON CONFLICT (fecha, location_uuid, feature_key) "
-        "DO UPDATE SET value = excluded.value, ingested_at = NOW()",
-        rows,
-    )
-    if verbose:
-        print(
-            f"  [metro_madrid] {slug} {month:02d}/{year}: "
-            f"{total_validaciones:,} validaciones → {val_per_day:.0f}/día"
-        )
-    return len(rows)
-
-
-# ── Asegurar feature_registry ─────────────────────────────────────────────────
-
-
 def _ensure_feature_registry(slug: str, location_uuid: str) -> None:
     fk = f"afluencia_metro_{slug}"
-    conn = get_conn()
-    conn.execute(
-        "INSERT INTO feature_registry "
-        "(feature_key, source, descripcion, categoria, periodicidad, activo) "
-        "VALUES (?,?,?,?,?,TRUE) ON CONFLICT (feature_key) DO NOTHING",
-        [
-            fk,
-            SOURCE,
-            f"Validaciones mensuales estación de metro — {slug.replace('_', ' ').title()}",
-            "movilidad",
-            "mensual",
-        ],
+    ensure_feature_registry(
+        fk,
+        SOURCE,
+        "movilidad",
+        f"Validaciones mensuales estación de metro — {slug.replace('_', ' ').title()}",
     )
-    conn.execute(
+    get_conn().execute(
         "INSERT INTO feature_flags (feature_key, location_uuid, status, periodicidad) "
         "VALUES (?,?,'contexto','mensual') "
         "ON CONFLICT (feature_key, location_uuid) DO NOTHING",
@@ -330,8 +277,15 @@ def sync_year(
     total = 0
     for slug, mes_vals in parsed.items():
         _ensure_feature_registry(slug, location_uuid)
+        fk = f"afluencia_metro_{slug}"
         for mes, validaciones in mes_vals.items():
-            total += _write_month(year, mes, validaciones, location_uuid, slug, verbose)
+            n = write_month_uniform(year, mes, validaciones, location_uuid, fk, verbose)
+            if verbose and n > 0:
+                print(
+                    f"  [metro_madrid] {slug} {mes:02d}/{year}: "
+                    f"{validaciones:,} validaciones → {validaciones/n:.0f}/día"
+                )
+            total += n
 
     return total
 

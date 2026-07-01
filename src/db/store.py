@@ -1185,10 +1185,11 @@ def _migrate_dim_zonas(conn: PgConn) -> None:
 
 
 def _migrate_location_source_config(conn: PgConn) -> None:
-    """Siembra config por defecto para Gran Vía (esri_places, metro_madrid, ine_eoh)."""
+    """Siembra config por defecto para ubicaciones conocidas."""
     import json as _json
 
     _GV_UUID = "251e7f40-95c7-4678-aa48-df1b90e3461c"
+    _MALAGA_UUID = "67034276-0d01-4c90-a363-fa75699a19a4"
 
     _ROWS = [
         (
@@ -1205,7 +1206,8 @@ def _migrate_location_source_config(conn: PgConn) -> None:
                         {"nombre": "Gran Vía", "slug": "gran_via"},
                         {"nombre": "Callao", "slug": "callao"},
                         {"nombre": "Sol", "slug": "sol"},
-                    ]
+                    ],
+                    "anyo_url": "https://www.metromadrid.es/export/sites/metro/comun/documentos/viajeros/Estadistica_{year}.xlsx",
                 }
             ),
         ),
@@ -1213,6 +1215,16 @@ def _migrate_location_source_config(conn: PgConn) -> None:
             _GV_UUID,
             "ine_eoh",
             _json.dumps({"provincia_nombre": "Madrid", "tabla_viajeros": 2078}),
+        ),
+        (
+            _MALAGA_UUID,
+            "cruceros",
+            _json.dumps(
+                {
+                    "ajax_url": "https://www.puertomalaga.com/wp-admin/admin-ajax.php",
+                    "pais_codigo": "ES",
+                }
+            ),
         ),
     ]
     conn.executemany(

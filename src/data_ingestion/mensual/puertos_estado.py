@@ -28,7 +28,6 @@ CLI:
 
 from __future__ import annotations
 
-import calendar
 import io
 import re
 import sys
@@ -40,8 +39,8 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from src.data_ingestion.prefetch._common import is_fresh, write_sync_marker
-from src.db.store import get_conn
+from src.data_ingestion.diaria._common import is_fresh, write_sync_marker
+from src.data_ingestion.mensual._common import get_configured_locations, write_month_uniform
 
 # ── Declaraciones de paquete mensual ─────────────────────────────────────────
 
@@ -95,17 +94,12 @@ _MIN_YEAR = 2012  # primer año disponible en el portal
 
 
 def _get_configured_locations() -> list[tuple[str, str]]:
-    """Returns [(location_uuid, port_authority), ...] for all active puertos_estado configs."""
-    rows = (
-        get_conn()
-        .execute(
-            "SELECT location_uuid, params->>'port_authority' "
-            "FROM location_source_config "
-            "WHERE source = 'puertos_estado' AND activo = TRUE"
-        )
-        .fetchall()
-    )
-    return [(r[0], r[1]) for r in rows if r[1]]
+    """Returns [(location_uuid, port_authority), ...]."""
+    return [
+        (lu, p["port_authority"])
+        for lu, p in get_configured_locations(SOURCE)
+        if p.get("port_authority")
+    ]
 
 
 # ── Descubrimiento de IDs ──────────────────────────────────────────────────────
@@ -254,36 +248,6 @@ def parse_xlsx(xlsx_bytes: bytes, port_authority: str) -> dict | None:
 # ── Escritura en DB ───────────────────────────────────────────────────────────
 
 
-def _write_month(
-    year: int, month: int, total_pax: int, location_uuid: str, verbose: bool = False
-) -> int:
-    """
-    Distribuye el total mensual uniformemente en los días del mes y escribe
-    en store_features_ext. Solo escribe meses ya cerrados (último día < hoy).
-    Idempotente. Devuelve número de filas escritas.
-    """
-    today = date.today()
-    last_day = calendar.monthrange(year, month)[1]
-    if date(year, month, last_day) >= today:
-        return 0
-
-    pax_per_day = total_pax / last_day
-    rows = [
-        (str(date(year, month, d)), location_uuid, _FEATURE_KEY, pax_per_day)
-        for d in range(1, last_day + 1)
-    ]
-
-    conn = get_conn()
-    conn.executemany(
-        "INSERT INTO store_features_ext (fecha, location_uuid, feature_key, value) "
-        "VALUES (?,?,?,?) "
-        "ON CONFLICT (fecha, location_uuid, feature_key) "
-        "DO UPDATE SET value = excluded.value, ingested_at = NOW()",
-        rows,
-    )
-    return len(rows)
-
-
 # ── Sync por año ──────────────────────────────────────────────────────────────
 
 
@@ -320,7 +284,9 @@ def sync_year(year: int, location_uuid: str, port_authority: str, verbose: bool 
                 )
             continue
 
-        n = _write_month(parsed["year_act"], parsed["month"], parsed["pax_act"], location_uuid)
+        n = write_month_uniform(
+            parsed["year_act"], parsed["month"], parsed["pax_act"], location_uuid, _FEATURE_KEY
+        )
         if n > 0:
             total += n
             if verbose:
@@ -330,8 +296,8 @@ def sync_year(year: int, location_uuid: str, port_authority: str, verbose: bool 
                 )
 
         # El fichero también contiene el mismo mes del año anterior
-        n_prev = _write_month(
-            parsed["year_prev"], parsed["month"], parsed["pax_prev"], location_uuid
+        n_prev = write_month_uniform(
+            parsed["year_prev"], parsed["month"], parsed["pax_prev"], location_uuid, _FEATURE_KEY
         )
         if n_prev > 0:
             total += n_prev

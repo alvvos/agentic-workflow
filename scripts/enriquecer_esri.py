@@ -30,7 +30,7 @@ load_dotenv()
 
 
 def cmd_estado():
-    from src.data_ingestion.prefetch.geo import listar_estado
+    from src.data_ingestion.geo import listar_estado
 
     filas = listar_estado(verbose=False)
     if not filas:
@@ -57,7 +57,7 @@ def cmd_estado():
 
 def cmd_enriquecer(uuids: list, org: str, fecha: str, dry_run: bool):
     from src.data_ingestion.esri_client import fetch_enrich
-    from src.data_ingestion.prefetch.geo import ingestar_snapshot_esri
+    from src.data_ingestion.geo import ingestar_snapshot_esri
     from src.db.store import get_conn
 
     conn = get_conn()

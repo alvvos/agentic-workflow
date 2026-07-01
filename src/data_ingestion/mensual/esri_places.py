@@ -384,7 +384,7 @@ def run(
     verbose: bool = True,
 ) -> dict[str, int]:
     """Interfaz nightly. Mensual es suficiente para datos de infraestructura."""
-    from src.data_ingestion.prefetch._common import is_fresh, write_sync_marker
+    from src.data_ingestion.diaria._common import is_fresh, write_sync_marker
 
     locations = _get_configured_locations()
     if location_uuid:

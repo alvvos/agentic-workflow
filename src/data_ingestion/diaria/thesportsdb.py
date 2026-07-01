@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from src.data_ingestion.prefetch._common import (
+from src.data_ingestion.diaria._common import (
     EVENTS_DATE_FROM,
     EVENTS_HORIZON,
     get_active_locations,
@@ -116,7 +116,7 @@ def run(
 
 
 if __name__ == "__main__":
-    from src.data_ingestion.prefetch._common import make_parser
+    from src.data_ingestion.diaria._common import make_parser
 
     args = make_parser("fixtures deportivos (TheSportsDB)").parse_args()
     run(

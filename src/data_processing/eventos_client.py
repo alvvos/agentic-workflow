@@ -1,7 +1,7 @@
 """
 Interfaz de lectura de eventos externos para el modelo ML.
 
-La lógica de descarga/escritura vive en src/data_ingestion/prefetch/.
+La lógica de descarga/escritura vive en src/data_ingestion/diaria/.
 Este módulo expone únicamente la interfaz de lectura usada en runtime:
   - get_eventos_features(fecha, location_uuid)  → dict con ev_* features
   - EVENTOS_FEATURE_COLS                        → lista de nombres de columna
@@ -117,13 +117,13 @@ def prefetch_eventos(
 ) -> int:
     """
     Descarga y cachea eventos para una location.
-    Delega a src.data_ingestion.prefetch.run_all.
+    Delega a src.data_ingestion.diaria.run_all.
     Mantenido por compatibilidad con ml_predictivo.py y seed.py.
     """
     if not force and location_uuid in _prefetched:
         return 0
 
-    from src.data_ingestion.prefetch.run_all import run as _run
+    from src.data_ingestion.diaria import run_all as _run
 
     result = _run(
         location_uuid=location_uuid,
@@ -142,6 +142,6 @@ def prefetch_all_locations(force: bool = False) -> dict:
     Prefetch de todas las locations activas.
     Mantenido por compatibilidad con seed.py.
     """
-    from src.data_ingestion.prefetch.run_all import run as _run
+    from src.data_ingestion.diaria import run_all as _run
 
     return _run(max_age_hours=0 if force else 6, verbose=True)
