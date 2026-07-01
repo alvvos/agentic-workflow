@@ -109,9 +109,12 @@ def _parse_int(s: str) -> int | None:
 # ── Escritura en DB ───────────────────────────────────────────────────────────
 
 
+_FK_DIA = "n_pasajeros_crucero_dia"
+
+
 def ingestar_escalas(escalas: list[dict]) -> int:
     """
-    Inserta escalas en store_calendario_org.
+    Inserta escalas en store_calendario_org y agrega pasajeros diarios en store_features_ext.
     Idempotente. Devuelve el número de filas de calendario insertadas.
     Los totales de pasajeros confirmados los escribe puertos_estado.py
     desde las estadísticas oficiales de Puertos del Estado.
@@ -152,6 +155,22 @@ def ingestar_escalas(escalas: list[dict]) -> int:
                metadata = excluded.metadata""",
         cal_rows,
     )
+
+    # Agregar pasajeros por día → store_features_ext (preview diario)
+    daily: dict[str, float] = {}
+    for e in escalas:
+        pax = e.get("n_pasajeros")
+        if pax and pax > 0:
+            daily[e["fecha"]] = daily.get(e["fecha"], 0.0) + pax
+
+    if daily:
+        conn.executemany(
+            "INSERT INTO store_features_ext (fecha, location_uuid, feature_key, value) "
+            "VALUES (?,?,?,?) "
+            "ON CONFLICT (fecha, location_uuid, feature_key) "
+            "DO UPDATE SET value = excluded.value, ingested_at = NOW()",
+            [(f, _MALAGA_LOCATION_UUID, _FK_DIA, v) for f, v in daily.items()],
+        )
 
     return len(cal_rows)
 
