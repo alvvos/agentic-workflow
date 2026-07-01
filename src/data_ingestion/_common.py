@@ -288,6 +288,26 @@ def ensure_feature_registry(
     )
 
 
+# ── Source registry ───────────────────────────────────────────────────────────
+
+
+def get_source_config(source: str, loc_params: dict | None = None) -> dict:
+    """
+    Devuelve config efectiva para un source: defaults de source_registry
+    fusionados con los params de la location (los params de location tienen precedencia).
+    """
+    row = (
+        get_conn()
+        .execute(
+            "SELECT config FROM source_registry WHERE source = %s",
+            [source],
+        )
+        .fetchone()
+    )
+    defaults: dict = row[0] if row and row[0] else {}
+    return {**defaults, **(loc_params or {})}
+
+
 # ── CLI helpers ───────────────────────────────────────────────────────────────
 
 

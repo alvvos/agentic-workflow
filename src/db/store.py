@@ -490,6 +490,23 @@ _DDL: list[str] = [
         sort_order INT DEFAULT 99
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS source_registry (
+        source          TEXT PRIMARY KEY,
+        periodicidad    TEXT CHECK (periodicidad IN ('diaria', 'mensual', 'semanal')),
+        categoria       TEXT,
+        descripcion     TEXT,
+        url_referencia  TEXT,
+        cobertura_desde TEXT,
+        latencia_dias   INTEGER,
+        paises          JSONB    DEFAULT '[]'::jsonb,
+        params_schema   TEXT,
+        params_ejemplo  JSONB    DEFAULT '{}'::jsonb,
+        config          JSONB    NOT NULL DEFAULT '{}'::jsonb,
+        activo          BOOLEAN  NOT NULL DEFAULT TRUE,
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
 ]
 
 _FACT_VISITAS_COLS = [
@@ -526,6 +543,7 @@ def _apply_ddl(conn: PgConn) -> None:
     _migrate_location_pois(conn)
     _migrate_location_source_config(conn)
     _migrate_registries(conn)
+    _migrate_source_registry(conn)
     _sync_users_from_json(conn)
 
 
@@ -1366,6 +1384,235 @@ def _migrate_location_pois(conn: PgConn) -> None:
         "ON CONFLICT (location_uuid, nombre, categoria) DO NOTHING",
         _SEED,
     )
+
+
+_SOURCE_REGISTRY_SEED = [
+    # ── Diarias universales ───────────────────────────────────────────────────
+    {
+        "source": "weather",
+        "periodicidad": "diaria",
+        "categoria": "meteorologia",
+        "descripcion": "Datos meteorológicos históricos y previsión (Open-Meteo).",
+        "url_referencia": "https://open-meteo.com/",
+        "cobertura_desde": "2024-01-01",
+        "latencia_dias": 1,
+        "paises": [],
+        "params_schema": None,
+        "params_ejemplo": {},
+        "config": {},
+    },
+    {
+        "source": "open_holidays",
+        "periodicidad": "diaria",
+        "categoria": "eventos",
+        "descripcion": "Festivos nacionales y regionales + vacaciones escolares (OpenHolidays API).",
+        "url_referencia": "https://www.openholidaysapi.org/",
+        "cobertura_desde": "2024-01-01",
+        "latencia_dias": 0,
+        "paises": [],
+        "params_schema": None,
+        "params_ejemplo": {},
+        "config": {},
+    },
+    {
+        "source": "ticketmaster",
+        "periodicidad": "diaria",
+        "categoria": "eventos",
+        "descripcion": "Eventos de conciertos, festivales y deportes (Ticketmaster Discovery API).",
+        "url_referencia": "https://developer.ticketmaster.com/",
+        "cobertura_desde": "2024-01-01",
+        "latencia_dias": 0,
+        "paises": [],
+        "params_schema": None,
+        "params_ejemplo": {},
+        "config": {},
+    },
+    {
+        "source": "thesportsdb",
+        "periodicidad": "diaria",
+        "categoria": "eventos",
+        "descripcion": "Partidos deportivos por ciudad (TheSportsDB API).",
+        "url_referencia": "https://www.thesportsdb.com/",
+        "cobertura_desde": "2024-01-01",
+        "latencia_dias": 0,
+        "paises": [],
+        "params_schema": None,
+        "params_ejemplo": {},
+        "config": {},
+    },
+    {
+        "source": "agenda_es",
+        "periodicidad": "diaria",
+        "categoria": "eventos",
+        "descripcion": "Agenda cultural y eventos municipales.",
+        "url_referencia": None,
+        "cobertura_desde": "2024-01-01",
+        "latencia_dias": 0,
+        "paises": ["ES"],
+        "params_schema": None,
+        "params_ejemplo": {},
+        "config": {},
+    },
+    # ── Diarias configuradas ──────────────────────────────────────────────────
+    {
+        "source": "cruceros",
+        "periodicidad": "diaria",
+        "categoria": "turismo",
+        "descripcion": "Escalas de cruceros por puerto (scraping de webs de autoridades portuarias).",
+        "url_referencia": None,
+        "cobertura_desde": "2024-01-01",
+        "latencia_dias": 1,
+        "paises": ["ES"],
+        "params_schema": "{'ajax_url': '<URL del endpoint WordPress AJAX>', 'pais_codigo': 'ES', 'feature_key': 'n_pasajeros_crucero_dia'}",
+        "params_ejemplo": {
+            "ajax_url": "https://www.puertomalaga.com/wp-admin/admin-ajax.php",
+            "pais_codigo": "ES",
+            "feature_key": "n_pasajeros_crucero_dia",
+        },
+        "config": {
+            "feature_key": "n_pasajeros_crucero_dia",
+            "categoria_evento": "escala_crucero",
+            "action": "get_prevision_turistas_by_date",
+        },
+    },
+    # ── Mensuales ─────────────────────────────────────────────────────────────
+    {
+        "source": "metro_madrid",
+        "periodicidad": "mensual",
+        "categoria": "movilidad",
+        "descripcion": "Validaciones mensuales por estación de metro (Metro de Madrid / CRTM). Proxy del volumen de peatones en la isócrona de la ubicación.",
+        "url_referencia": "https://www.metromadrid.es/en/metro-de-madrid/statistics",
+        "cobertura_desde": "2016-01",
+        "latencia_dias": 45,
+        "paises": ["ES"],
+        "params_schema": "{'estaciones': [{'nombre': '<nombre exacto en el Excel de Metro Madrid>', 'slug': '<snake_case>'}], 'anyo_url': '<URL pattern con {year}>', 'feature_key_prefix': 'afluencia_metro_'}",
+        "params_ejemplo": {
+            "estaciones": [
+                {"nombre": "Gran Via", "slug": "gran_via"},
+                {"nombre": "Callao", "slug": "callao"},
+            ],
+            "anyo_url": "https://www.metromadrid.es/...",
+        },
+        "config": {
+            "feature_key_prefix": "afluencia_metro_",
+        },
+    },
+    {
+        "source": "puertos_estado",
+        "periodicidad": "mensual",
+        "categoria": "turismo",
+        "descripcion": "Pasajeros de crucero oficiales — Puertos del Estado. Total mensual embarcados + desembarcados.",
+        "url_referencia": "https://www.puertos.es/en/data/statistics/monthly",
+        "cobertura_desde": "2012-01",
+        "latencia_dias": 25,
+        "paises": ["ES"],
+        "params_schema": "{'port_authority': '<nombre exacto de la Autoridad Portuaria en el XLSX>'}",
+        "params_ejemplo": {"port_authority": "Malaga"},
+        "config": {
+            "feature_key": "n_pasajeros_crucero_oficial",
+            "listing_url": "https://www.puertos.es/en/data/statistics/monthly",
+            "hoja_excel": "Pasajeros crucero",
+        },
+    },
+    {
+        "source": "ine_eoh",
+        "periodicidad": "mensual",
+        "categoria": "turismo",
+        "descripcion": "Viajeros y pernoctaciones en establecimientos hoteleros — INE Encuesta de Ocupación Hotelera.",
+        "url_referencia": "https://www.ine.es/dyngs/INEbase/es/operacion.htm?c=Estadistica_C&cid=1254736177015",
+        "cobertura_desde": "1999-01",
+        "latencia_dias": 45,
+        "paises": ["ES"],
+        "params_schema": "{'provincia_nombre': '<fragmento del nombre de provincia en series INE>'}",
+        "params_ejemplo": {"provincia_nombre": "Malaga"},
+        "config": {
+            "base_url": "https://servicios.ine.es/wstempus/js/ES",
+            "tabla_viajeros": 2078,
+            "feature_key_viajeros": "ine_viajeros_hoteleros",
+            "feature_key_pernoctaciones": "ine_pernoctaciones_hoteleras",
+        },
+    },
+    {
+        "source": "esri_places",
+        "periodicidad": "mensual",
+        "categoria": "contexto_espacial",
+        "descripcion": "POIs del entorno (metro, monumentos, salas de eventos, competidores) — ArcGIS Places API de Esri.",
+        "url_referencia": "https://developers.arcgis.com/rest/places/places-service/near-point/",
+        "cobertura_desde": None,
+        "latencia_dias": 0,
+        "paises": ["ES", "MX", "PT"],
+        "params_schema": "{'radio_m': 1200, 'max_resultados': 200, 'categorias': {'<esri_category_id>': ['<tipo_interno>', '<label>']}}",
+        "params_ejemplo": {"radio_m": 1200},
+        "config": {
+            "base_url": "https://places-api.arcgis.com/arcgis/rest/services/places-service/v1",
+            "radio_m": 1200,
+            "page_size": 20,
+            "max_category_ids_per_call": 10,
+            "categorias": {
+                "4bf58dd8d48988d1fd931735": ["metro", "Metro Station"],
+                "4bf58dd8d48988d129951735": ["metro", "Rail Station"],
+                "4bf58dd8d48988d12d941735": ["tourist_poi", "Monument / Landmark"],
+                "4deefb944765f83613cdba6e": ["tourist_poi", "Historic Site"],
+                "4bf58dd8d48988d181941735": ["tourist_poi", "Museum"],
+                "4bf58dd8d48988d137941735": ["event_venue", "Theater"],
+                "5032792091d4c4b30a586d5c": ["event_venue", "Concert Hall"],
+                "4bf58dd8d48988d103951735": ["competitor", "Clothing Store"],
+                "4bf58dd8d48988d1f6941735": ["competitor", "Department Store"],
+                "63be6904847c3692a84b9bec": ["competitor", "Fashion Retail"],
+            },
+            "valores_categoria": {
+                "metro": 0.85,
+                "tourist_poi": 0.70,
+                "event_venue": 0.65,
+                "competitor": 0.80,
+                "otro": 0.50,
+            },
+        },
+    },
+]
+
+
+def _migrate_source_registry(conn: PgConn) -> None:
+    """
+    Puebla/actualiza source_registry con los defaults operacionales de cada source.
+    Idempotente: usa ON CONFLICT (source) DO UPDATE SET para re-aplicar en cada startup.
+    """
+    import json as _json
+
+    for entry in _SOURCE_REGISTRY_SEED:
+        conn.execute(
+            """
+            INSERT INTO source_registry
+                (source, periodicidad, categoria, descripcion, url_referencia,
+                 cobertura_desde, latencia_dias, paises, params_schema,
+                 params_ejemplo, config, activo)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s::jsonb, %s::jsonb, TRUE)
+            ON CONFLICT (source) DO UPDATE SET
+                periodicidad    = EXCLUDED.periodicidad,
+                categoria       = EXCLUDED.categoria,
+                descripcion     = EXCLUDED.descripcion,
+                url_referencia  = EXCLUDED.url_referencia,
+                cobertura_desde = EXCLUDED.cobertura_desde,
+                latencia_dias   = EXCLUDED.latencia_dias,
+                paises          = EXCLUDED.paises,
+                params_schema   = EXCLUDED.params_schema,
+                params_ejemplo  = EXCLUDED.params_ejemplo,
+                config          = EXCLUDED.config
+            """,
+            [
+                entry["source"],
+                entry["periodicidad"],
+                entry["categoria"],
+                entry["descripcion"],
+                entry["url_referencia"],
+                entry["cobertura_desde"],
+                entry["latencia_dias"],
+                _json.dumps(entry["paises"], ensure_ascii=False),
+                entry["params_schema"],
+                _json.dumps(entry["params_ejemplo"], ensure_ascii=False),
+                _json.dumps(entry["config"], ensure_ascii=False),
+            ],
+        )
 
 
 def _migrate_fact_visitas(conn: PgConn) -> None:

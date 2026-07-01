@@ -28,6 +28,7 @@ import requests
 from src.data_ingestion._common import (
     ensure_feature_registry,
     get_configured_locations,
+    get_source_config,
     is_fresh,
     write_month_uniform,
     write_sync_marker,
@@ -45,6 +46,9 @@ def _handler_metro_madrid(
     """Validaciones mensuales de Metro de Madrid por estacion."""
     if is_fresh(loc_uuid, "metro_madrid", max_age_hours):
         return 0
+
+    cfg = get_source_config("metro_madrid", params)
+    feature_key_prefix = cfg.get("feature_key_prefix", "afluencia_metro_")
 
     estaciones = params.get("estaciones", [])
     url_pattern = params.get("anyo_url")
@@ -155,7 +159,7 @@ def _handler_metro_madrid(
     def _ensure_registry(slug: str) -> None:
         from src.db.store import get_conn
 
-        fk = f"afluencia_metro_{slug}"
+        fk = f"{feature_key_prefix}{slug}"
         ensure_feature_registry(
             fk,
             "metro_madrid",
@@ -183,7 +187,7 @@ def _handler_metro_madrid(
         total = 0
         for slug, mes_vals in parsed.items():
             _ensure_registry(slug)
-            fk = f"afluencia_metro_{slug}"
+            fk = f"{feature_key_prefix}{slug}"
             for mes, validaciones in mes_vals.items():
                 n = write_month_uniform(year, mes, validaciones, loc_uuid, fk, verbose)
                 if verbose and n > 0:
@@ -225,10 +229,11 @@ def _handler_puertos_estado(
             print(f"  [puertos_estado] {loc_uuid}: sin port_authority en params — omitido")
         return 0
 
-    _FEATURE_KEY = "n_pasajeros_crucero_oficial"
-    _BASE_URL = "https://www.puertos.es"
-    _LISTING_URL = _BASE_URL + "/en/data/statistics/monthly"
-    _SHEET = "Pasajeros crucero"
+    cfg = get_source_config("puertos_estado", params)
+    _FEATURE_KEY = cfg["feature_key"]
+    _LISTING_URL = cfg["listing_url"]
+    _BASE_URL = _LISTING_URL.rsplit("/en/", 1)[0]
+    _SHEET = cfg.get("hoja_excel", "Pasajeros crucero")
     _TIMEOUT = 30
 
     def _fetch_listing_ids(year: int) -> dict[int, int]:
@@ -425,14 +430,15 @@ def _handler_ine_eoh(
             print(f"  [ine_eoh] {loc_uuid}: sin provincia_nombre en params — omitido")
         return 0
 
-    _BASE = "https://servicios.ine.es/wstempus/js/ES"
+    cfg = get_source_config("ine_eoh", params)
+    base_url = cfg["base_url"]
+    tabla_viajeros_default = cfg["tabla_viajeros"]
+    feature_key_viajeros = cfg["feature_key_viajeros"]
+    feature_key_pernoctaciones = cfg["feature_key_pernoctaciones"]
     _TIMEOUT = 30
-    _DEFAULT_TABLA_VIAJEROS = 2078
-    _FK_VIAJEROS = "ine_viajeros_hoteleros"
-    _FK_PERNOCTACIONES = "ine_pernoctaciones_hoteleras"
 
     def _fetch_tabla(tabla_id: int, nult: int = 300) -> list[dict]:
-        url = f"{_BASE}/DATOS_TABLA/{tabla_id}?nult={nult}"
+        url = f"{base_url}/DATOS_TABLA/{tabla_id}?nult={nult}"
         r = requests.get(url, timeout=_TIMEOUT)
         r.raise_for_status()
         return r.json()
@@ -475,8 +481,8 @@ def _handler_ine_eoh(
         return matches
 
     try:
-        tabla_v = int(params.get("tabla_viajeros", _DEFAULT_TABLA_VIAJEROS))
-        tabla_p = int(params.get("tabla_pernoctaciones", _DEFAULT_TABLA_VIAJEROS))
+        tabla_v = int(params.get("tabla_viajeros", tabla_viajeros_default))
+        tabla_p = int(params.get("tabla_pernoctaciones", tabla_viajeros_default))
         total = 0
 
         raw_v = _fetch_tabla(tabla_v)
@@ -497,13 +503,13 @@ def _handler_ine_eoh(
                         agg[(yr, mes)] = val
 
             ensure_feature_registry(
-                _FK_VIAJEROS,
+                feature_key_viajeros,
                 "ine_eoh",
                 "turismo",
                 f"Viajeros hoteleros estimados — {provincia} (INE EOH)",
             )
             for (yr, mes), val in sorted(agg.items()):
-                total += write_month_uniform(yr, mes, val, loc_uuid, _FK_VIAJEROS, verbose)
+                total += write_month_uniform(yr, mes, val, loc_uuid, feature_key_viajeros, verbose)
 
         raw_p = _fetch_tabla(tabla_p) if tabla_p != tabla_v else raw_v
         series_p = _find_series(raw_p, must_contain=["pernoctaci"])
@@ -523,13 +529,15 @@ def _handler_ine_eoh(
                     agg_p[(yr, mes)] = val
 
             ensure_feature_registry(
-                _FK_PERNOCTACIONES,
+                feature_key_pernoctaciones,
                 "ine_eoh",
                 "turismo",
                 f"Pernoctaciones hoteleras estimadas — {provincia} (INE EOH)",
             )
             for (yr, mes), val in sorted(agg_p.items()):
-                total += write_month_uniform(yr, mes, val, loc_uuid, _FK_PERNOCTACIONES, verbose)
+                total += write_month_uniform(
+                    yr, mes, val, loc_uuid, feature_key_pernoctaciones, verbose
+                )
 
         write_sync_marker(loc_uuid, "ine_eoh")
         return total
@@ -625,123 +633,47 @@ def sync_all(
 
 # ── Catalog (para context_scout.py) ──────────────────────────────────────────
 
-# Catalog entries definidos inline (en lugar de estar repartidos en modulos individuales)
-_CATALOG_ENTRIES: list[tuple[dict, list[str]]] = [
-    (
-        {
-            "feature_key_template": "afluencia_metro_{slug}",
-            "source": "metro_madrid",
-            "categoria": "movilidad",
-            "periodicidad": "mensual",
-            "descripcion": (
-                "Validaciones mensuales por estacion de metro (Metro de Madrid / CRTM). "
-                "Mide el numero de accesos validados en cada estacion dentro de la isócrona "
-                "de la ubicacion. Proxy directo del volumen de peatones que pasan por el area."
-            ),
-            "url_referencia": "https://www.metromadrid.es/en/metro-de-madrid/statistics",
-            "granularidad": "estacion (mensual, distribuida en dias)",
-            "cobertura_desde": "2016-01",
-            "latencia_dias": 45,
-            "notas_tecnicas": (
-                "Requiere configurar 'estaciones' en location_source_config. "
-                "Cada entrada necesita 'nombre' (exacto en el Excel) y 'slug' para el feature_key. "
-                "Si el URL del Excel cambia, actualiza 'anyo_url' en location_source_config."
-            ),
-            "params_schema": (
-                "{'estaciones': [{'nombre': '<nombre exacto en el Excel de Metro Madrid>', "
-                "'slug': '<snake_case del nombre>'}], "
-                "'anyo_url': '<URL pattern con {year}>'}."
-            ),
-            "params_ejemplo": {
-                "estaciones": [
-                    {"nombre": "Gran Via", "slug": "gran_via"},
-                    {"nombre": "Callao", "slug": "callao"},
-                ]
-            },
-        },
-        ["ES"],
-    ),
-    (
-        {
-            "feature_key_template": "n_pasajeros_crucero_oficial",
-            "source": "puertos_estado",
-            "categoria": "turismo",
-            "periodicidad": "mensual",
-            "descripcion": (
-                "Pasajeros de crucero — Puertos del Estado (estadistica oficial). "
-                "Total mensual de pasajeros embarcados y desembarcados en el puerto."
-            ),
-            "url_referencia": "https://www.puertos.es/en/data/statistics/monthly",
-            "granularidad": "puerto (ciudad)",
-            "cobertura_desde": "2012-01",
-            "latencia_dias": 25,
-            "notas_tecnicas": (
-                "XLSX publicado ~dia 22-25 del mes siguiente. Sin autenticacion. "
-                "Requiere configurar port_authority en location_source_config."
-            ),
-            "params_schema": (
-                "{'port_authority': '<nombre exacto de la Autoridad Portuaria en el XLSX>'}."
-            ),
-            "params_ejemplo": {"port_authority": "Malaga"},
-        },
-        ["ES"],
-    ),
-    (
-        {
-            "feature_key_template": "ine_viajeros_hoteleros",
-            "source": "ine_eoh",
-            "categoria": "turismo",
-            "periodicidad": "mensual",
-            "descripcion": ("Viajeros y pernoctaciones en establecimientos hoteleros — INE EOH."),
-            "url_referencia": "https://www.ine.es/dyngs/INEbase/es/operacion.htm"
-            "?c=Estadistica_C&cid=1254736177015",
-            "granularidad": "provincia o municipio (mensual, distribuida en dias)",
-            "cobertura_desde": "1999-01",
-            "latencia_dias": 45,
-            "notas_tecnicas": (
-                "Requiere configurar 'provincia_nombre' en location_source_config. "
-                "Tabla por defecto: 2078 (viajeros+pernoctaciones por provincias)."
-            ),
-            "params_schema": (
-                "{'provincia_nombre': '<fragmento del nombre de provincia en series INE>'}."
-            ),
-            "params_ejemplo": {"provincia_nombre": "Malaga"},
-        },
-        ["ES"],
-    ),
-    (
-        {
-            "feature_key_template": None,
-            "source": "esri_places",
-            "categoria": "contexto_espacial",
-            "periodicidad": "mensual",
-            "descripcion": (
-                "Puntos de interes del entorno (metro, monumentos, salas de eventos, "
-                "competidores) obtenidos de la ArcGIS Places API de Esri."
-            ),
-            "url_referencia": (
-                "https://developers.arcgis.com/rest/places/places-service/near-point/"
-            ),
-            "granularidad": "POI individual (radio configurable, defecto 1200 m)",
-            "cobertura_desde": None,
-            "latencia_dias": 0,
-            "notas_tecnicas": (
-                "No genera filas en store_features_ext. "
-                "Upsertea directamente en location_pois. "
-                "Solo activa si ESRI_KEY esta en el entorno."
-            ),
-        },
-        ["ES", "MX", "PT"],
-    ),
-]
 
+def cargar_catalog(pais: str = "") -> list[dict]:
+    """Devuelve entradas de catálogo de source_registry para context_scout.py."""
+    from src.db.store import get_conn
 
-def cargar_catalog(pais: str) -> list[dict]:
-    """
-    Devuelve entradas de catalogo aplicables al pais dado.
-    Compatibilidad con context_scout.py (mismo contrato que mensual/__init__.py).
-    """
-    return [entry for entry, paises in _CATALOG_ENTRIES if not paises or pais in paises]
+    if pais:
+        rows = (
+            get_conn()
+            .execute(
+                "SELECT source, categoria, periodicidad, descripcion, url_referencia, "
+                "cobertura_desde, latencia_dias, paises, params_schema, params_ejemplo, config "
+                "FROM source_registry WHERE activo = TRUE "
+                "AND (paises = '[]'::jsonb OR paises @> %s::jsonb)",
+                [f'["{pais}"]'],
+            )
+            .fetchall()
+        )
+    else:
+        rows = (
+            get_conn()
+            .execute(
+                "SELECT source, categoria, periodicidad, descripcion, url_referencia, "
+                "cobertura_desde, latencia_dias, paises, params_schema, params_ejemplo, config "
+                "FROM source_registry WHERE activo = TRUE",
+            )
+            .fetchall()
+        )
+    cols = [
+        "source",
+        "categoria",
+        "periodicidad",
+        "descripcion",
+        "url_referencia",
+        "cobertura_desde",
+        "latencia_dias",
+        "paises",
+        "params_schema",
+        "params_ejemplo",
+        "config",
+    ]
+    return [dict(zip(cols, r)) for r in rows]
 
 
 # ── sync_esri_places_location (publica, para admin_pois.py) ──────────────────
@@ -768,6 +700,16 @@ def sync_esri_places_location(
 
     params = params or {}
 
+    cfg = get_source_config("esri_places", params)
+    base_url = cfg["base_url"]
+    near_point_url = base_url + "/places/near-point"
+    radio_m_default = int(cfg.get("radio_m", 1200))
+    page_size = int(cfg.get("page_size", 20))
+    max_cat_per_call = int(cfg.get("max_category_ids_per_call", 10))
+    cat_map_raw = cfg.get("categorias", {})
+    cat_map_default: dict[str, tuple[str, str]] = {k: tuple(v) for k, v in cat_map_raw.items()}  # type: ignore[misc]
+    valores_cat: dict[str, float] = cfg.get("valores_categoria", {"otro": 0.50})
+
     def _get_loc_coords():
         row = (
             get_conn()
@@ -791,32 +733,6 @@ def sync_esri_places_location(
         )
         return row[0] if row else None
 
-    _PLACES_BASE = "https://places-api.arcgis.com/arcgis/rest/services/places-service/v1"
-    _NEAR_POINT_URL = f"{_PLACES_BASE}/places/near-point"
-    _DEFAULT_RADIO_M = 1200
-    _DEFAULT_PAGE_SIZE = 20
-    _MAX_CATEGORY_IDS_PER_CALL = 10
-
-    _DEFAULT_CATEGORIES: dict[str, tuple[str, str]] = {
-        "4bf58dd8d48988d1fd931735": ("metro", "Metro Station"),
-        "4bf58dd8d48988d129951735": ("metro", "Rail Station"),
-        "4bf58dd8d48988d12d941735": ("tourist_poi", "Monument / Landmark"),
-        "4deefb944765f83613cdba6e": ("tourist_poi", "Historic Site"),
-        "4bf58dd8d48988d181941735": ("tourist_poi", "Museum"),
-        "4bf58dd8d48988d137941735": ("event_venue", "Theater"),
-        "5032792091d4c4b30a586d5c": ("event_venue", "Concert Hall"),
-        "4bf58dd8d48988d103951735": ("competitor", "Clothing Store"),
-        "4bf58dd8d48988d1f6941735": ("competitor", "Department Store"),
-        "63be6904847c3692a84b9bec": ("competitor", "Fashion Retail"),
-    }
-    _DEFAULT_VALOR: dict[str, float] = {
-        "metro": 0.85,
-        "tourist_poi": 0.70,
-        "event_venue": 0.65,
-        "competitor": 0.80,
-        "otro": 0.50,
-    }
-
     def _call_near_point(
         lat: float,
         lon: float,
@@ -829,13 +745,13 @@ def sync_esri_places_location(
             "x": lon,
             "radius": radio_m,
             "categoryIds": ",".join(category_ids),
-            "pageSize": _DEFAULT_PAGE_SIZE,
+            "pageSize": page_size,
             "f": "json",
             "token": token,
         }
         if page_token:
             p["pageToken"] = page_token
-        url = _NEAR_POINT_URL + "?" + urllib.parse.urlencode(p)
+        url = near_point_url + "?" + urllib.parse.urlencode(p)
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read())
@@ -875,8 +791,8 @@ def sync_esri_places_location(
         seen: set[str] = set()
         results: list[dict] = []
         batches = [
-            category_ids[i : i + _MAX_CATEGORY_IDS_PER_CALL]
-            for i in range(0, len(category_ids), _MAX_CATEGORY_IDS_PER_CALL)
+            category_ids[i : i + max_cat_per_call]
+            for i in range(0, len(category_ids), max_cat_per_call)
         ]
         for batch in batches:
             for place in _fetch_page_batch(lat, lon, radio_m, batch, max_resultados):
@@ -901,12 +817,12 @@ def sync_esri_places_location(
             return None
         cats = place.get("categories", [])
         categoria = "otro"
-        valor = _DEFAULT_VALOR["otro"]
+        valor = valores_cat.get("otro", 0.50)
         for c in cats:
             cid = str(c.get("categoryId", ""))
             if cid in cat_map:
                 categoria, _ = cat_map[cid]
-                valor = _DEFAULT_VALOR.get(categoria, 0.5)
+                valor = valores_cat.get(categoria, 0.5)
                 break
         cat_labels = [c.get("label", "") for c in cats if c.get("label")]
         detalle = " · ".join(cat_labels[:3]) if cat_labels else None
@@ -930,14 +846,16 @@ def sync_esri_places_location(
         return 0
 
     lat, lon = coords
-    radio_m = int(params.get("radio_m", _DEFAULT_RADIO_M))
+    radio_m = int(params.get("radio_m", radio_m_default))
     max_res = int(params.get("max_resultados", 200))
 
     cat_ids_cfg = params.get("categorias")
     if cat_ids_cfg:
-        cat_map = {cid: _DEFAULT_CATEGORIES.get(cid, ("otro", cid)) for cid in cat_ids_cfg}
+        cat_map: dict[str, tuple[str, str]] = {
+            cid: cat_map_default.get(cid, ("otro", cid)) for cid in cat_ids_cfg
+        }
     else:
-        cat_map = _DEFAULT_CATEGORIES.copy()
+        cat_map = cat_map_default.copy()
 
     try:
         places = _fetch_all_places(lat, lon, radio_m, list(cat_map.keys()), max_res)

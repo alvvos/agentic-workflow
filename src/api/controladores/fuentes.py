@@ -1,55 +1,40 @@
 from __future__ import annotations
 
-import importlib
 import json
-import pkgutil
-from pathlib import Path
 
 from src.api.modelos.fuente import ConfigFuente, FuenteDisponible
 from src.db.store import get_conn
 
-_CATALOGO: dict[str, FuenteDisponible] | None = None
-
 
 def _cargar_catalogo() -> dict[str, FuenteDisponible]:
+    rows = (
+        get_conn()
+        .execute(
+            "SELECT source, categoria, periodicidad, descripcion, url_referencia, "
+            "cobertura_desde, latencia_dias, paises, params_schema, params_ejemplo "
+            "FROM source_registry WHERE activo = TRUE ORDER BY source"
+        )
+        .fetchall()
+    )
     catalogo: dict[str, FuenteDisponible] = {}
-    for pkg_path in ("src.data_ingestion.mensual", "src.data_ingestion.diaria"):
-        try:
-            pkg = importlib.import_module(pkg_path)
-            pkg_dir = Path(pkg.__file__).parent
-        except Exception:
-            continue
-        for _, modname, _ in pkgutil.iter_modules([str(pkg_dir)]):
-            if modname.startswith("_"):
-                continue
-            try:
-                mod = importlib.import_module(f"{pkg_path}.{modname}")
-                entry = getattr(mod, "CATALOG_ENTRY", None)
-                source = getattr(mod, "SOURCE", None)
-                paises = getattr(mod, "CATALOG_PAISES", [])
-                if entry and source:
-                    catalogo[source] = FuenteDisponible(
-                        source=source,
-                        categoria=entry.get("categoria"),
-                        periodicidad=entry.get("periodicidad"),
-                        descripcion=entry.get("descripcion"),
-                        url_referencia=entry.get("url_referencia"),
-                        cobertura_desde=entry.get("cobertura_desde"),
-                        latencia_dias=entry.get("latencia_dias"),
-                        paises=paises,
-                        params_schema=entry.get("params_schema"),
-                        params_ejemplo=entry.get("params_ejemplo"),
-                    )
-            except Exception:
-                pass
+    for r in rows:
+        catalogo[r[0]] = FuenteDisponible(
+            source=r[0],
+            categoria=r[1],
+            periodicidad=r[2],
+            descripcion=r[3],
+            url_referencia=r[4],
+            cobertura_desde=r[5],
+            latencia_dias=r[6],
+            paises=r[7] if isinstance(r[7], list) else [],
+            params_schema=r[8],
+            params_ejemplo=r[9] if isinstance(r[9], dict) else {},
+        )
     return catalogo
 
 
 def catalogo_fuentes() -> list[FuenteDisponible]:
-    global _CATALOGO
-    if _CATALOGO is None:
-        _CATALOGO = _cargar_catalogo()
-    return list(_CATALOGO.values())
+    return list(_cargar_catalogo().values())
 
 
 def listar_fuentes(location_uuid: str) -> list[ConfigFuente]:

@@ -24,6 +24,7 @@ from src.data_ingestion._common import (
     WEATHER_FORECAST,
     get_active_locations,
     get_configured_locations,
+    get_source_config,
     is_fresh,
     update_ev_rank_total,
     write_calendario_org,
@@ -192,6 +193,8 @@ def _handler_cruceros(
         from src.data_ingestion._common import ensure_feature_registry
         from src.db.store import get_conn
 
+        cfg = get_source_config("cruceros", params)
+
         ajax_url = params.get("ajax_url")
         if not ajax_url:
             if verbose:
@@ -199,7 +202,8 @@ def _handler_cruceros(
             return 0
         pais_codigo = params.get("pais_codigo", "ES")
 
-        _FK_DIA = "n_pasajeros_crucero_dia"
+        feature_key = cfg["feature_key"]
+        categoria_evento = cfg.get("categoria_evento", "escala_crucero")
 
         def _fetch_month(month: int, year: int) -> list[dict]:
             resp = requests.post(
@@ -263,7 +267,7 @@ def _handler_cruceros(
                     None,
                     uuid,
                     pais_codigo,
-                    "escala_crucero",
+                    categoria_evento,
                     e["fecha"],
                     e["fecha"],
                     _json.dumps(
@@ -275,7 +279,7 @@ def _handler_cruceros(
                         ensure_ascii=False,
                     ),
                     "cruceros",
-                    f"{uuid}:escala_crucero:{e['fecha']}:{e.get('barco', '')}",
+                    f"{uuid}:{categoria_evento}:{e['fecha']}:{e.get('barco', '')}",
                 )
                 for e in escalas
             ]
@@ -293,13 +297,13 @@ def _handler_cruceros(
                 if pax and pax > 0:
                     daily[e["fecha"]] = daily.get(e["fecha"], 0.0) + pax
             if daily:
-                ensure_feature_registry(_FK_DIA, "cruceros", "turismo")
+                ensure_feature_registry(feature_key, "cruceros", "turismo")
                 conn.executemany(
                     "INSERT INTO store_features_ext (fecha, location_uuid, feature_key, value) "
                     "VALUES (?,?,?,?) "
                     "ON CONFLICT (fecha, location_uuid, feature_key) "
                     "DO UPDATE SET value = excluded.value, ingested_at = NOW()",
-                    [(f, uuid, _FK_DIA, v) for f, v in daily.items()],
+                    [(f, uuid, feature_key, v) for f, v in daily.items()],
                 )
             return len(cal_rows)
 
@@ -678,10 +682,12 @@ def sync_cruceros_months(
 
     import requests
 
-    from src.data_ingestion._common import ensure_feature_registry
+    from src.data_ingestion._common import ensure_feature_registry, get_source_config
     from src.db.store import get_conn
 
-    _FK_DIA = "n_pasajeros_crucero_dia"
+    _cfg = get_source_config("cruceros")
+    _FK_DIA = _cfg.get("feature_key", "n_pasajeros_crucero_dia")
+    _CATEGORIA_EVENTO = _cfg.get("categoria_evento", "escala_crucero")
 
     def _parse_arrival_date(entrada_salida: str, query_month: int, query_year: int):
         try:
@@ -738,7 +744,7 @@ def sync_cruceros_months(
                 None,
                 location_uuid,
                 pais_codigo,
-                "escala_crucero",
+                _CATEGORIA_EVENTO,
                 e["fecha"],
                 e["fecha"],
                 _json.dumps(
@@ -750,7 +756,7 @@ def sync_cruceros_months(
                     ensure_ascii=False,
                 ),
                 "cruceros",
-                f"{location_uuid}:escala_crucero:{e['fecha']}:{e.get('barco', '')}",
+                f"{location_uuid}:{_CATEGORIA_EVENTO}:{e['fecha']}:{e.get('barco', '')}",
             )
             for e in escalas
         ]
