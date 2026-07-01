@@ -130,7 +130,7 @@ def _get_configured_locations() -> list[tuple[str, list[dict], str]]:
     for loc_uuid, params_raw in rows:
         params = params_raw if isinstance(params_raw, dict) else json.loads(params_raw or "{}")
         estaciones = params.get("estaciones", [])
-        url_pattern = params.get("anyo_url", _DEFAULT_URL_PATTERN)
+        url_pattern = params.get("anyo_url") or _DEFAULT_URL_PATTERN
         if estaciones:
             result.append((loc_uuid, estaciones, url_pattern))
     return result

@@ -173,9 +173,9 @@ def _ensure_feature_registry(feature_key: str, descripcion: str) -> None:
     conn = get_conn()
     conn.execute(
         "INSERT INTO feature_registry "
-        "(feature_key, source, descripcion, categoria, periodicidad, activo) "
-        "VALUES (?,?,?,?,?,TRUE) ON CONFLICT (feature_key) DO NOTHING",
-        [feature_key, SOURCE, descripcion, "turismo", "mensual"],
+        "(feature_key, source, notas, categoria) "
+        "VALUES (?,?,?,?) ON CONFLICT (feature_key) DO NOTHING",
+        [feature_key, SOURCE, descripcion, "turismo"],
     )
 
 
