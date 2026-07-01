@@ -48,7 +48,7 @@ def _handler_metro_madrid(
         return 0
 
     cfg = get_source_config("metro_madrid", params)
-    feature_key_prefix = cfg.get("feature_key_prefix", "afluencia_metro_")
+    feature_key_prefix = cfg["feature_key_prefix"]
 
     estaciones = params.get("estaciones", [])
     url_pattern = params.get("anyo_url")

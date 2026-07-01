@@ -686,8 +686,8 @@ def sync_cruceros_months(
     from src.db.store import get_conn
 
     _cfg = get_source_config("cruceros")
-    _FK_DIA = _cfg.get("feature_key", "n_pasajeros_crucero_dia")
-    _CATEGORIA_EVENTO = _cfg.get("categoria_evento", "escala_crucero")
+    _FK_DIA = _cfg["feature_key"]
+    _CATEGORIA_EVENTO = _cfg["categoria_evento"]
 
     def _parse_arrival_date(entrada_salida: str, query_month: int, query_year: int):
         try:
