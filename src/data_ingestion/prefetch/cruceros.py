@@ -114,9 +114,9 @@ _FK_DIA = "n_pasajeros_crucero_dia"
 
 def _ensure_feature_registry() -> None:
     get_conn().execute(
-        "INSERT INTO feature_registry (feature_key, source, categoria, periodicidad, activo) "
-        "VALUES (?,?,?,?,TRUE) ON CONFLICT (feature_key) DO NOTHING",
-        [_FK_DIA, _SOURCE, "turismo", "diaria"],
+        "INSERT INTO feature_registry (feature_key, source, categoria) "
+        "VALUES (?,?,?) ON CONFLICT (feature_key) DO NOTHING",
+        [_FK_DIA, _SOURCE, "turismo"],
     )
 
 
