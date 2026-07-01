@@ -50,11 +50,37 @@ from src.core.theme import (
     PALETA_PM as _PALETA_PM,
 )
 from src.core.utils import MESES_ES as _MESES_ES
-from src.data_processing.data_radar import obtener_clima_historico, obtener_info_ubicacion
 from src.data_processing.geo_enrichment import get_geo_snapshot_date, get_geo_vals
+from src.db.queries import get_location_by_name
 from src.reporting.geo_panel import generar_mapa_contexto, generar_panel_geo_visual
 
 festivos_espana = holidays.ES(years=[2024, 2025, 2026])
+
+
+def _clima_historico(lat: float, lon: float, fecha_inicio: str, fecha_fin: str) -> dict:
+    import requests
+
+    try:
+        url = (
+            f"https://archive-api.open-meteo.com/v1/archive"
+            f"?latitude={lat}&longitude={lon}"
+            f"&start_date={fecha_inicio}&end_date={fecha_fin}"
+            f"&daily=temperature_2m_max,temperature_2m_min,precipitation_sum"
+            f"&timezone=Europe%2FMadrid"
+        )
+        d = requests.get(url, timeout=5).json().get("daily", {})
+        return {
+            dia: {
+                "tmax": d["temperature_2m_max"][i],
+                "tmin": d["temperature_2m_min"][i],
+                "precip": d["precipitation_sum"][i],
+            }
+            for i, dia in enumerate(d.get("time", []))
+        }
+    except Exception:
+        return {}
+
+
 dias_semana_es = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 dias_corto = ["L", "M", "X", "J", "V", "S", "D"]
 
@@ -4281,8 +4307,9 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
     if pd.isna(fecha_max):
         return dbc.Alert("Error de formato de fecha.", color="danger", className="rounded-4")
 
-    lat, lon, _ = obtener_info_ubicacion(ubi)
-    clima = obtener_clima_historico(
+    _loc = get_location_by_name(ubi)
+    lat, lon = (_loc.get("lat", 40.4168), _loc.get("lon", -3.7038)) if _loc else (40.4168, -3.7038)
+    clima = _clima_historico(
         lat,
         lon,
         (fecha_max - timedelta(days=60)).strftime("%Y-%m-%d"),

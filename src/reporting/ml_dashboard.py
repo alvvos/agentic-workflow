@@ -1,4 +1,3 @@
-import os
 from datetime import date, timedelta
 
 import dash_bootstrap_components as dbc
@@ -7,7 +6,6 @@ import plotly.graph_objects as go
 from dash import Input, Output, State, callback, dcc, html, no_update
 
 from src.core.data_master import mapa_tiendas
-from src.data_processing.constructor_master import cargar_csv_crudo, enriquecer_datos_ubicacion
 from src.db.queries import get_df_enriquecido, get_zones_for_loc
 from src.services.ml_predictivo import ejecutar_auditoria_predictiva
 
@@ -410,18 +408,14 @@ def ejecutar_auditoria(n, locs, zone, fecha, horiz, session_id):
         # Prefer DuckDB; fall back to session CSV
         df_e = get_df_enriquecido(loc_principal, session_id=session_id)
         if df_e.empty:
-            archivo_usuario = os.path.join("src", "data", f"dataset_{session_id}.csv")
-            if not os.path.exists(archivo_usuario):
-                return (
-                    "-",
-                    "-",
-                    "-",
-                    "-",
-                    go.Figure(),
-                    "Error: Sincroniza los datos desde el panel principal antes de usar el Motor Predictivo.",
-                )
-            df_crudo = cargar_csv_crudo(archivo_usuario)
-            df_e = enriquecer_datos_ubicacion(df_crudo, loc_principal)
+            return (
+                "-",
+                "-",
+                "-",
+                "-",
+                go.Figure(),
+                "Error: Sincroniza los datos desde el panel principal antes de usar el Motor Predictivo.",
+            )
         res = ejecutar_auditoria_predictiva(df_e, loc_principal, zone, fecha, horiz)
 
         if "error" in res:
@@ -498,20 +492,17 @@ def ejecutar_forecast_manana(n, locs, session_id):
     if not session_id:
         return no_update, "Error de sesión."
 
-    archivo = os.path.join("src", "data", f"dataset_{session_id}.csv")
-    if not os.path.exists(archivo):
-        return no_update, "Sincroniza los datos desde el panel principal primero."
-
     try:
-        df_crudo = cargar_csv_crudo(archivo)
-        ultima_fecha_global = pd.to_datetime(df_crudo["fecha"]).max()
-        falso_hoy = (ultima_fecha_global + timedelta(days=1)).strftime("%Y-%m-%d")
-
         zona_cards = []
+        ultima_fecha_global = None
         for loc_uuid in locs or []:
-            df_e = enriquecer_datos_ubicacion(df_crudo, loc_uuid)
+            df_e = get_df_enriquecido(loc_uuid, session_id=session_id)
             if df_e.empty:
                 continue
+            max_fecha = pd.to_datetime(df_e["fecha"]).max()
+            if ultima_fecha_global is None or max_fecha > ultima_fecha_global:
+                ultima_fecha_global = max_fecha
+            falso_hoy = (max_fecha + timedelta(days=1)).strftime("%Y-%m-%d")
             loc_nombre = mapa_tiendas_ml.get(loc_uuid, loc_uuid)
             for zona_info in mapa_zonas_por_loc.get(loc_uuid, []):
                 zone_uuid = zona_info["value"]

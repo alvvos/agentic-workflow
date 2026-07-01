@@ -7,35 +7,7 @@ import pandas as pd
 import requests
 from dash import html
 
-
-def obtener_info_ubicacion(nombre_ubi, ruta_json=None):
-    lat, lon, region_code = 40.4168, -3.7038, "MD"
-    try:
-        from src.db.queries import get_location_by_name
-
-        loc = get_location_by_name(nombre_ubi)
-        if loc:
-            return loc.get("lat", lat), loc.get("lon", lon), loc.get("region_code", region_code)
-    except Exception:
-        pass
-    return lat, lon, region_code
-
-
-def obtener_clima_historico(lat, lon, fecha_inicio, fecha_fin):
-    clima_dict = {}
-    url = f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lon}&start_date={fecha_inicio}&end_date={fecha_fin}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Europe%2FMadrid"
-    try:
-        respuesta = requests.get(url, timeout=5).json()
-        if "daily" in respuesta:
-            for i, dia_str in enumerate(respuesta["daily"]["time"]):
-                clima_dict[dia_str] = {
-                    "tmax": respuesta["daily"]["temperature_2m_max"][i],
-                    "tmin": respuesta["daily"]["temperature_2m_min"][i],
-                    "precip": respuesta["daily"]["precipitation_sum"][i],
-                }
-    except Exception:
-        pass
-    return clima_dict
+from src.db.queries import get_location_by_name
 
 
 def generar_tabla_auditoria(df_filt):
@@ -87,7 +59,10 @@ def generar_tabla_auditoria(df_filt):
         df_ubi["fecha_dt"] = pd.to_datetime(df_ubi["fecha"]).dt.date
         df_ubi["year_month"] = df_ubi["fecha_dt"].apply(lambda x: (x.year, x.month))
 
-        lat, lon, region_code = obtener_info_ubicacion(ubi)
+        _loc = get_location_by_name(ubi)
+        lat = _loc.get("lat", 40.4168) if _loc else 40.4168
+        lon = _loc.get("lon", -3.7038) if _loc else -3.7038
+        region_code = _loc.get("region_code", "MD") if _loc else "MD"
         años_presentes = list(df_ubi["fecha_dt"].apply(lambda x: x.year).unique())
 
         try:
@@ -98,7 +73,25 @@ def generar_tabla_auditoria(df_filt):
         fecha_min_str, fecha_max_str = df_ubi["fecha_dt"].min().strftime("%Y-%m-%d"), df_ubi[
             "fecha_dt"
         ].max().strftime("%Y-%m-%d")
-        clima_datos = obtener_clima_historico(lat, lon, fecha_min_str, fecha_max_str)
+        try:
+            _url = (
+                f"https://archive-api.open-meteo.com/v1/archive"
+                f"?latitude={lat}&longitude={lon}"
+                f"&start_date={fecha_min_str}&end_date={fecha_max_str}"
+                f"&daily=temperature_2m_max,temperature_2m_min,precipitation_sum"
+                f"&timezone=Europe%2FMadrid"
+            )
+            _d = requests.get(_url, timeout=5).json().get("daily", {})
+            clima_datos = {
+                dia: {
+                    "tmax": _d["temperature_2m_max"][i],
+                    "tmin": _d["temperature_2m_min"][i],
+                    "precip": _d["precipitation_sum"][i],
+                }
+                for i, dia in enumerate(_d.get("time", []))
+            }
+        except Exception:
+            clima_datos = {}
 
         tabs_meses = []
         for year, month in sorted(df_ubi["year_month"].unique()):

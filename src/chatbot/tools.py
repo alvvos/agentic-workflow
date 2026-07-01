@@ -295,28 +295,6 @@ def get_forecast(
     df = get_df_enriquecido(location_uuid, session_id)
 
     if df is None or df.empty:
-        # fallback CSV
-        from src.data_processing.constructor_master import (
-            cargar_csv_crudo,
-            enriquecer_datos_ubicacion,
-        )
-
-        archivo = str(_DATA_DIR / f"dataset_{session_id}.csv")
-        if not Path(archivo).exists():
-            files = sorted(glob(_RAW_GLOB))
-            if not files:
-                return {"error": "No hay datos disponibles."}
-            archivo = files[-1]
-        df_crudo = cargar_csv_crudo(archivo)
-        if df_crudo is None or df_crudo.empty:
-            return {"error": "No hay datos disponibles."}
-        _ML_COLS = {"es_festivo", "llueve", "temp_max", "temp_min"}
-        if _ML_COLS.issubset(df_crudo.columns):
-            df = df_crudo[df_crudo["location_id"] == location_uuid].copy()
-        else:
-            df = enriquecer_datos_ubicacion(df_crudo, location_uuid)
-
-    if df is None or df.empty:
         return {"error": f"Sin datos para la ubicación {location_uuid}."}
 
     falso_hoy = date.today().isoformat()
