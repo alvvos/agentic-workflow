@@ -568,9 +568,15 @@ def _migrar_renombrar_tablas(conn: PgConn) -> None:
         conn.execute(
             f"""
             DO $$ BEGIN
-              IF EXISTS (SELECT FROM pg_tables WHERE schemaname='public' AND tablename='{viejo}')
-                 AND NOT EXISTS (SELECT FROM pg_tables WHERE schemaname='public' AND tablename='{nuevo}')
-              THEN ALTER TABLE {viejo} RENAME TO {nuevo};
+              IF EXISTS (SELECT FROM pg_tables WHERE schemaname='public' AND tablename='{viejo}') THEN
+                IF NOT EXISTS (SELECT FROM pg_tables WHERE schemaname='public' AND tablename='{nuevo}') THEN
+                  -- caso normal: solo existe la vieja → renombrar
+                  ALTER TABLE {viejo} RENAME TO {nuevo};
+                ELSIF (SELECT COUNT(*) FROM {nuevo}) = 0 THEN
+                  -- caso migración: nueva existe vacía (creada por DDL) y vieja tiene datos → swap
+                  DROP TABLE {nuevo} CASCADE;
+                  ALTER TABLE {viejo} RENAME TO {nuevo};
+                END IF;
               END IF;
             END $$
             """
