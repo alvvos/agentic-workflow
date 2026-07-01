@@ -533,6 +533,7 @@ def _apply_ddl(conn: PgConn) -> None:
     _migrate_registries(conn)
     _migrate_fuentes(conn)
     _migrar_tipo_conector(conn)
+    _migrar_config_thesportsdb(conn)
     _sync_users_from_json(conn)
 
 
@@ -1561,8 +1562,38 @@ _SOURCE_REGISTRY_SEED = [
         "latencia_dias": 0,
         "paises": [],
         "params_schema": None,
-        "params_ejemplo": {},
-        "config": {},
+        "params_ejemplo": {
+            "equipos": ["real madrid", "atlético", "getafe"],
+            "sedes": ["santiago bernabéu", "estadio metropolitano"],
+        },
+        "config": {
+            "delay": 1.2,
+            "retries": 2,
+            "ligas": {
+                "ES": [
+                    {"nombre": "LaLiga", "id": "4335", "tipo": "liga"},
+                    {"nombre": "LaLiga 2", "id": "4336", "tipo": "liga"},
+                    {"nombre": "Copa del Rey", "id": "4337", "tipo": "copa"},
+                    {"nombre": "Supercopa de España", "id": "5104", "tipo": "copa"},
+                ],
+                "MX": [
+                    {"nombre": "Liga MX", "id": "4350", "tipo": "liga"},
+                    {"nombre": "Liga de Expansión", "id": "4351", "tipo": "liga"},
+                ],
+                "EU": [
+                    {"nombre": "UEFA Champions", "id": "4480", "tipo": "champions"},
+                    {"nombre": "UEFA Europa", "id": "4481", "tipo": "champions"},
+                    {"nombre": "UEFA Conference", "id": "4966", "tipo": "champions"},
+                ],
+            },
+            "scores": {
+                "liga": 55,
+                "copa": 65,
+                "champions": 85,
+                "derby": 80,
+                "factor_visitante": 0.4,
+            },
+        },
     },
     {
         "fuente": "agenda_es",
@@ -1763,6 +1794,50 @@ def _migrar_tipo_conector(conn: PgConn) -> None:
             "UPDATE fuentes SET config = config || %s::jsonb WHERE fuente = %s",
             [_json.dumps(extra_config), fuente],
         )
+
+
+def _migrar_config_thesportsdb(conn: PgConn) -> None:
+    """Migra ligas y scores de thesportsdb de código a DB. Idempotente."""
+    import json as _json
+
+    ya_migrado = conn.execute(
+        "SELECT config ? 'ligas' FROM fuentes WHERE fuente = 'thesportsdb'"
+    ).fetchone()
+    if ya_migrado and ya_migrado[0]:
+        return
+
+    extra = {
+        "delay": 1.2,
+        "retries": 2,
+        "ligas": {
+            "ES": [
+                {"nombre": "LaLiga", "id": "4335", "tipo": "liga"},
+                {"nombre": "LaLiga 2", "id": "4336", "tipo": "liga"},
+                {"nombre": "Copa del Rey", "id": "4337", "tipo": "copa"},
+                {"nombre": "Supercopa de España", "id": "5104", "tipo": "copa"},
+            ],
+            "MX": [
+                {"nombre": "Liga MX", "id": "4350", "tipo": "liga"},
+                {"nombre": "Liga de Expansión", "id": "4351", "tipo": "liga"},
+            ],
+            "EU": [
+                {"nombre": "UEFA Champions", "id": "4480", "tipo": "champions"},
+                {"nombre": "UEFA Europa", "id": "4481", "tipo": "champions"},
+                {"nombre": "UEFA Conference", "id": "4966", "tipo": "champions"},
+            ],
+        },
+        "scores": {
+            "liga": 55,
+            "copa": 65,
+            "champions": 85,
+            "derby": 80,
+            "factor_visitante": 0.4,
+        },
+    }
+    conn.execute(
+        "UPDATE fuentes SET config = config || %s::jsonb WHERE fuente = 'thesportsdb'",
+        [_json.dumps(extra)],
+    )
 
 
 def _migrate_visitas(conn: PgConn) -> None:
