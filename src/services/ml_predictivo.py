@@ -81,32 +81,7 @@ def _save_model(modelo, location_uuid, zone_uuid, features, metrics):
             f,
             indent=2,
         )
-    try:
-        from src.db.store import get_conn
-
-        get_conn().execute(
-            """
-            INSERT INTO model_registry (model_id, location_uuid, zone_uuid, trained_at, features, metrics, model_path, is_valid)
-            VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)
-            ON CONFLICT (model_id) DO UPDATE SET
-                trained_at = excluded.trained_at,
-                features   = excluded.features,
-                metrics    = excluded.metrics,
-                model_path = excluded.model_path,
-                is_valid   = TRUE
-        """,
-            [
-                f"{location_uuid}_{zone_uuid}",
-                location_uuid,
-                zone_uuid,
-                trained_at,
-                json.dumps(features),
-                json.dumps(metrics),
-                model_path,
-            ],
-        )
-    except Exception:
-        pass
+    # model_registry table dropped — models persisted as files only
 
 
 # ── Predicción ───────────────────────────────────────────────────────────────
@@ -129,7 +104,7 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
 
         # 1. EXTRACCIÓN DE HISTÓRICO
         df_tienda = df_master[
-            (df_master["location_id"] == location_uuid) & (df_master["zone_uuid"] == zone_uuid)
+            (df_master["location_id"] == location_uuid) & (df_master["zona_id"] == zone_uuid)
         ].copy()
 
         if df_tienda.empty:

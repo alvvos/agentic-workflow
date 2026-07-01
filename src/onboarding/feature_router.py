@@ -45,8 +45,7 @@ def enrutar(location_uuid: str) -> RoutingResult:
     conn = get_conn()
 
     row = conn.execute(
-        "SELECT nombre, ciudad, pais_codigo, lat, lon "
-        "FROM dim_ubicaciones WHERE location_uuid = ?",
+        "SELECT nombre, ciudad, pais_codigo, lat, lon " "FROM ubicaciones WHERE ubicacion_id = ?",
         [location_uuid],
     ).fetchone()
 
@@ -54,7 +53,7 @@ def enrutar(location_uuid: str) -> RoutingResult:
         return RoutingResult(
             location_uuid=location_uuid,
             nombre="?",
-            excluidas={"*": f"location_uuid '{location_uuid}' no encontrado"},
+            excluidas={"*": f"ubicacion_id '{location_uuid}' no encontrado"},
         )
 
     nombre, ciudad, pais_codigo, lat, lon = row

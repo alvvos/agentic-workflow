@@ -1,11 +1,11 @@
 """
-Validador del DataFrame de señales externas (store_features_ext).
+Validador del DataFrame de señales externas (valores_señales).
 
-Estructura estándar de cualquier consulta a store_features_ext:
+Estructura estándar de cualquier consulta a valores_señales:
   fecha           date / datetime   — fecha del valor
-  location_uuid   object            — UUID de la ubicación
-  feature_key     object            — clave de la señal (ej. 'n_pasajeros_crucero_oficial')
-  value           float64           — valor de la señal ese día
+  ubicacion_id    object            — UUID de la ubicación
+  señal_id        object            — clave de la señal (ej. 'n_pasajeros_crucero_oficial')
+  valor           float64           — valor de la señal ese día
 
 Este validador aplica a todas las señales de contexto,
 independientemente de cuántas fuentes de ingesta las produzcan.
@@ -19,9 +19,9 @@ SECCION = "features_ext"
 
 _REQUERIDAS = {
     "fecha": "datetime_or_date",
-    "location_uuid": "object",
-    "feature_key": "object",
-    "value": "numeric",
+    "ubicacion_id": "object",
+    "señal_id": "object",
+    "valor": "numeric",
 }
 
 

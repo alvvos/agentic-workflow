@@ -6,8 +6,8 @@ Rápido y sin efectos secundarios: solo lectura de DB.
 
 Checks:
   1. UBICACION  — activa=TRUE, lat/lon presentes, aparece en el árbol de tiendas
-  2. VISITAS    — fact_visitas tiene ≥ MIN_DIAS_VISITAS filas (historial mínimo útil)
-  3. COBERTURA  — cada feature 'active' tiene filas en store_features_ext
+  2. VISITAS    — visitas tiene ≥ MIN_DIAS_VISITAS filas (historial mínimo útil)
+  3. COBERTURA  — cada feature 'active' tiene filas en valores_señales
   4. ZONAS      — al menos una zona activa asociada a la ubicación
 """
 
@@ -42,12 +42,12 @@ class SmokeTestResult:
 
 def _check_ubicacion(conn, location_uuid: str) -> CheckResult:
     row = conn.execute(
-        "SELECT activa, lat, lon FROM dim_ubicaciones WHERE location_uuid = ?",
+        "SELECT activa, lat, lon FROM ubicaciones WHERE ubicacion_id = ?",
         [location_uuid],
     ).fetchone()
 
     if not row:
-        return CheckResult("ubicacion", False, "location_uuid no encontrado en dim_ubicaciones")
+        return CheckResult("ubicacion", False, "ubicacion_id no encontrado en ubicaciones")
 
     activa, lat, lon = row
     if not activa:
@@ -64,7 +64,7 @@ def _check_ubicacion(conn, location_uuid: str) -> CheckResult:
 
 def _check_visitas(conn, location_uuid: str) -> CheckResult:
     n = conn.execute(
-        "SELECT COUNT(DISTINCT fecha) FROM fact_visitas WHERE location_uuid = ?",
+        "SELECT COUNT(DISTINCT fecha) FROM visitas WHERE ubicacion_id = ?",
         [location_uuid],
     ).fetchone()[0]
 
@@ -72,21 +72,21 @@ def _check_visitas(conn, location_uuid: str) -> CheckResult:
         return CheckResult(
             "visitas",
             False,
-            "0 días en fact_visitas — sync nocturna aún no ha corrido para esta ubicación",
+            "0 días en visitas — sync nocturna aún no ha corrido para esta ubicación",
         )
     if n < MIN_DIAS_VISITAS:
         return CheckResult(
             "visitas",
             False,
-            f"solo {n} días en fact_visitas (mínimo {MIN_DIAS_VISITAS} para modelo útil)",
+            f"solo {n} días en visitas (mínimo {MIN_DIAS_VISITAS} para modelo útil)",
         )
 
-    return CheckResult("visitas", True, f"{n} días con datos en fact_visitas")
+    return CheckResult("visitas", True, f"{n} días con datos en visitas")
 
 
 def _check_cobertura_features(conn, location_uuid: str) -> CheckResult:
     activas = conn.execute(
-        "SELECT feature_key FROM feature_flags WHERE location_uuid = ? AND status = 'active'",
+        "SELECT señal_id FROM activacion_señales WHERE ubicacion_id = ? AND status = 'active'",
         [location_uuid],
     ).fetchall()
 
@@ -100,7 +100,7 @@ def _check_cobertura_features(conn, location_uuid: str) -> CheckResult:
     sin_datos: list[str] = []
     for (fk,) in activas:
         n = conn.execute(
-            "SELECT COUNT(*) FROM store_features_ext WHERE location_uuid = ? AND feature_key = ?",
+            "SELECT COUNT(*) FROM valores_señales WHERE ubicacion_id = ? AND señal_id = ?",
             [location_uuid, fk],
         ).fetchone()[0]
         if n == 0:
@@ -110,7 +110,7 @@ def _check_cobertura_features(conn, location_uuid: str) -> CheckResult:
         return CheckResult(
             "cobertura_features",
             False,
-            f"{len(sin_datos)} feature(s) activa(s) sin datos en store_features_ext: "
+            f"{len(sin_datos)} feature(s) activa(s) sin datos en valores_señales: "
             + ", ".join(sin_datos[:5])
             + ("..." if len(sin_datos) > 5 else ""),
         )
@@ -118,13 +118,13 @@ def _check_cobertura_features(conn, location_uuid: str) -> CheckResult:
     return CheckResult(
         "cobertura_features",
         True,
-        f"{len(activas)} feature(s) activa(s) con cobertura en store_features_ext",
+        f"{len(activas)} feature(s) activa(s) con cobertura en valores_señales",
     )
 
 
 def _check_zonas(conn, location_uuid: str) -> CheckResult:
     n = conn.execute(
-        "SELECT COUNT(*) FROM dim_zonas WHERE location_uuid = ? AND hidden = FALSE",
+        "SELECT COUNT(*) FROM zonas WHERE ubicacion_id = ? AND hidden = FALSE",
         [location_uuid],
     ).fetchone()[0]
 
@@ -132,7 +132,7 @@ def _check_zonas(conn, location_uuid: str) -> CheckResult:
         return CheckResult(
             "zonas",
             False,
-            "sin zonas visibles en dim_zonas — el panel no podrá mostrar datos",
+            "sin zonas visibles en zonas — el panel no podrá mostrar datos",
         )
 
     return CheckResult("zonas", True, f"{n} zona(s) visible(s)")
@@ -144,7 +144,7 @@ def ejecutar(location_uuid: str) -> SmokeTestResult:
     conn = get_conn()
 
     nombre_row = conn.execute(
-        "SELECT nombre FROM dim_ubicaciones WHERE location_uuid = ?", [location_uuid]
+        "SELECT nombre FROM ubicaciones WHERE ubicacion_id = ?", [location_uuid]
     ).fetchone()
     nombre = nombre_row[0] if nombre_row else location_uuid
 

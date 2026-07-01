@@ -1,6 +1,6 @@
 """
 Historial persistente de conversaciones por usuario.
-Tablas: chat_conversaciones, chat_mensajes
+Tablas: conversaciones, mensajes
 """
 
 import json
@@ -63,7 +63,7 @@ def create_conversation(session_id: str, location_uuid: Optional[str] = None) ->
     conv_id = uuid.uuid4().hex[:8]
     try:
         get_conn().execute(
-            "INSERT INTO chat_conversaciones (conv_id, user_id, title, location_uuid)"
+            "INSERT INTO conversaciones (conversacion_id, usuario_id, title, ubicacion_id)"
             " VALUES (?, ?, 'Nueva conversación', ?)",
             [conv_id, session_id or "anonymous", _safe_uuid(location_uuid)],
         )
@@ -82,7 +82,7 @@ def update_conversation(
     try:
         conn = get_conn()
         row = conn.execute(
-            "SELECT title FROM chat_conversaciones WHERE conv_id = ?", [conv_id]
+            "SELECT title FROM conversaciones WHERE conversacion_id = ?", [conv_id]
         ).fetchone()
 
         new_title = row[0] if row else "Nueva conversación"
@@ -101,23 +101,23 @@ def update_conversation(
         now = datetime.now()
         if row:
             conn.execute(
-                "UPDATE chat_conversaciones"
-                " SET title = ?, updated_at = ?, location_uuid = COALESCE(?, location_uuid)"
-                " WHERE conv_id = ?",
+                "UPDATE conversaciones"
+                " SET title = ?, updated_at = ?, ubicacion_id = COALESCE(?, ubicacion_id)"
+                " WHERE conversacion_id = ?",
                 [new_title, now, safe_loc, conv_id],
             )
         else:
             conn.execute(
-                "INSERT INTO chat_conversaciones"
-                " (conv_id, user_id, title, location_uuid, updated_at)"
+                "INSERT INTO conversaciones"
+                " (conversacion_id, usuario_id, title, ubicacion_id, updated_at)"
                 " VALUES (?, ?, ?, ?, ?)",
                 [conv_id, session_id or "anonymous", new_title, safe_loc, now],
             )
 
-        conn.execute("DELETE FROM chat_mensajes WHERE conv_id = ?", [conv_id])
+        conn.execute("DELETE FROM mensajes WHERE conversacion_id = ?", [conv_id])
         if messages:
             conn.executemany(
-                "INSERT INTO chat_mensajes (conv_id, seq, role, content)" " VALUES (?, ?, ?, ?)",
+                "INSERT INTO mensajes (conversacion_id, seq, role, content)" " VALUES (?, ?, ?, ?)",
                 [
                     (conv_id, i, m.get("role", "user"), _serialize(m.get("content", "")))
                     for i, m in enumerate(messages)
@@ -130,7 +130,7 @@ def update_conversation(
 def rename_conversation(session_id: str, conv_id: str, new_title: str) -> None:
     try:
         get_conn().execute(
-            "UPDATE chat_conversaciones SET title = ? WHERE conv_id = ? AND user_id = ?",
+            "UPDATE conversaciones SET title = ? WHERE conversacion_id = ? AND usuario_id = ?",
             [new_title.strip() or "Conversación", conv_id, session_id],
         )
     except Exception as exc:
@@ -140,7 +140,7 @@ def rename_conversation(session_id: str, conv_id: str, new_title: str) -> None:
 def delete_conversation(session_id: str, conv_id: str) -> None:
     try:
         get_conn().execute(
-            "DELETE FROM chat_conversaciones WHERE conv_id = ? AND user_id = ?",
+            "DELETE FROM conversaciones WHERE conversacion_id = ? AND usuario_id = ?",
             [conv_id, session_id],
         )
     except Exception as exc:
@@ -152,8 +152,8 @@ def list_conversations(session_id: str) -> list[dict]:
         rows = (
             get_conn()
             .execute(
-                "SELECT conv_id, title, updated_at, location_uuid"
-                " FROM chat_conversaciones WHERE user_id = ?"
+                "SELECT conversacion_id, title, updated_at, ubicacion_id"
+                " FROM conversaciones WHERE usuario_id = ?"
                 " ORDER BY updated_at DESC LIMIT ?",
                 [session_id, MAX_CONVS],
             )
@@ -177,15 +177,15 @@ def load_conversation(session_id: str, conv_id: str) -> Optional[dict]:
     try:
         conn = get_conn()
         conv_row = conn.execute(
-            "SELECT conv_id, title, created_at, updated_at, location_uuid"
-            " FROM chat_conversaciones WHERE conv_id = ? AND user_id = ?",
+            "SELECT conversacion_id, title, created_at, updated_at, ubicacion_id"
+            " FROM conversaciones WHERE conversacion_id = ? AND usuario_id = ?",
             [conv_id, session_id],
         ).fetchone()
         if conv_row is None:
             return None
 
         msg_rows = conn.execute(
-            "SELECT role, content FROM chat_mensajes WHERE conv_id = ? ORDER BY seq",
+            "SELECT role, content FROM mensajes WHERE conversacion_id = ? ORDER BY seq",
             [conv_id],
         ).fetchall()
 

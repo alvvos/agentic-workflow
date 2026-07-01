@@ -173,11 +173,9 @@ def cargar_todas_ubicaciones(
     from src.db.store import get_conn
 
     conn = get_conn()
-    org_rows = conn.execute(
-        "SELECT org_uuid, nombre FROM dim_organizaciones ORDER BY nombre"
-    ).fetchall()
+    org_rows = conn.execute("SELECT org_id, nombre FROM organizaciones ORDER BY nombre").fetchall()
     loc_rows = conn.execute(
-        "SELECT location_uuid, org_uuid, nombre, lat, lon FROM dim_ubicaciones WHERE activa = TRUE"
+        "SELECT ubicacion_id, org_id, nombre, lat, lon FROM ubicaciones WHERE activa = TRUE"
     ).fetchall()
     locs_by_org: dict = {}
     for loc in loc_rows:

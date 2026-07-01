@@ -101,21 +101,21 @@ def seed_ubicaciones() -> dict:
 
     orgs, locs, zonas = [], [], []
     for org in raw:
-        org_uuid = org.get("uuid")
-        if not org_uuid:
+        org_id = org.get("uuid")
+        if not org_id:
             continue
         # Infer country from first location
         first_loc = org["locations"][0] if org["locations"] else {}
         pais = _pais(first_loc)
         config = json.dumps(_PRESETS.get(pais, _PRESET_ES))
-        orgs.append((org_uuid, org["name"], pais, config))
+        orgs.append((org_id, org["name"], pais, config))
 
         for loc in org["locations"]:
             loc_pais = _pais(loc)
             locs.append(
                 (
                     loc["uuid"],
-                    org_uuid,
+                    org_id,
                     loc["name"],
                     loc.get("lat"),
                     loc.get("lon"),
@@ -123,7 +123,6 @@ def seed_ubicaciones() -> dict:
                     loc.get("province"),
                     loc_pais,
                     loc.get("region_code"),
-                    loc.get("country_code"),
                     loc.get("postCode") or loc.get("postal_code"),
                     loc.get("address"),
                     True,
@@ -133,22 +132,22 @@ def seed_ubicaciones() -> dict:
                 zonas.append((z["uuid"], loc["uuid"], z["zoneName"], z.get("hidden", False)))
 
     conn.executemany(
-        "INSERT INTO dim_organizaciones VALUES (?,?,?,?) ON CONFLICT DO NOTHING",
+        "INSERT INTO organizaciones VALUES (?,?,?,?) ON CONFLICT DO NOTHING",
         orgs,
     )
     conn.executemany(
-        "INSERT INTO dim_ubicaciones VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING",
+        "INSERT INTO ubicaciones (ubicacion_id, org_id, nombre, lat, lon, ciudad, provincia, pais_codigo, region_code, codigo_postal, direccion, activa) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING",
         locs,
     )
     conn.executemany(
-        "INSERT INTO dim_zonas (zone_uuid, location_uuid, nombre, hidden) VALUES (?,?,?,?) ON CONFLICT DO NOTHING",
+        "INSERT INTO zonas (zona_id, ubicacion_id, nombre, hidden) VALUES (?,?,?,?) ON CONFLICT DO NOTHING",
         zonas,
     )
     return {"orgs": len(orgs), "locs": len(locs), "zonas": len(zonas)}
 
 
 def migrate_zone_types() -> int:
-    """Populate dim_zonas.zone_type from todas_las_ubicaciones.json."""
+    """Populate zonas.zone_type from todas_las_ubicaciones.json."""
     raw_path = _DATA / "todas_las_ubicaciones.json"
     if not raw_path.exists():
         return 0
@@ -161,7 +160,7 @@ def migrate_zone_types() -> int:
                 if z.get("uuid") and "zoneType" in z:
                     rows.append((z["zoneType"], z["uuid"]))
     if rows:
-        conn.executemany("UPDATE dim_zonas SET zone_type = ? WHERE zone_uuid = ?", rows)
+        conn.executemany("UPDATE zonas SET zone_type = ? WHERE zona_id = ?", rows)
     return len(rows)
 
 
@@ -179,20 +178,20 @@ def seed_geo_snapshots() -> int:
         if not isinstance(snapshots, list):
             continue
         for snap in snapshots:
-            valid_from = snap.get("valid_from")
-            valid_to = snap.get("valid_to")
-            for key, value in snap.items():
+            vigente_desde = snap.get("valid_from")
+            vigente_hasta = snap.get("valid_to")
+            for key, valor in snap.items():
                 if key in ("valid_from", "valid_to"):
                     continue
                 # Skip non-scalar values (e.g. catchment_rings GeoJSON geometry)
-                if not isinstance(value, (int, float, type(None))):
+                if not isinstance(valor, (int, float, type(None))):
                     continue
-                rows.append((loc_uuid, key, valid_from, value, valid_to))
+                rows.append((loc_uuid, key, vigente_desde, valor, vigente_hasta))
 
     conn.executemany(
         """
-        INSERT INTO store_geo_snapshots
-            (location_uuid, feature_key, valid_from, value, valid_to)
+        INSERT INTO snapshots_geo
+            (ubicacion_id, señal_id, vigente_desde, valor, vigente_hasta)
         VALUES (?,?,?,?,?)
         ON CONFLICT DO NOTHING
         """,
@@ -224,19 +223,19 @@ def seed_feature_registry() -> int:
             (key, "supercalendario", "calendario", '"all"', None, "con_cobertura", None, None)
         )
 
-    # Open-Meteo weather — stored in store_features_ext, fetched on first training call
+    # Open-Meteo weather — stored in valores_señales, fetched on first training call
     for key, nota in [
         (
             "temp_max",
-            "Temperatura máxima diaria (°C). API Open-Meteo archive. Caché en store_features_ext.",
+            "Temperatura máxima diaria (°C). API Open-Meteo archive. Caché en valores_señales.",
         ),
         (
             "temp_min",
-            "Temperatura mínima diaria (°C). API Open-Meteo archive. Caché en store_features_ext.",
+            "Temperatura mínima diaria (°C). API Open-Meteo archive. Caché en valores_señales.",
         ),
         (
             "llueve",
-            "Precipitación > 0 mm (0/1). API Open-Meteo archive. Caché en store_features_ext.",
+            "Precipitación > 0 mm (0/1). API Open-Meteo archive. Caché en valores_señales.",
         ),
     ]:
         entries.append((key, "open_meteo", "clima", '"all"', None, "con_cobertura", None, nota))
@@ -258,17 +257,17 @@ def seed_feature_registry() -> int:
 
     conn.executemany(
         """
-        INSERT INTO feature_registry
-            (feature_key, source, categoria, org_applicability, location_applicability,
+        INSERT INTO señales
+            (señal_id, fuente, categoria, org_applicability, location_applicability,
              status, notas)
         VALUES (?,?,?,?,?,?,?)
-        ON CONFLICT (feature_key) DO UPDATE
-            SET source               = EXCLUDED.source,
+        ON CONFLICT (señal_id) DO UPDATE
+            SET fuente               = EXCLUDED.fuente,
                 categoria            = EXCLUDED.categoria,
                 org_applicability    = EXCLUDED.org_applicability,
                 location_applicability = EXCLUDED.location_applicability,
                 status               = EXCLUDED.status,
-                notas                = COALESCE(EXCLUDED.notas, feature_registry.notas)
+                notas                = COALESCE(EXCLUDED.notas, señales.notas)
         """,
         [(e[0], e[1], e[2], e[3], e[4], e[5], e[7]) for e in entries],
     )
@@ -279,7 +278,7 @@ def seed_feature_registry() -> int:
 
 
 def seed_usuarios() -> int:
-    """Migrate users.json → dim_usuarios (idempotent)."""
+    """Migrate users.json → usuarios (idempotent)."""
     users_file = Path(__file__).parent.parent.parent / "users.json"
     if not users_file.exists():
         return 0
@@ -291,14 +290,14 @@ def seed_usuarios() -> int:
             entry = {"password": entry, "role": "user"}
         rows.append((username, entry.get("password", ""), entry.get("role", "user")))
     conn.executemany(
-        "INSERT INTO dim_usuarios (user_id, password_hash, role) VALUES (?,?,?) ON CONFLICT DO NOTHING",
+        "INSERT INTO usuarios (usuario_id, password_hash, role) VALUES (?,?,?) ON CONFLICT DO NOTHING",
         rows,
     )
     return len(rows)
 
 
 def seed_conversaciones() -> int:
-    """Migrate JSON conversation files → chat_conversaciones + chat_mensajes (idempotent)."""
+    """Migrate JSON conversation files → conversaciones + mensajes (idempotent)."""
     conv_root = Path(__file__).parent.parent / "data" / "conversations"
     if not conv_root.exists():
         return 0
@@ -307,30 +306,31 @@ def seed_conversaciones() -> int:
     for user_dir in conv_root.iterdir():
         if not user_dir.is_dir():
             continue
-        user_id = user_dir.name
+        usuario_id = user_dir.name
         for conv_file in sorted(user_dir.glob("*.json")):
             if conv_file.name == "_index.json":
                 continue
             try:
                 conv = json.loads(conv_file.read_text("utf-8"))
-                conv_id = conv.get("id", conv_file.stem)
+                conversacion_id = conv.get("id", conv_file.stem)
                 title = conv.get("title", "Nueva conversación")
-                loc_uuid = conv.get("location_uuid")
+                ubicacion_id = conv.get("location_uuid")
                 created = datetime.fromtimestamp(conv.get("created_at", time.time()))
                 updated = datetime.fromtimestamp(conv.get("updated_at", time.time()))
                 conn.execute(
-                    "INSERT INTO chat_conversaciones (conv_id, user_id, title, location_uuid, created_at, updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT DO NOTHING",
-                    [conv_id, user_id, title, loc_uuid, created, updated],
+                    "INSERT INTO conversaciones (conversacion_id, usuario_id, title, ubicacion_id, created_at, updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT DO NOTHING",
+                    [conversacion_id, usuario_id, title, ubicacion_id, created, updated],
                 )
                 existing = conn.execute(
-                    "SELECT COUNT(*) FROM chat_mensajes WHERE conv_id = ?", [conv_id]
+                    "SELECT COUNT(*) FROM mensajes WHERE conversacion_id = ?",
+                    [conversacion_id],
                 ).fetchone()[0]
                 if existing == 0:
                     msgs = conv.get("messages", [])
                     if msgs:
                         rows = [
                             (
-                                conv_id,
+                                conversacion_id,
                                 i,
                                 m.get("role", "user"),
                                 (
@@ -342,7 +342,7 @@ def seed_conversaciones() -> int:
                             for i, m in enumerate(msgs)
                         ]
                         conn.executemany(
-                            "INSERT INTO chat_mensajes (conv_id, seq, role, content) VALUES (?,?,?,?)",
+                            "INSERT INTO mensajes (conversacion_id, seq, role, content) VALUES (?,?,?,?)",
                             rows,
                         )
                 total += 1
@@ -353,7 +353,7 @@ def seed_conversaciones() -> int:
 
 def seed_feature_flags() -> dict:
     """
-    Seeds feature_flags for climate and geo features across all active locations.
+    Seeds activacion_señales for climate and geo features across all active locations.
     - open_meteo → active  (climate variables always enter the model)
     - esri       → inactive (no temporal signal; excluded globally)
     Idempotent: ON CONFLICT DO UPDATE enforces the target state on every run.
@@ -363,30 +363,23 @@ def seed_feature_flags() -> dict:
 
     locs = [
         r[0]
-        for r in conn.execute(
-            "SELECT location_uuid FROM dim_ubicaciones WHERE activa = TRUE"
-        ).fetchall()
+        for r in conn.execute("SELECT ubicacion_id FROM ubicaciones WHERE activa = TRUE").fetchall()
     ]
     if not locs:
         return {"active": 0, "inactive": 0}
 
     climate_keys = [
         r[0]
-        for r in conn.execute(
-            "SELECT feature_key FROM feature_registry WHERE source = 'open_meteo'"
-        ).fetchall()
+        for r in conn.execute("SELECT señal_id FROM señales WHERE fuente = 'open_meteo'").fetchall()
     ]
     geo_keys = [
-        r[0]
-        for r in conn.execute(
-            "SELECT feature_key FROM feature_registry WHERE source = 'esri'"
-        ).fetchall()
+        r[0] for r in conn.execute("SELECT señal_id FROM señales WHERE fuente = 'esri'").fetchall()
     ]
 
     sql = """
-        INSERT INTO feature_flags (feature_key, location_uuid, status, periodicidad)
+        INSERT INTO activacion_señales (señal_id, ubicacion_id, status, periodicidad)
         VALUES (?, ?, ?, ?)
-        ON CONFLICT (feature_key, location_uuid) DO UPDATE
+        ON CONFLICT (señal_id, ubicacion_id) DO UPDATE
             SET status       = EXCLUDED.status,
                 periodicidad = EXCLUDED.periodicidad
     """
@@ -429,8 +422,8 @@ def seed_feature_flags() -> dict:
 
 def ingest_visitas_csv(csv_path: str) -> int:
     """
-    Bulk-import an Aitanna session CSV into fact_visitas.
-    Skips rows whose location_uuid is not in dim_ubicaciones.
+    Bulk-import an Aitanna session CSV into visitas.
+    Skips rows whose ubicacion_id is not in ubicaciones.
     Idempotent via ON CONFLICT DO NOTHING.
 
     Returns the number of rows inserted.
@@ -441,7 +434,7 @@ def ingest_visitas_csv(csv_path: str) -> int:
 
     conn = get_conn()
 
-    org_map = dict(conn.execute("SELECT location_uuid, org_uuid FROM dim_ubicaciones").fetchall())
+    org_map = dict(conn.execute("SELECT ubicacion_id, org_id FROM ubicaciones").fetchall())
     if not org_map:
         return 0
 
@@ -490,8 +483,8 @@ def ingest_visitas_csv(csv_path: str) -> int:
     if rows:
         conn.executemany(
             """
-            INSERT INTO fact_visitas
-                (fecha, zone_uuid, location_uuid, org_uuid,
+            INSERT INTO visitas
+                (fecha, zona_id, ubicacion_id, org_id,
                  total_visits, unique_visitors, new_visitors,
                  uv_7d, uv_28d, uv_month, uv_year,
                  freq_7d, freq_28d, freq_month, freq_year,
@@ -506,12 +499,12 @@ def ingest_visitas_csv(csv_path: str) -> int:
 
 
 def ingest_all_session_csvs() -> int:
-    """Import all dataset_*.csv files found in src/data/ into fact_visitas."""
+    """Import all dataset_*.csv files found in src/data/ into visitas."""
     total = 0
     for csv_file in sorted(_DATA.glob("dataset_*.csv")):
-        n_before = get_conn().execute("SELECT COUNT(*) FROM fact_visitas").fetchone()[0]
+        n_before = get_conn().execute("SELECT COUNT(*) FROM visitas").fetchone()[0]
         ingest_visitas_csv(str(csv_file))
-        n_after = get_conn().execute("SELECT COUNT(*) FROM fact_visitas").fetchone()[0]
+        n_after = get_conn().execute("SELECT COUNT(*) FROM visitas").fetchone()[0]
         added = n_after - n_before
         print(f"  {csv_file.name}: +{added} rows")
         total += added
@@ -526,35 +519,35 @@ def run_all(verbose: bool = True) -> None:
         if verbose:
             print(msg)
 
-    log("── dim_ubicaciones + dim_organizaciones + dim_zonas")
+    log("── ubicaciones + organizaciones + zonas")
     r = seed_ubicaciones()
     log(f'   {r["orgs"]} orgs · {r["locs"]} ubicaciones · {r["zonas"]} zonas')
 
-    log("── dim_zonas: zone_type migration")
+    log("── zonas: zone_type migration")
     n = migrate_zone_types()
     log(f"   {n} zonas actualizadas con zone_type")
 
-    log("── store_geo_snapshots (geo_features.json → EAV)")
+    log("── snapshots_geo (geo_features.json → EAV)")
     n = seed_geo_snapshots()
     log(f"   {n} filas geo")
 
-    log("── feature_registry")
+    log("── señales")
     n = seed_feature_registry()
-    log(f"   {n} features registradas")
+    log(f"   {n} señales registradas")
 
-    log("── feature_flags: clima → active · geo → inactive")
+    log("── activacion_señales: clima → active · geo → inactive")
     r = seed_feature_flags()
     log(f'   {r["active"]} flags active · {r["inactive"]} flags inactive')
 
-    log("── fact_visitas (dataset_*.csv → DuckDB)")
+    log("── visitas (dataset_*.csv → PostgreSQL)")
     n = ingest_all_session_csvs()
     log(f"   {n} filas de visitas insertadas")
 
-    log("── dim_usuarios (users.json → DuckDB)")
+    log("── usuarios (users.json → PostgreSQL)")
     n = seed_usuarios()
     log(f"   {n} usuarios migrados")
 
-    log("── chat_conversaciones + chat_mensajes (JSON → DuckDB)")
+    log("── conversaciones + mensajes (JSON → PostgreSQL)")
     n = seed_conversaciones()
     log(f"   {n} conversaciones migradas")
 

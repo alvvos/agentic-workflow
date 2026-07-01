@@ -40,16 +40,16 @@ def _conn():
 
 
 def _load_from_db(location_uuid: str) -> dict[str, dict]:
-    """Carga ev_* features de store_features_ext para una location → {date_str: {col: value}}."""
+    """Carga ev_* features de valores_señales para una location → {date_str: {col: value}}."""
     try:
         rows = (
             _conn()
             .execute(
                 """
-            SELECT fecha, feature_key, value
-            FROM   store_features_ext
-            WHERE  location_uuid = ?
-              AND  feature_key LIKE 'ev_%%'
+            SELECT fecha, señal_id, valor
+            FROM   valores_señales
+            WHERE  ubicacion_id = ?
+              AND  señal_id LIKE 'ev_%%'
         """,
                 [location_uuid],
             )
@@ -59,7 +59,7 @@ def _load_from_db(location_uuid: str) -> dict[str, dict]:
         return {}
 
     result: dict[str, dict] = {}
-    for fecha, key, value in rows:
+    for fecha, key, value in rows:  # key=señal_id, value=valor
         d = str(fecha)
         if d not in result:
             result[d] = dict(_ZERO_ROW)

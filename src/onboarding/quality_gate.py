@@ -143,7 +143,7 @@ def validar(location_uuid: str) -> QualityResult:
     row = conn.execute(
         "SELECT nombre, direccion, ciudad, provincia, pais_codigo, "
         "codigo_postal, country_code, lat, lon "
-        "FROM dim_ubicaciones WHERE location_uuid = ?",
+        "FROM ubicaciones WHERE ubicacion_id = ?",
         [location_uuid],
     ).fetchone()
 
@@ -152,7 +152,7 @@ def validar(location_uuid: str) -> QualityResult:
             location_uuid=location_uuid,
             nombre="?",
             ok=False,
-            issues=[f"location_uuid '{location_uuid}' no encontrado en dim_ubicaciones"],
+            issues=[f"ubicacion_id '{location_uuid}' no encontrado en ubicaciones"],
         )
 
     nombre, direccion, ciudad, provincia, pais_codigo, cp, country_code, lat, lon = row
@@ -197,7 +197,7 @@ def validar(location_uuid: str) -> QualityResult:
         )
         if lat is not None:
             conn.execute(
-                "UPDATE dim_ubicaciones SET lat = ?, lon = ? WHERE location_uuid = ?",
+                "UPDATE ubicaciones SET lat = ?, lon = ? WHERE ubicacion_id = ?",
                 [round(lat, 6), round(lon, 6), location_uuid],
             )
             geocoded = True
@@ -217,7 +217,7 @@ def validar(location_uuid: str) -> QualityResult:
             )
             # Anular coordenadas erróneas para proteger prefetch y ML
             conn.execute(
-                "UPDATE dim_ubicaciones SET lat = NULL, lon = NULL WHERE location_uuid = ?",
+                "UPDATE ubicaciones SET lat = NULL, lon = NULL WHERE ubicacion_id = ?",
                 [location_uuid],
             )
             lat = lon = None

@@ -21,7 +21,7 @@ def _load_poi_categories(conn=None) -> dict:
     try:
         c = conn or get_conn()
         rows = c.execute(
-            "SELECT category, label, icon_cls, color, badge_color FROM poi_category_registry"
+            "SELECT category, label, icon_cls, color, badge_color FROM categorias_poi"
         ).fetchall()
         return {
             cat: {"label": lbl, "icon_cls": icon, "color": col, "badge_color": bc}
@@ -34,9 +34,7 @@ def _load_poi_categories(conn=None) -> dict:
 def _get_loc_options() -> list[dict]:
     rows = (
         get_conn()
-        .execute(
-            "SELECT location_uuid, nombre FROM dim_ubicaciones WHERE activa = TRUE ORDER BY nombre"
-        )
+        .execute("SELECT ubicacion_id, nombre FROM ubicaciones WHERE activa = TRUE ORDER BY nombre")
         .fetchall()
     )
     return [{"label": r[1], "value": r[0]} for r in rows]
@@ -197,8 +195,8 @@ def _actualizar_tabla(location_uuid, del_clicks):
             loc_uuid, nombre, categoria = parts
             try:
                 get_conn().execute(
-                    "UPDATE location_pois SET activo = FALSE "
-                    "WHERE location_uuid = ? AND nombre = ? AND categoria = ?",
+                    "UPDATE puntos_interes SET activo = FALSE "
+                    "WHERE ubicacion_id = ? AND nombre = ? AND categoria = ?",
                     [loc_uuid, nombre, categoria],
                 )
                 feedback = f"POI '{nombre}' eliminado."
@@ -283,7 +281,7 @@ def _guardar_poi(n, location_uuid, nombre, categoria, lat, lon, valor, detalle, 
 
     org_row = (
         get_conn()
-        .execute("SELECT org_uuid FROM dim_ubicaciones WHERE location_uuid = ?", [location_uuid])
+        .execute("SELECT org_id FROM ubicaciones WHERE ubicacion_id = ?", [location_uuid])
         .fetchone()
     )
     if not org_row:

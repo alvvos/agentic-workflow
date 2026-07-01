@@ -59,8 +59,8 @@ def descargar_auditoria_excel(n, locs, t_f, sd, ed, dia, zones_bi, session_id):
         return dash.no_update
     df["Ubicación"] = df["location_id"].map(mapa_tiendas).fillna("Desconocida")
     df["Zona"] = (
-        df["zone_uuid"].map(mapa_zonas).fillna("SinNombre")
-        if "zone_uuid" in df.columns
+        df["zona_id"].map(mapa_zonas).fillna("SinNombre")
+        if "zona_id" in df.columns
         else "SinNombre"
     )
     hoy = datetime.today().date()

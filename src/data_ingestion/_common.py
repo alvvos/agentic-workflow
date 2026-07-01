@@ -47,9 +47,9 @@ def get_active_locations(location_uuid: str | None = None) -> list[dict]:
         row = (
             get_conn()
             .execute(
-                """SELECT location_uuid, nombre, lat, lon, pais_codigo, region_code, ciudad
-               FROM   dim_ubicaciones
-               WHERE  location_uuid = ? AND activa = TRUE""",
+                """SELECT ubicacion_id, nombre, lat, lon, pais_codigo, region_code, ciudad
+               FROM   ubicaciones
+               WHERE  ubicacion_id = ? AND activa = TRUE""",
                 [location_uuid],
             )
             .fetchone()
@@ -59,8 +59,8 @@ def get_active_locations(location_uuid: str | None = None) -> list[dict]:
     rows = (
         get_conn()
         .execute(
-            """SELECT location_uuid, nombre, lat, lon, pais_codigo, region_code, ciudad
-           FROM   dim_ubicaciones
+            """SELECT ubicacion_id, nombre, lat, lon, pais_codigo, region_code, ciudad
+           FROM   ubicaciones
            WHERE  activa = TRUE AND lat IS NOT NULL AND lon IS NOT NULL"""
         )
         .fetchall()
@@ -94,8 +94,8 @@ def is_fresh(location_uuid: str, source_name: str, max_age_hours: float) -> bool
         row = (
             get_conn()
             .execute(
-                "SELECT MAX(ingested_at) FROM store_features_ext "
-                "WHERE  location_uuid = ? AND feature_key = ?",
+                "SELECT MAX(ingested_at) FROM valores_señales "
+                "WHERE  ubicacion_id = ? AND señal_id = ?",
                 [location_uuid, f"_sync_{source_name}"],
             )
             .fetchone()
@@ -112,10 +112,10 @@ def write_sync_marker(location_uuid: str, source_name: str) -> None:
     """Escribe/actualiza el sync marker del source para este location."""
     try:
         get_conn().execute(
-            "INSERT INTO store_features_ext (fecha, location_uuid, feature_key, value) "
+            "INSERT INTO valores_señales (fecha, ubicacion_id, señal_id, valor) "
             "VALUES (CURRENT_DATE, ?, ?, 1.0) "
-            "ON CONFLICT (fecha, location_uuid, feature_key) "
-            "DO UPDATE SET value = 1.0, ingested_at = NOW()",
+            "ON CONFLICT (fecha, ubicacion_id, señal_id) "
+            "DO UPDATE SET valor = 1.0, ingested_at = NOW()",
             [location_uuid, f"_sync_{source_name}"],
         )
     except Exception:
@@ -126,7 +126,7 @@ def write_sync_marker(location_uuid: str, source_name: str) -> None:
 
 
 def write_ev_features(location_uuid: str, daily: dict[date, dict]) -> None:
-    """Upsert scores diarios de eventos en store_features_ext."""
+    """Upsert scores diarios de eventos en valores_señales."""
     rows = []
     for d, scores in daily.items():
         for key, value in scores.items():
@@ -136,9 +136,9 @@ def write_ev_features(location_uuid: str, daily: dict[date, dict]) -> None:
         return
     try:
         get_conn().executemany(
-            "INSERT INTO store_features_ext (fecha, location_uuid, feature_key, value) "
-            "VALUES (?,?,?,?) ON CONFLICT (fecha, location_uuid, feature_key) "
-            "DO UPDATE SET value = GREATEST(store_features_ext.value, excluded.value), ingested_at = NOW()",
+            "INSERT INTO valores_señales (fecha, ubicacion_id, señal_id, valor) "
+            "VALUES (?,?,?,?) ON CONFLICT (fecha, ubicacion_id, señal_id) "
+            "DO UPDATE SET valor = GREATEST(valores_señales.valor, excluded.valor), ingested_at = NOW()",
             rows,
         )
     except Exception:
@@ -146,7 +146,7 @@ def write_ev_features(location_uuid: str, daily: dict[date, dict]) -> None:
 
 
 def write_calendario_org(location_uuid: str, events: list[dict], pais_codigo: str) -> None:
-    """Upsert eventos crudos en store_calendario_org."""
+    """Upsert eventos crudos en eventos."""
     rows = [
         (
             None,
@@ -166,8 +166,8 @@ def write_calendario_org(location_uuid: str, events: list[dict], pais_codigo: st
         return
     try:
         get_conn().executemany(
-            """INSERT INTO store_calendario_org
-               (org_uuid, location_uuid, pais_codigo, evento_key,
+            """INSERT INTO eventos
+               (org_id, ubicacion_id, pais_codigo, evento_key,
                 fecha_inicio, fecha_fin, metadata, fuente, source_key)
                VALUES (?,?,?,?,?,?,?,?,?)
                ON CONFLICT (source_key) DO NOTHING""",
@@ -185,24 +185,24 @@ def update_ev_rank_total(location_uuid: str, date_from: date, date_to: date) -> 
     try:
         get_conn().execute(
             """
-            INSERT INTO store_features_ext (fecha, location_uuid, feature_key, value)
+            INSERT INTO valores_señales (fecha, ubicacion_id, señal_id, valor)
             SELECT
                 fecha,
                 ?,
                 'ev_rank_total',
                 LEAST(100, GREATEST(
-                    COALESCE(MAX(CASE WHEN feature_key = 'ev_rank_deportivo'  THEN value END), 0),
-                    COALESCE(MAX(CASE WHEN feature_key = 'ev_rank_concierto'  THEN value END), 0),
-                    COALESCE(MAX(CASE WHEN feature_key = 'ev_rank_festival'   THEN value END), 0),
-                    COALESCE(MAX(CASE WHEN feature_key = 'ev_rank_municipal'  THEN value END), 0),
+                    COALESCE(MAX(CASE WHEN señal_id = 'ev_rank_deportivo'  THEN valor END), 0),
+                    COALESCE(MAX(CASE WHEN señal_id = 'ev_rank_concierto'  THEN valor END), 0),
+                    COALESCE(MAX(CASE WHEN señal_id = 'ev_rank_festival'   THEN valor END), 0),
+                    COALESCE(MAX(CASE WHEN señal_id = 'ev_rank_municipal'  THEN valor END), 0),
                 ))
-            FROM   store_features_ext
-            WHERE  location_uuid = ?
-              AND  feature_key IN ('ev_rank_deportivo','ev_rank_concierto','ev_rank_festival','ev_rank_municipal')
+            FROM   valores_señales
+            WHERE  ubicacion_id = ?
+              AND  señal_id IN ('ev_rank_deportivo','ev_rank_concierto','ev_rank_festival','ev_rank_municipal')
               AND  fecha BETWEEN ? AND ?
             GROUP  BY fecha
-            ON CONFLICT (fecha, location_uuid, feature_key)
-            DO UPDATE SET value = excluded.value, ingested_at = NOW()
+            ON CONFLICT (fecha, ubicacion_id, señal_id)
+            DO UPDATE SET valor = excluded.valor, ingested_at = NOW()
             """,
             [location_uuid, location_uuid, str(date_from), str(date_to)],
         )
@@ -215,15 +215,15 @@ def update_ev_rank_total(location_uuid: str, date_from: date, date_to: date) -> 
 
 def get_configured_locations(source: str) -> list[tuple[str, dict]]:
     """
-    Lee location_source_config para el source dado.
-    Devuelve [(location_uuid, params_dict), ...] solo para filas activas.
+    Lee config_fuentes para el source dado.
+    Devuelve [(ubicacion_id, params_dict), ...] solo para filas activas.
     """
     rows = (
         get_conn()
         .execute(
-            "SELECT location_uuid, params "
-            "FROM location_source_config "
-            "WHERE source = ? AND activo = TRUE",
+            "SELECT ubicacion_id, params "
+            "FROM config_fuentes "
+            "WHERE fuente = ? AND activo = TRUE",
             [source],
         )
         .fetchall()
@@ -263,10 +263,10 @@ def write_month_uniform(
         for d in range(1, last_day + 1)
     ]
     get_conn().executemany(
-        "INSERT INTO store_features_ext (fecha, location_uuid, feature_key, value) "
+        "INSERT INTO valores_señales (fecha, ubicacion_id, señal_id, valor) "
         "VALUES (?,?,?,?) "
-        "ON CONFLICT (fecha, location_uuid, feature_key) "
-        "DO UPDATE SET value = excluded.value, ingested_at = NOW()",
+        "ON CONFLICT (fecha, ubicacion_id, señal_id) "
+        "DO UPDATE SET valor = excluded.valor, ingested_at = NOW()",
         rows,
     )
     if verbose:
@@ -280,10 +280,10 @@ def ensure_feature_registry(
     categoria: str,
     notas: str = "",
 ) -> None:
-    """Registra el feature_key en feature_registry si no existe. Usa columnas reales del schema."""
+    """Registra el señal_id en señales si no existe. Usa columnas reales del schema."""
     get_conn().execute(
-        "INSERT INTO feature_registry (feature_key, source, categoria, notas, status) "
-        "VALUES (?,?,?,?,'con_cobertura') ON CONFLICT (feature_key) DO NOTHING",
+        "INSERT INTO señales (señal_id, fuente, categoria, notas, status) "
+        "VALUES (?,?,?,?,'con_cobertura') ON CONFLICT (señal_id) DO NOTHING",
         [feature_key, source, categoria, notas],
     )
 
@@ -293,13 +293,13 @@ def ensure_feature_registry(
 
 def get_source_config(source: str, loc_params: dict | None = None) -> dict:
     """
-    Devuelve config efectiva para un source: defaults de source_registry
+    Devuelve config efectiva para un source: defaults de fuentes
     fusionados con los params de la location (los params de location tienen precedencia).
     """
     row = (
         get_conn()
         .execute(
-            "SELECT config FROM source_registry WHERE source = %s",
+            "SELECT config FROM fuentes WHERE fuente = %s",
             [source],
         )
         .fetchone()

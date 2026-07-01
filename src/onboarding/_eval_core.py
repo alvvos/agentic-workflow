@@ -54,8 +54,8 @@ def _load_visitas(conn, location_uuid: str) -> pd.DataFrame:
     df = conn.execute(
         """
         SELECT fecha, SUM(total_visits)::int AS total_visits
-        FROM   fact_visitas
-        WHERE  location_uuid = ?
+        FROM   visitas
+        WHERE  ubicacion_id = ?
         GROUP  BY fecha
         ORDER  BY fecha
         """,
@@ -73,15 +73,15 @@ def _load_ext_feature(
     fecha_max: pd.Timestamp,
 ) -> pd.Series:
     """
-    Carga una feature de store_features_ext con la estrategia de relleno de
-    feature_registry.fill_method: 'ffill' (mensual) o 'zero' (eventos sparse).
+    Carga una feature de valores_señales con la estrategia de relleno de
+    señales.fill_method: 'ffill' (mensual) o 'zero' (eventos sparse).
     """
     df = conn.execute(
         """
-        SELECT fecha, value::double precision AS value
-        FROM   store_features_ext
-        WHERE  location_uuid = ?
-          AND  feature_key   = ?
+        SELECT fecha, valor::double precision AS valor
+        FROM   valores_señales
+        WHERE  ubicacion_id = ?
+          AND  señal_id     = ?
           AND  fecha BETWEEN ? AND ?
         ORDER  BY fecha
         """,
@@ -92,7 +92,7 @@ def _load_ext_feature(
         return pd.Series(dtype=float, name=feature_key)
 
     df["fecha"] = pd.to_datetime(df["fecha"])
-    serie = df.set_index("fecha")["value"]
+    serie = df.set_index("fecha")["valor"]
     full_idx = pd.date_range(fecha_min, fecha_max, freq="D")
     return serie.reindex(full_idx).fillna(0.0).rename(feature_key)
 
@@ -167,7 +167,7 @@ def _evaluate_feature(
 ) -> list[dict]:
     df_vis = _load_visitas(conn, location_uuid)
     if df_vis.empty:
-        print(f"    ⚠  Sin datos en fact_visitas para {location_uuid[:8]}")
+        print(f"    ⚠  Sin datos en visitas para {location_uuid[:8]}")
         return []
 
     df_full = _build_matrix(df_vis)
@@ -183,7 +183,7 @@ def _evaluate_feature(
     )
     if feat_series.empty:
         print(
-            f"    ⚠  Sin datos en store_features_ext para '{feature_key}' "
+            f"    ⚠  Sin datos en valores_señales para '{feature_key}' "
             "— ejecuta ingest_features.py"
         )
         return []
@@ -243,8 +243,8 @@ def _evaluate_feature(
 
         results.append(
             {
-                "feature_key": feature_key,
-                "location_uuid": location_uuid,
+                "señal_id": feature_key,
+                "ubicacion_id": location_uuid,
                 "split_idx": k,
                 "fecha_eval_ini": eval_start.date(),
                 "fecha_eval_fin": eval_end.date(),
@@ -266,8 +266,8 @@ def _evaluate_feature(
 def _write_results(conn, results: list[dict]) -> None:
     conn.executemany(
         """
-        INSERT INTO feature_eval_results
-            (feature_key, location_uuid, split_idx,
+        INSERT INTO evaluaciones_señales
+            (señal_id, ubicacion_id, split_idx,
              fecha_eval_ini, fecha_eval_fin,
              n_train, n_eval,
              wmape_baseline, wmape_con_feat, wmape_delta, horizonte)
@@ -275,8 +275,8 @@ def _write_results(conn, results: list[dict]) -> None:
         """,
         [
             (
-                r["feature_key"],
-                r["location_uuid"],
+                r["señal_id"],
+                r["ubicacion_id"],
                 r["split_idx"],
                 r["fecha_eval_ini"],
                 r["fecha_eval_fin"],
@@ -295,17 +295,15 @@ def _write_results(conn, results: list[dict]) -> None:
 def _write_flags(conn, results: list[dict]) -> None:
     by_loc: dict[tuple, list] = {}
     for r in results:
-        by_loc.setdefault((r["feature_key"], r["location_uuid"]), []).append(r["wmape_delta"])
+        by_loc.setdefault((r["señal_id"], r["ubicacion_id"]), []).append(r["wmape_delta"])
 
     for (feat_key, loc_uuid), deltas in by_loc.items():
-        mean_delta = float(np.mean(deltas))
         conn.execute(
             """
-            INSERT INTO feature_flags (feature_key, location_uuid, status, wmape_delta, evaluated_at)
-            VALUES (?, ?, 'inactive', ?, NOW())
-            ON CONFLICT (feature_key, location_uuid) DO UPDATE
-                SET wmape_delta  = excluded.wmape_delta,
-                    evaluated_at = NOW()
+            INSERT INTO activacion_señales (señal_id, ubicacion_id, status, evaluated_at)
+            VALUES (?, ?, 'inactive', NOW())
+            ON CONFLICT (señal_id, ubicacion_id) DO UPDATE
+                SET evaluated_at = NOW()
             """,
-            [feat_key, loc_uuid, mean_delta],
+            [feat_key, loc_uuid],
         )

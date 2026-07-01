@@ -8,7 +8,7 @@ Fases implementadas:
   1. Quality Gate      — validación, geocodificación, bounding box
   2. Feature Router    — qué fuentes aplican por país/ciudad/tenant
   3. Context Scout     — descubre fuentes abiertas para la isócrona y las registra
-                         en feature_registry + feature_flags (status='contexto')
+                         en señales + activacion_señales (status='contexto')
   4. Feature Evaluator — walk-forward WMAPE sobre features con cobertura;
                          auto-activa las que mejoran ≥ 0.5 pp
 
@@ -77,17 +77,15 @@ def activar_clima_task(location_uuid: str, routing: RoutingResult) -> int:
 
     climate_keys = [
         r[0]
-        for r in conn.execute(
-            "SELECT feature_key FROM feature_registry WHERE source = 'open_meteo'"
-        ).fetchall()
+        for r in conn.execute("SELECT señal_id FROM señales WHERE source = 'open_meteo'").fetchall()
     ]
     if not climate_keys:
         return 0
 
     conn.executemany(
-        "INSERT INTO feature_flags (feature_key, location_uuid, status, periodicidad) "
+        "INSERT INTO activacion_señales (señal_id, ubicacion_id, status, periodicidad) "
         "VALUES (?, ?, 'active', 'diaria') "
-        "ON CONFLICT (feature_key, location_uuid) DO UPDATE SET status = 'active'",
+        "ON CONFLICT (señal_id, ubicacion_id) DO UPDATE SET status = 'active'",
         [(fk, location_uuid) for fk in climate_keys],
     )
 
@@ -174,7 +172,7 @@ def onboarding_ubicacion(location_uuid: str) -> bool:
     eval_result = feature_eval_task(location_uuid)
     if eval_result.sin_historial:
         logger.info(
-            "Feature Eval aplazada — %s aún no tiene suficiente historial en fact_visitas",
+            "Feature Eval aplazada — %s aún no tiene suficiente historial en visitas",
             eval_result.nombre,
         )
     else:

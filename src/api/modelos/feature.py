@@ -6,9 +6,9 @@ from pydantic import BaseModel
 
 
 class Feature(BaseModel):
-    """Entrada del catálogo global de features (feature_registry)."""
+    """Entrada del catálogo global de features (señales)."""
 
-    feature_key: str
+    señal_id: str
     source: str
     categoria: str | None = None
     status_registro: str  # 'incompleto' | 'con_cobertura'
@@ -19,16 +19,15 @@ class Feature(BaseModel):
     agg_fn: str | None = None
     display_mode: str | None = None
     canonical_type: str | None = None
-    fallback_feature_key: str | None = None
+    fallback_señal_id: str | None = None
 
 
 class EstadoFeature(BaseModel):
-    """Estado de una feature para una ubicación concreta (feature_flags)."""
+    """Estado de una feature para una ubicación concreta (activacion_señales)."""
 
-    feature_key: str
-    location_uuid: str
+    señal_id: str
+    ubicacion_id: str
     status: str  # 'active' | 'contexto' | 'inactive'
-    wmape_delta: float | None = None
     periodicidad: str | None = None
 
 

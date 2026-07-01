@@ -8,11 +8,11 @@ def listar_features_catalogo() -> list[Feature]:
     rows = (
         get_conn()
         .execute(
-            "SELECT feature_key, source, categoria, status, "
+            "SELECT señal_id, fuente, categoria, status, "
             "label, sublabel, color, icon_cls, agg_fn, display_mode, "
-            "canonical_type, fallback_feature_key "
-            "FROM feature_registry "
-            "ORDER BY feature_key"
+            "canonical_type, fallback_señal_id "
+            "FROM señales "
+            "ORDER BY señal_id"
         )
         .fetchall()
     )
@@ -39,10 +39,10 @@ def listar_features(location_uuid: str) -> list[EstadoFeature]:
     rows = (
         get_conn()
         .execute(
-            "SELECT feature_key, location_uuid, status, wmape_delta, periodicidad "
-            "FROM feature_flags "
-            "WHERE location_uuid = ? "
-            "ORDER BY feature_key",
+            "SELECT señal_id, ubicacion_id, status, wmape_delta, periodicidad "
+            "FROM activacion_señales "
+            "WHERE ubicacion_id = ? "
+            "ORDER BY señal_id",
             [location_uuid],
         )
         .fetchall()
@@ -66,19 +66,19 @@ def cambiar_estado_feature(
 ) -> EstadoFeature | None:
     conn = get_conn()
     existe = conn.execute(
-        "SELECT 1 FROM feature_flags WHERE location_uuid = ? AND feature_key = ?",
+        "SELECT 1 FROM activacion_señales WHERE ubicacion_id = ? AND señal_id = ?",
         [location_uuid, feature_key],
     ).fetchone()
     if existe is None:
         return None
     conn.execute(
-        "UPDATE feature_flags SET status = ? " "WHERE location_uuid = ? AND feature_key = ?",
+        "UPDATE activacion_señales SET status = ? WHERE ubicacion_id = ? AND señal_id = ?",
         [nuevo_status, location_uuid, feature_key],
     )
     row = conn.execute(
-        "SELECT feature_key, location_uuid, status, wmape_delta, periodicidad "
-        "FROM feature_flags "
-        "WHERE location_uuid = ? AND feature_key = ?",
+        "SELECT señal_id, ubicacion_id, status, wmape_delta, periodicidad "
+        "FROM activacion_señales "
+        "WHERE ubicacion_id = ? AND señal_id = ?",
         [location_uuid, feature_key],
     ).fetchone()
     return EstadoFeature(

@@ -10,9 +10,9 @@ def _cargar_catalogo() -> dict[str, FuenteDisponible]:
     rows = (
         get_conn()
         .execute(
-            "SELECT source, categoria, periodicidad, descripcion, url_referencia, "
+            "SELECT fuente, categoria, periodicidad, descripcion, url_referencia, "
             "cobertura_desde, latencia_dias, paises, params_schema, params_ejemplo "
-            "FROM source_registry WHERE activo = TRUE ORDER BY source"
+            "FROM fuentes WHERE activo = TRUE ORDER BY fuente"
         )
         .fetchall()
     )
@@ -41,10 +41,10 @@ def listar_fuentes(location_uuid: str) -> list[ConfigFuente]:
     rows = (
         get_conn()
         .execute(
-            "SELECT id, location_uuid, source, params, activo "
-            "FROM location_source_config "
-            "WHERE location_uuid = ? "
-            "ORDER BY source",
+            "SELECT id, ubicacion_id, fuente, params, activo "
+            "FROM config_fuentes "
+            "WHERE ubicacion_id = ? "
+            "ORDER BY fuente",
             [location_uuid],
         )
         .fetchall()
@@ -78,16 +78,16 @@ def configurar_fuente(
 
     conn = get_conn()
     conn.execute(
-        "INSERT INTO location_source_config (location_uuid, source, params, activo) "
+        "INSERT INTO config_fuentes (ubicacion_id, fuente, params, activo) "
         "VALUES (?, ?, ?::jsonb, TRUE) "
-        "ON CONFLICT (location_uuid, source) "
+        "ON CONFLICT (ubicacion_id, fuente) "
         "DO UPDATE SET params = EXCLUDED.params, activo = TRUE",
         [location_uuid, source, json.dumps(params, ensure_ascii=False)],
     )
     row = conn.execute(
-        "SELECT id, location_uuid, source, params, activo "
-        "FROM location_source_config "
-        "WHERE location_uuid = ? AND source = ?",
+        "SELECT id, ubicacion_id, fuente, params, activo "
+        "FROM config_fuentes "
+        "WHERE ubicacion_id = ? AND fuente = ?",
         [location_uuid, source],
     ).fetchone()
     return (
@@ -106,15 +106,13 @@ def eliminar_fuente(location_uuid: str, source: str) -> bool:
     """Desactiva la fuente (activo = FALSE). Devuelve False si no existía."""
     conn = get_conn()
     row_antes = conn.execute(
-        "SELECT id FROM location_source_config "
-        "WHERE location_uuid = ? AND source = ? AND activo = TRUE",
+        "SELECT id FROM config_fuentes " "WHERE ubicacion_id = ? AND fuente = ? AND activo = TRUE",
         [location_uuid, source],
     ).fetchone()
     if row_antes is None:
         return False
     conn.execute(
-        "UPDATE location_source_config SET activo = FALSE "
-        "WHERE location_uuid = ? AND source = ?",
+        "UPDATE config_fuentes SET activo = FALSE " "WHERE ubicacion_id = ? AND fuente = ?",
         [location_uuid, source],
     )
     return True

@@ -40,27 +40,27 @@ class FeatureEvalResult:
     activadas: list[str] = field(default_factory=list)
     inactivas: list[str] = field(default_factory=list)
     sin_datos: list[str] = field(default_factory=list)
-    sin_historial: bool = False  # True si fact_visitas tiene < MIN_TRAIN_ROWS
+    sin_historial: bool = False  # True si visitas tiene < MIN_TRAIN_ROWS
     error: str | None = None
 
 
 def _features_pendientes(conn, location_uuid: str) -> list[str]:
     """
-    Devuelve feature_keys con cobertura suficiente y sin decisión para esta ubicación.
+    Devuelve señal_ids con cobertura suficiente y sin decisión para esta ubicación.
     Excluye explícitamente las que ya tienen status='active' o 'inactive'.
     Las features 'contexto' (Context Scout) se dejan para cuando tengan datos.
     """
     rows = conn.execute(
         """
-        SELECT fr.feature_key
-          FROM feature_registry fr
+        SELECT fr.señal_id
+          FROM señales fr
          WHERE fr.status = 'con_cobertura'
-           AND fr.feature_key NOT IN (
-               SELECT feature_key FROM feature_flags
-                WHERE location_uuid = ?
+           AND fr.señal_id NOT IN (
+               SELECT señal_id FROM activacion_señales
+                WHERE ubicacion_id = ?
                   AND status IN ('active', 'inactive')
            )
-         ORDER BY fr.feature_key
+         ORDER BY fr.señal_id
         """,
         [location_uuid],
     ).fetchall()
@@ -79,7 +79,7 @@ def _auto_write_flags(conn, results: list[dict], threshold: float) -> tuple[list
     """
     by_loc: dict[tuple, list[float]] = {}
     for r in results:
-        by_loc.setdefault((r["feature_key"], r["location_uuid"]), []).append(r["wmape_delta"])
+        by_loc.setdefault((r["señal_id"], r["ubicacion_id"]), []).append(r["wmape_delta"])
 
     activadas: list[str] = []
     inactivas: list[str] = []
@@ -90,14 +90,13 @@ def _auto_write_flags(conn, results: list[dict], threshold: float) -> tuple[list
 
         conn.execute(
             """
-            INSERT INTO feature_flags
-              (feature_key, location_uuid, status, wmape_delta, evaluated_at)
-            VALUES (?, ?, ?, ?, NOW())
-            ON CONFLICT (feature_key, location_uuid) DO UPDATE
-                SET wmape_delta  = excluded.wmape_delta,
-                    evaluated_at = NOW()
+            INSERT INTO activacion_señales
+              (señal_id, ubicacion_id, status, evaluated_at)
+            VALUES (?, ?, ?, NOW())
+            ON CONFLICT (señal_id, ubicacion_id) DO UPDATE
+                SET evaluated_at = NOW()
             """,
-            [feat_key, loc_uuid, status, mean_delta],
+            [feat_key, loc_uuid, status],
         )
 
         if status == "active":
@@ -125,7 +124,7 @@ def evaluar(
     conn = get_conn()
 
     nombre_row = conn.execute(
-        "SELECT nombre FROM dim_ubicaciones WHERE location_uuid = ?", [location_uuid]
+        "SELECT nombre FROM ubicaciones WHERE ubicacion_id = ?", [location_uuid]
     ).fetchone()
     nombre = nombre_row[0] if nombre_row else location_uuid
 
@@ -133,19 +132,19 @@ def evaluar(
 
     if not fecha_corte:
         row = conn.execute(
-            "SELECT MAX(fecha) FROM fact_visitas WHERE location_uuid = ?", [location_uuid]
+            "SELECT MAX(fecha) FROM visitas WHERE ubicacion_id = ?", [location_uuid]
         ).fetchone()
         fecha_corte = row[0] if row and row[0] else date.today()
 
     # Comprobación rápida de historial mínimo
     n_dias = conn.execute(
-        "SELECT COUNT(DISTINCT fecha) FROM fact_visitas WHERE location_uuid = ?",
+        "SELECT COUNT(DISTINCT fecha) FROM visitas WHERE ubicacion_id = ?",
         [location_uuid],
     ).fetchone()[0]
 
     if n_dias < MIN_TRAIN_ROWS:
         log.info(
-            "Feature Eval: %s — solo %d días en fact_visitas (mínimo %d) — evaluación aplazada",
+            "Feature Eval: %s — solo %d días en visitas (mínimo %d) — evaluación aplazada",
             nombre,
             n_dias,
             MIN_TRAIN_ROWS,
@@ -181,7 +180,7 @@ def evaluar(
             result.evaluadas.append(feat)
         else:
             result.sin_datos.append(feat)
-            log.info("  %s — sin datos suficientes en store_features_ext", feat)
+            log.info("  %s — sin datos suficientes en valores_señales", feat)
 
     if all_results:
         _write_results(conn, all_results)
@@ -190,14 +189,10 @@ def evaluar(
         result.inactivas = inactivas
 
         for feat in activadas:
-            delta = float(
-                np.mean([r["wmape_delta"] for r in all_results if r["feature_key"] == feat])
-            )
+            delta = float(np.mean([r["wmape_delta"] for r in all_results if r["señal_id"] == feat]))
             log.info("  ACTIVADA ✓  %s  (delta medio: %+.2f pp)", feat, delta * 100)
         for feat in inactivas:
-            delta = float(
-                np.mean([r["wmape_delta"] for r in all_results if r["feature_key"] == feat])
-            )
+            delta = float(np.mean([r["wmape_delta"] for r in all_results if r["señal_id"] == feat]))
             log.info("  inactiva    %s  (delta medio: %+.2f pp)", feat, delta * 100)
 
     return result

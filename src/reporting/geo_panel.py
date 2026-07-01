@@ -142,8 +142,8 @@ def _load_geo_meta(conn) -> tuple[dict, dict, dict]:
     norm_tipo: dict = {}
     try:
         rows = conn.execute(
-            "SELECT feature_key, label, icon_cls, color, agg_fn, canonical_type "
-            "FROM feature_registry WHERE label IS NOT NULL"
+            "SELECT señal_id, label, icon_cls, color, agg_fn, canonical_type "
+            "FROM señales WHERE label IS NOT NULL"
         ).fetchall()
         for fk, lbl, icon, col, agg, canon in rows:
             feature_meta[fk] = {
@@ -155,7 +155,7 @@ def _load_geo_meta(conn) -> tuple[dict, dict, dict]:
             if canon:
                 norm_tipo[fk] = canon
         cat_rows = conn.execute(
-            "SELECT category, label, icon_cls, color, badge_color FROM poi_category_registry"
+            "SELECT category, label, icon_cls, color, badge_color FROM categorias_poi"
         ).fetchall()
         poi_cat_meta = {
             cat: {
@@ -190,10 +190,10 @@ def _render_area_signals(location_uuid: str):
         conn = get_conn()
         feature_meta, poi_cat_meta, _ = _load_geo_meta(conn)
         ts_rows = conn.execute(
-            """SELECT feature_key, fecha::text, value
-               FROM   store_features_ext
-               WHERE  location_uuid = ? AND value IS NOT NULL AND fecha >= ?
-               ORDER  BY feature_key, fecha""",
+            """SELECT señal_id, fecha::text, valor
+               FROM   valores_señales
+               WHERE  ubicacion_id = ? AND valor IS NOT NULL AND fecha >= ?
+               ORDER  BY señal_id, fecha""",
             [location_uuid, str(hoy - timedelta(days=182))],
         ).fetchall()
         # Escalas futuras para el gráfico de previsión (próximos 2 meses)
@@ -203,8 +203,8 @@ def _render_area_signals(location_uuid: str):
                           CASE WHEN (metadata->>'n_pasajeros') ~ '^[0-9]+$'
                                THEN (metadata->>'n_pasajeros')::int ELSE 0 END
                       ), 0)
-               FROM   store_calendario_org
-               WHERE  location_uuid = ?
+               FROM   eventos
+               WHERE  ubicacion_id = ?
                  AND  evento_key = 'escala_crucero'
                  AND  fecha_inicio > CURRENT_DATE
                  AND  fecha_inicio <= (CURRENT_DATE + INTERVAL '2 months')::date
@@ -213,8 +213,8 @@ def _render_area_signals(location_uuid: str):
         ).fetchall()
         ev_rows = conn.execute(
             """SELECT evento_key, fecha_inicio::text, fecha_fin::text, metadata
-               FROM   store_calendario_org
-               WHERE  location_uuid = ?
+               FROM   eventos
+               WHERE  ubicacion_id = ?
                  AND  fecha_inicio >= ? AND fecha_inicio <= ?
                ORDER  BY fecha_inicio""",
             [location_uuid, str(hoy - timedelta(days=90)), str(hoy + timedelta(days=90))],
@@ -232,8 +232,8 @@ def _render_area_signals(location_uuid: str):
         notas_map = {
             fk: notas
             for fk, notas in conn.execute(
-                "SELECT feature_key, notas FROM feature_registry "
-                "WHERE feature_key = ANY(?) AND notas IS NOT NULL",
+                "SELECT señal_id, notas FROM señales "
+                "WHERE señal_id = ANY(?) AND notas IS NOT NULL",
                 [all_keys],
             ).fetchall()
         }
@@ -241,12 +241,12 @@ def _render_area_signals(location_uuid: str):
         pass
 
     ts_rows = [r for r in ts_rows if r[0] not in _UNIVERSAL_EXT_KEYS]
-    # Eventos raw: feature_registry con display_mode='raw' (categoría eventos/cruceros).
+    # Eventos raw: señales con display_mode='raw' (categoría eventos/cruceros).
     try:
         _raw_keys = {
             r[0]
             for r in conn.execute(
-                "SELECT feature_key FROM feature_registry WHERE display_mode = 'raw'"
+                "SELECT señal_id FROM señales WHERE display_mode = 'raw'"
             ).fetchall()
         }
     except Exception:

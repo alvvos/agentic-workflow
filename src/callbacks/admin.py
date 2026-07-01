@@ -18,7 +18,7 @@ _ROLE_COLORS = {"admin": "danger", "user": "primary"}
 def _load_users() -> dict:
     rows = (
         get_conn()
-        .execute("SELECT user_id, password_hash, role FROM dim_usuarios ORDER BY user_id")
+        .execute("SELECT usuario_id, password_hash, role FROM usuarios ORDER BY usuario_id")
         .fetchall()
     )
     return {r[0]: {"password": r[1], "role": r[2] or "user"} for r in rows}
@@ -27,27 +27,27 @@ def _load_users() -> dict:
 def _upsert_user(username: str, password_hash: str, role: str) -> None:
     get_conn().execute(
         """
-        INSERT INTO dim_usuarios (user_id, password_hash, role)
+        INSERT INTO usuarios (usuario_id, password_hash, role)
         VALUES (?, ?, ?)
-        ON CONFLICT (user_id) DO UPDATE SET password_hash = excluded.password_hash, role = excluded.role
+        ON CONFLICT (usuario_id) DO UPDATE SET password_hash = excluded.password_hash, role = excluded.role
     """,
         [username, password_hash, role],
     )
 
 
 def _delete_user(username: str) -> None:
-    get_conn().execute("DELETE FROM dim_usuarios WHERE user_id = ?", [username])
+    get_conn().execute("DELETE FROM usuarios WHERE usuario_id = ?", [username])
 
 
 def _update_role(username: str, new_role: str) -> None:
-    get_conn().execute("UPDATE dim_usuarios SET role = ? WHERE user_id = ?", [new_role, username])
+    get_conn().execute("UPDATE usuarios SET role = ? WHERE usuario_id = ?", [new_role, username])
 
 
 def _get_user_org_access(user_id: str) -> list[str]:
     rows = (
         get_conn()
         .execute(
-            "SELECT org_uuid FROM user_org_access WHERE user_id = ? ORDER BY org_uuid", [user_id]
+            "SELECT org_id FROM accesos_usuario WHERE usuario_id = ? ORDER BY org_id", [user_id]
         )
         .fetchall()
     )
@@ -56,10 +56,10 @@ def _get_user_org_access(user_id: str) -> list[str]:
 
 def _set_user_org_access(user_id: str, org_uuids: list[str]) -> None:
     conn = get_conn()
-    conn.execute("DELETE FROM user_org_access WHERE user_id = ?", [user_id])
+    conn.execute("DELETE FROM accesos_usuario WHERE usuario_id = ?", [user_id])
     if org_uuids:
         conn.executemany(
-            "INSERT INTO user_org_access (user_id, org_uuid) VALUES (?, ?)",
+            "INSERT INTO accesos_usuario (usuario_id, org_id) VALUES (?, ?)",
             [(user_id, uuid) for uuid in org_uuids],
         )
 
@@ -78,15 +78,13 @@ def _current_user() -> str:
 
 def _load_orgs() -> list:
     conn = get_conn()
-    orgs_rows = conn.execute(
-        "SELECT org_uuid, nombre FROM dim_organizaciones ORDER BY nombre"
-    ).fetchall()
+    orgs_rows = conn.execute("SELECT org_id, nombre FROM organizaciones ORDER BY nombre").fetchall()
     locs_rows = conn.execute(
-        "SELECT location_uuid, org_uuid, nombre, lat, lon, ciudad, provincia "
-        "FROM dim_ubicaciones WHERE activa = TRUE ORDER BY nombre"
+        "SELECT ubicacion_id, org_id, nombre, lat, lon, ciudad, provincia "
+        "FROM ubicaciones WHERE activa = TRUE ORDER BY nombre"
     ).fetchall()
     zones_rows = conn.execute(
-        "SELECT zone_uuid, location_uuid, nombre FROM dim_zonas ORDER BY nombre"
+        "SELECT zona_id, ubicacion_id, nombre FROM zonas ORDER BY nombre"
     ).fetchall()
 
     zones_by_loc: dict = {}
@@ -116,8 +114,8 @@ def _load_orgs() -> list:
 def _zone_modal_body(loc_uuid: str):
     conn = get_conn()
     zones = conn.execute(
-        "SELECT zone_uuid, nombre, zone_type, parent_zone_uuid, hidden"
-        " FROM dim_zonas WHERE location_uuid = ? ORDER BY sort_order, nombre",
+        "SELECT zona_id, nombre, zone_type, parent_zona_id, hidden"
+        " FROM zonas WHERE ubicacion_id = ? ORDER BY nombre",
         [loc_uuid],
     ).fetchall()
 
@@ -768,23 +766,23 @@ def handle_delete_modal(_, __, pending, signal):
     if kind == "loc":
         conn = get_conn()
         row = conn.execute(
-            "SELECT nombre FROM dim_ubicaciones WHERE location_uuid = ?", [identifier]
+            "SELECT nombre FROM ubicaciones WHERE ubicacion_id = ?", [identifier]
         ).fetchone()
         if not row:
             return no_update, *_u, "Ubicación no encontrada.", True, "warning", False
         nombre = row[0]
-        conn.execute("DELETE FROM dim_ubicaciones WHERE location_uuid = ?", [identifier])
+        conn.execute("DELETE FROM ubicaciones WHERE ubicacion_id = ?", [identifier])
         return (signal or 0) + 1, *_u, f"Ubicación '{nombre}' eliminada.", True, "success", False
 
     if kind == "org":
         conn = get_conn()
         row = conn.execute(
-            "SELECT nombre FROM dim_organizaciones WHERE org_uuid = ?", [identifier]
+            "SELECT nombre FROM organizaciones WHERE org_id = ?", [identifier]
         ).fetchone()
         if not row:
             return no_update, *_u, "Organización no encontrada.", True, "warning", False
         nombre = row[0]
-        conn.execute("DELETE FROM dim_organizaciones WHERE org_uuid = ?", [identifier])
+        conn.execute("DELETE FROM organizaciones WHERE org_id = ?", [identifier])
         return (signal or 0) + 1, *_u, f"Organización '{nombre}' eliminada.", True, "success", False
 
     return no_update, *_u, *_l, False
@@ -854,7 +852,7 @@ def open_zone_modal(edit_clicks, _cancel):
 
     row = (
         get_conn()
-        .execute("SELECT nombre FROM dim_ubicaciones WHERE location_uuid = ?", [loc_uuid])
+        .execute("SELECT nombre FROM ubicaciones WHERE ubicacion_id = ?", [loc_uuid])
         .fetchone()
     )
     nombre_loc = row[0] if row else loc_uuid[:8] + "…"
@@ -949,16 +947,8 @@ def save_zone_hierarchy(n_clicks, parent_values, zone_ids, visible_values, signa
         hidden = not bool(visible)
         uuid_to_parent[zone_uuid] = parent_uuid
         conn.execute(
-            "UPDATE dim_zonas SET parent_zone_uuid = ?, hidden = ? WHERE zone_uuid = ?",
+            "UPDATE zonas SET parent_zona_id = ?, hidden = ? WHERE zona_id = ?",
             [parent_uuid, hidden, zone_uuid],
-        )
-
-    # Re-derive last_zone: a zone is a leaf when no other zone in the batch lists it as parent
-    parent_set = set(v for v in uuid_to_parent.values() if v)
-    for zone_uuid in uuid_to_parent:
-        conn.execute(
-            "UPDATE dim_zonas SET last_zone = ? WHERE zone_uuid = ?",
-            [zone_uuid not in parent_set, zone_uuid],
         )
 
     n = len(zone_ids)

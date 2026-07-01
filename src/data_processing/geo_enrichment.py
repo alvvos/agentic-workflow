@@ -315,7 +315,7 @@ def invalidate_geo_cache(location_uuid: str = None) -> None:
 
 def _fetch_snapshot_features(location_uuid: str, fecha=None) -> dict:
     """
-    Consulta store_geo_snapshots y devuelve {feature_key: value} del snapshot aplicable.
+    Consulta snapshots_geo y devuelve {feature_key: value} del snapshot aplicable.
     Retorna dict vacío si no hay datos para esta ubicación.
     """
     from src.db.store import get_conn
@@ -325,17 +325,17 @@ def _fetch_snapshot_features(location_uuid: str, fecha=None) -> dict:
     if fecha is None:
         row = conn.execute(
             """
-            SELECT DISTINCT valid_from FROM store_geo_snapshots
-            WHERE location_uuid = ? AND valid_to IS NULL
-            ORDER BY valid_from DESC LIMIT 1
+            SELECT DISTINCT vigente_desde FROM snapshots_geo
+            WHERE ubicacion_id = ? AND vigente_hasta IS NULL
+            ORDER BY vigente_desde DESC LIMIT 1
         """,
             [location_uuid],
         ).fetchone()
         if not row:
             row = conn.execute(
                 """
-                SELECT DISTINCT valid_from FROM store_geo_snapshots
-                WHERE location_uuid = ? ORDER BY valid_from DESC LIMIT 1
+                SELECT DISTINCT vigente_desde FROM snapshots_geo
+                WHERE ubicacion_id = ? ORDER BY vigente_desde DESC LIMIT 1
             """,
                 [location_uuid],
             ).fetchone()
@@ -343,11 +343,11 @@ def _fetch_snapshot_features(location_uuid: str, fecha=None) -> dict:
         fecha_str = str(fecha)[:10]
         row = conn.execute(
             """
-            SELECT DISTINCT valid_from FROM store_geo_snapshots
-            WHERE location_uuid = ?
-              AND valid_from <= ?
-              AND (valid_to IS NULL OR valid_to >= ?)
-            ORDER BY valid_from DESC LIMIT 1
+            SELECT DISTINCT vigente_desde FROM snapshots_geo
+            WHERE ubicacion_id = ?
+              AND vigente_desde <= ?
+              AND (vigente_hasta IS NULL OR vigente_hasta >= ?)
+            ORDER BY vigente_desde DESC LIMIT 1
         """,
             [location_uuid, fecha_str, fecha_str],
         ).fetchone()
@@ -355,13 +355,13 @@ def _fetch_snapshot_features(location_uuid: str, fecha=None) -> dict:
     if not row:
         return {}
 
-    valid_from = row[0]
+    vigente_desde = row[0]
     rows = conn.execute(
         """
-        SELECT feature_key, value FROM store_geo_snapshots
-        WHERE location_uuid = ? AND valid_from = ?
+        SELECT señal_id, valor FROM snapshots_geo
+        WHERE ubicacion_id = ? AND vigente_desde = ?
     """,
-        [location_uuid, valid_from],
+        [location_uuid, vigente_desde],
     ).fetchall()
     return {k: v for k, v in rows}
 
@@ -371,7 +371,7 @@ def get_geo_vals(location_uuid: str, fecha=None) -> dict:
     Devuelve el snapshot geoespacial de una ubicación en un momento dado.
 
     - fecha=None → snapshot activo más reciente (para predicción de fechas futuras).
-    - fecha=<date> → snapshot cuyo intervalo [valid_from, valid_to] contiene esa fecha
+    - fecha=<date> → snapshot cuyo intervalo [vigente_desde, vigente_hasta] contiene esa fecha
       (para training: evita data leakage de datos futuros en filas históricas).
 
     Si no hay snapshot aplicable devuelve None en todos los campos, lo que hace que
@@ -428,7 +428,7 @@ def enriquecer_con_geo(
 
 
 def get_catchment_rings(location_uuid: str):
-    """Retorna geometría de isócronas peatonales almacenada en dim_ubicaciones."""
+    """Retorna geometría de isócronas peatonales almacenada en ubicaciones."""
     import json
 
     from src.db.store import get_conn
@@ -436,7 +436,7 @@ def get_catchment_rings(location_uuid: str):
     row = (
         get_conn()
         .execute(
-            "SELECT catchment_rings_json FROM dim_ubicaciones WHERE location_uuid = ?",
+            "SELECT catchment_rings_json FROM ubicaciones WHERE ubicacion_id = ?",
             [location_uuid],
         )
         .fetchone()
@@ -450,16 +450,16 @@ def get_catchment_rings(location_uuid: str):
 
 
 def get_geo_snapshot_date(location_uuid: str) -> str | None:
-    """Returns the valid_from date of the active geo snapshot, or None if no data."""
+    """Returns the vigente_desde date of the active geo snapshot, or None if no data."""
     from src.db.store import get_conn
 
     row = (
         get_conn()
         .execute(
             """
-        SELECT valid_from FROM store_geo_snapshots
-        WHERE location_uuid = ? AND valid_to IS NULL
-        ORDER BY valid_from DESC LIMIT 1
+        SELECT vigente_desde FROM snapshots_geo
+        WHERE ubicacion_id = ? AND vigente_hasta IS NULL
+        ORDER BY vigente_desde DESC LIMIT 1
     """,
             [location_uuid],
         )
@@ -471,8 +471,8 @@ def get_geo_snapshot_date(location_uuid: str) -> str | None:
         get_conn()
         .execute(
             """
-        SELECT valid_from FROM store_geo_snapshots
-        WHERE location_uuid = ? ORDER BY valid_from DESC LIMIT 1
+        SELECT vigente_desde FROM snapshots_geo
+        WHERE ubicacion_id = ? ORDER BY vigente_desde DESC LIMIT 1
     """,
             [location_uuid],
         )

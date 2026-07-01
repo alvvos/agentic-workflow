@@ -167,9 +167,9 @@ def _handler_metro_madrid(
             f"Validaciones mensuales estacion de metro — {slug.replace('_', ' ').title()}",
         )
         get_conn().execute(
-            "INSERT INTO feature_flags (feature_key, location_uuid, status, periodicidad) "
+            "INSERT INTO activacion_señales (señal_id, ubicacion_id, status, periodicidad) "
             "VALUES (?,?,'contexto','mensual') "
-            "ON CONFLICT (feature_key, location_uuid) DO NOTHING",
+            "ON CONFLICT (señal_id, ubicacion_id) DO NOTHING",
             [fk, loc_uuid],
         )
 
@@ -642,9 +642,9 @@ def cargar_catalog(pais: str = "") -> list[dict]:
         rows = (
             get_conn()
             .execute(
-                "SELECT source, categoria, periodicidad, descripcion, url_referencia, "
+                "SELECT fuente, categoria, periodicidad, descripcion, url_referencia, "
                 "cobertura_desde, latencia_dias, paises, params_schema, params_ejemplo, config "
-                "FROM source_registry WHERE activo = TRUE "
+                "FROM fuentes WHERE activo = TRUE "
                 "AND (paises = '[]'::jsonb OR paises @> %s::jsonb)",
                 [f'["{pais}"]'],
             )
@@ -654,14 +654,14 @@ def cargar_catalog(pais: str = "") -> list[dict]:
         rows = (
             get_conn()
             .execute(
-                "SELECT source, categoria, periodicidad, descripcion, url_referencia, "
+                "SELECT fuente, categoria, periodicidad, descripcion, url_referencia, "
                 "cobertura_desde, latencia_dias, paises, params_schema, params_ejemplo, config "
-                "FROM source_registry WHERE activo = TRUE",
+                "FROM fuentes WHERE activo = TRUE",
             )
             .fetchall()
         )
     cols = [
-        "source",
+        "fuente",
         "categoria",
         "periodicidad",
         "descripcion",
@@ -673,6 +673,7 @@ def cargar_catalog(pais: str = "") -> list[dict]:
         "params_ejemplo",
         "config",
     ]
+
     return [dict(zip(cols, r)) for r in rows]
 
 
@@ -714,8 +715,7 @@ def sync_esri_places_location(
         row = (
             get_conn()
             .execute(
-                "SELECT lat, lon FROM dim_ubicaciones "
-                "WHERE location_uuid = ? AND lat IS NOT NULL",
+                "SELECT lat, lon FROM ubicaciones " "WHERE ubicacion_id = ? AND lat IS NOT NULL",
                 [location_uuid],
             )
             .fetchone()
@@ -726,7 +726,7 @@ def sync_esri_places_location(
         row = (
             get_conn()
             .execute(
-                "SELECT org_uuid FROM dim_ubicaciones WHERE location_uuid = ?",
+                "SELECT org_id FROM ubicaciones WHERE ubicacion_id = ?",
                 [location_uuid],
             )
             .fetchone()

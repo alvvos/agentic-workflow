@@ -6,10 +6,8 @@ from src.db.store import get_conn
 
 def listar_ubicaciones(activas_only: bool = True) -> list[UbicacionResumen]:
     sql = (
-        "SELECT location_uuid, nombre, ciudad, pais_codigo, activa "
-        "FROM dim_ubicaciones "
-        + ("WHERE activa = TRUE " if activas_only else "")
-        + "ORDER BY nombre"
+        "SELECT ubicacion_id, nombre, ciudad, pais_codigo, activa "
+        "FROM ubicaciones " + ("WHERE activa = TRUE " if activas_only else "") + "ORDER BY nombre"
     )
     rows = get_conn().execute(sql).fetchall()
     return [
@@ -28,9 +26,9 @@ def obtener_ubicacion(uuid: str) -> Ubicacion | None:
     row = (
         get_conn()
         .execute(
-            "SELECT location_uuid, org_uuid, nombre, lat, lon, "
+            "SELECT ubicacion_id, org_id, nombre, lat, lon, "
             "ciudad, provincia, pais_codigo, direccion, activa "
-            "FROM dim_ubicaciones WHERE location_uuid = ?",
+            "FROM ubicaciones WHERE ubicacion_id = ?",
             [uuid],
         )
         .fetchone()

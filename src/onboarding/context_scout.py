@@ -339,15 +339,15 @@ Prefiero 3 fuentes sólidas a 8 cuestionables.
 
 El sistema gestiona un modelo XGBoost de predicción de visitas diarias para tiendas físicas. \
 El modelo entrena sobre series temporales de afluencia y consume features externas para reducir \
-el WMAPE (error de predicción normalizado). Las features se almacenan en store_features_ext \
-como series diarias por (fecha, location_uuid, feature_key).
+el WMAPE (error de predicción normalizado). Las features se almacenan en valores_señales \
+como series diarias por (fecha, ubicacion_id, señal_id).
 
 El pipeline de vida de una feature nueva es:
-  1. Registro en feature_registry con status='incompleto'
-  2. Un ingestor mensual descarga los datos históricos → store_features_ext
+  1. Registro en señales con status='incompleto'
+  2. Un ingestor mensual descarga los datos históricos → valores_señales
   3. _promote_if_covered() verifica cobertura diaria completa → status='con_cobertura'
   4. Evaluación walk-forward WMAPE (wmape_delta < 0 = mejora)
-  5. Si mejora: feature_flags.status='active' → entra al modelo
+  5. Si mejora: activacion_señales.status='active' → entra al modelo
 
 Las features que registres en esta tarea entrarán como status='contexto': \
 visibles en el panel de Señal de Contexto del dashboard, pero fuera del modelo \
@@ -546,8 +546,8 @@ def descubrir_fuentes(location_uuid: str) -> ScoutResult:
     row = conn.execute(
         """
         SELECT nombre, ciudad, provincia, pais_codigo, lat, lon, codigo_postal, direccion
-        FROM dim_ubicaciones
-        WHERE location_uuid = ?
+        FROM ubicaciones
+        WHERE ubicacion_id = ?
         """,
         [location_uuid],
     ).fetchone()
@@ -556,7 +556,7 @@ def descubrir_fuentes(location_uuid: str) -> ScoutResult:
         return ScoutResult(
             location_uuid=location_uuid,
             nombre="?",
-            error=f"location_uuid '{location_uuid}' no encontrado en dim_ubicaciones",
+            error=f"ubicacion_id '{location_uuid}' no encontrado en ubicaciones",
         )
 
     pais = (row[3] or "").upper()
@@ -626,8 +626,8 @@ def descubrir_fuentes(location_uuid: str) -> ScoutResult:
 
 def registrar_fuentes(result: ScoutResult) -> ScoutResult:
     """
-    Escribe en feature_registry + feature_flags las fuentes seleccionadas.
-    Idempotente: si feature_key ya existe, no duplica.
+    Escribe en señales + activacion_señales las fuentes seleccionadas.
+    Idempotente: si señal_id ya existe, no duplica.
     Devuelve el mismo ScoutResult con n_registradas actualizado.
     """
     if not result.seleccionadas or result.error:
@@ -640,9 +640,9 @@ def registrar_fuentes(result: ScoutResult) -> ScoutResult:
     n = 0
 
     for src in result.seleccionadas:
-        # feature_registry — upsert
+        # señales — upsert
         existing = conn.execute(
-            "SELECT feature_key FROM feature_registry WHERE feature_key = ?",
+            "SELECT señal_id FROM señales WHERE señal_id = ?",
             [src.feature_key],
         ).fetchone()
 
@@ -655,8 +655,8 @@ def registrar_fuentes(result: ScoutResult) -> ScoutResult:
 
             conn.execute(
                 """
-                INSERT INTO feature_registry
-                  (feature_key, source, categoria, org_applicability,
+                INSERT INTO señales
+                  (señal_id, source, categoria, org_applicability,
                    location_applicability, status, notas, registrado_en)
                 VALUES (?, ?, ?, ?, ?, 'incompleto', ?, ?)
                 """,
@@ -670,11 +670,11 @@ def registrar_fuentes(result: ScoutResult) -> ScoutResult:
                     ahora,
                 ],
             )
-            log.info("feature_registry INSERT: %s", src.feature_key)
+            log.info("señales INSERT: %s", src.feature_key)
         else:
-            # La feature ya existe — solo ampliar location_applicability si es necesario
+            # La señal ya existe — solo ampliar location_applicability si es necesario
             loc_row = conn.execute(
-                "SELECT location_applicability FROM feature_registry WHERE feature_key = ?",
+                "SELECT location_applicability FROM señales WHERE señal_id = ?",
                 [src.feature_key],
             ).fetchone()
             if loc_row and loc_row[0]:
@@ -686,29 +686,29 @@ def registrar_fuentes(result: ScoutResult) -> ScoutResult:
                     ):
                         existing_locs.append(result.location_uuid)
                         conn.execute(
-                            "UPDATE feature_registry SET location_applicability = ? WHERE feature_key = ?",
+                            "UPDATE señales SET location_applicability = ? WHERE señal_id = ?",
                             [json.dumps(existing_locs), src.feature_key],
                         )
                 except (json.JSONDecodeError, TypeError):
                     pass
 
-        # feature_flags — solo si no existe ya para esta (feature, location)
+        # activacion_señales — solo si no existe ya para esta (señal, ubicacion)
         flag_exists = conn.execute(
-            "SELECT 1 FROM feature_flags WHERE feature_key = ? AND location_uuid = ?",
+            "SELECT 1 FROM activacion_señales WHERE señal_id = ? AND ubicacion_id = ?",
             [src.feature_key, result.location_uuid],
         ).fetchone()
 
         if not flag_exists:
             conn.execute(
                 """
-                INSERT INTO feature_flags
-                  (feature_key, location_uuid, status, periodicidad)
+                INSERT INTO activacion_señales
+                  (señal_id, ubicacion_id, status, periodicidad)
                 VALUES (?, ?, 'contexto', ?)
                 """,
                 [src.feature_key, result.location_uuid, src.periodicidad],
             )
             log.info(
-                "feature_flags INSERT: %s / %s — contexto/%s",
+                "activacion_señales INSERT: %s / %s — contexto/%s",
                 src.feature_key,
                 result.location_uuid,
                 src.periodicidad,

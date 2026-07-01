@@ -22,7 +22,7 @@ def _rebuild_ml_maps():
     mapa_zonas_ml.clear()
     for loc_uuid, nombre in mapa_tiendas.items():
         zonas = [
-            {"label": z["nombre"], "value": z["zone_uuid"]}
+            {"label": z["nombre"], "value": z["zona_id"]}
             for z in get_zones_for_loc(loc_uuid)
             if not z["hidden"]
         ]
@@ -30,7 +30,7 @@ def _rebuild_ml_maps():
         mapa_tiendas_ml[loc_uuid] = nombre
         for z in get_zones_for_loc(loc_uuid):
             if not z["hidden"]:
-                mapa_zonas_ml[z["zone_uuid"]] = z["nombre"]
+                mapa_zonas_ml[z["zona_id"]] = z["nombre"]
 
 
 try:

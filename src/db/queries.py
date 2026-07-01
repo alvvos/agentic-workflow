@@ -4,14 +4,14 @@ Read-side query layer.
 Primary entry point for the ML pipeline:
 
     from src.db.queries import get_df_enriquecido
-    df = get_df_enriquecido(location_uuid, session_id)
+    df = get_df_enriquecido(ubicacion_id, session_id)
     # → same shape as enriquecer_datos_ubicacion() output:
-    #   fecha, location_id, zone_uuid, total_visits,
+    #   fecha, location_id, zona_id, total_visits,
     #   temp_max, temp_min, llueve, es_festivo
 
 The function:
-  1. Reads fact_visitas from DuckDB (falls back to session CSV if empty).
-  2. Fetches weather from store_features_ext (calls Open-Meteo and caches on miss).
+  1. Reads visitas from PostgreSQL (falls back to session CSV if empty).
+  2. Fetches weather from valores_señales (calls Open-Meteo and caches on miss).
   3. Computes es_festivo using the org's pais_codigo (ES or MX).
   4. Returns a DataFrame ready for ejecutar_auditoria_predictiva().
 
@@ -35,35 +35,35 @@ _DATA = Path(__file__).parent.parent / "data"
 # ── Org / location helpers ────────────────────────────────────────────────────
 
 
-def get_org_info(location_uuid: str) -> dict:
-    """Returns {org_uuid, pais_codigo, config_calendario} for a location."""
+def get_org_info(ubicacion_id: str) -> dict:
+    """Returns {org_id, pais_codigo, config_calendario} for a location."""
     conn = get_conn()
     row = conn.execute(
         """
-        SELECT o.org_uuid, o.pais_codigo, o.config_calendario
-        FROM dim_ubicaciones u
-        JOIN dim_organizaciones o ON o.org_uuid = u.org_uuid
-        WHERE u.location_uuid = ?
+        SELECT o.org_id, o.pais_codigo, o.config_calendario
+        FROM ubicaciones u
+        JOIN organizaciones o ON o.org_id = u.org_id
+        WHERE u.ubicacion_id = ?
     """,
-        [location_uuid],
+        [ubicacion_id],
     ).fetchone()
     if row is None:
-        return {"org_uuid": None, "pais_codigo": "ES", "config_calendario": {}}
+        return {"org_id": None, "pais_codigo": "ES", "config_calendario": {}}
     cfg = row[2]
     if isinstance(cfg, str):
         try:
             cfg = json.loads(cfg)
         except Exception:
             cfg = {}
-    return {"org_uuid": row[0], "pais_codigo": row[1], "config_calendario": cfg or {}}
+    return {"org_id": row[0], "pais_codigo": row[1], "config_calendario": cfg or {}}
 
 
-def get_location_coords(location_uuid: str) -> Optional[tuple]:
+def get_location_coords(ubicacion_id: str) -> Optional[tuple]:
     """Returns (lat, lon) for a location, or None."""
     conn = get_conn()
     row = conn.execute(
-        "SELECT lat, lon FROM dim_ubicaciones WHERE location_uuid = ?",
-        [location_uuid],
+        "SELECT lat, lon FROM ubicaciones WHERE ubicacion_id = ?",
+        [ubicacion_id],
     ).fetchone()
     if row and row[0] is not None and row[1] is not None:
         return (float(row[0]), float(row[1]))
@@ -151,9 +151,9 @@ def _fetch_weather_forecast(
         return pd.DataFrame()
 
 
-def _cache_weather(location_uuid: str, df_weather: pd.DataFrame, overwrite: bool = False) -> None:
+def _cache_weather(ubicacion_id: str, df_weather: pd.DataFrame, overwrite: bool = False) -> None:
     """
-    Escribe filas de clima en store_features_ext.
+    Escribe filas de clima en valores_señales.
     overwrite=True → DO UPDATE (usar para datos de pronóstico que cambian).
     overwrite=False → DO NOTHING (usar para histórico confirmado).
     """
@@ -166,50 +166,50 @@ def _cache_weather(location_uuid: str, df_weather: pd.DataFrame, overwrite: bool
         rows += [
             (
                 fecha,
-                location_uuid,
+                ubicacion_id,
                 "temp_max",
                 float(row["temp_max"]) if pd.notna(row["temp_max"]) else None,
             ),
             (
                 fecha,
-                location_uuid,
+                ubicacion_id,
                 "temp_min",
                 float(row["temp_min"]) if pd.notna(row["temp_min"]) else None,
             ),
-            (fecha, location_uuid, "llueve", float(row["llueve"])),
+            (fecha, ubicacion_id, "llueve", float(row["llueve"])),
         ]
     if overwrite:
         sql = (
-            "INSERT INTO store_features_ext (fecha, location_uuid, feature_key, value) "
-            "VALUES (?,?,?,?) ON CONFLICT (fecha, location_uuid, feature_key) "
-            "DO UPDATE SET value = excluded.value"
+            "INSERT INTO valores_señales (fecha, ubicacion_id, señal_id, valor) "
+            "VALUES (?,?,?,?) ON CONFLICT (fecha, ubicacion_id, señal_id) "
+            "DO UPDATE SET valor = excluded.valor"
         )
     else:
         sql = (
-            "INSERT INTO store_features_ext (fecha, location_uuid, feature_key, value) "
+            "INSERT INTO valores_señales (fecha, ubicacion_id, señal_id, valor) "
             "VALUES (?,?,?,?) ON CONFLICT DO NOTHING"
         )
     conn.executemany(sql, rows)
 
 
-def _get_weather(location_uuid: str, fechas: pd.Series) -> pd.DataFrame:
+def _get_weather(ubicacion_id: str, fechas: pd.Series) -> pd.DataFrame:
     """
     Returns weather DataFrame for the given dates.
-    Reads from store_features_ext; fetches from Open-Meteo on miss and caches.
+    Reads from valores_señales; fetches from Open-Meteo on miss and caches.
     """
     conn = get_conn()
     cached = conn.execute(
         """
         SELECT fecha,
-            MAX(CASE WHEN feature_key='temp_max' THEN value END) AS temp_max,
-            MAX(CASE WHEN feature_key='temp_min' THEN value END) AS temp_min,
-            MAX(CASE WHEN feature_key='llueve'   THEN value END) AS llueve
-        FROM store_features_ext
-        WHERE location_uuid = ?
-          AND feature_key IN ('temp_max','temp_min','llueve')
+            MAX(CASE WHEN señal_id='temp_max' THEN valor END) AS temp_max,
+            MAX(CASE WHEN señal_id='temp_min' THEN valor END) AS temp_min,
+            MAX(CASE WHEN señal_id='llueve'   THEN valor END) AS llueve
+        FROM valores_señales
+        WHERE ubicacion_id = ?
+          AND señal_id IN ('temp_max','temp_min','llueve')
         GROUP BY fecha
     """,
-        [location_uuid],
+        [ubicacion_id],
     ).df()
 
     need = set(pd.to_datetime(fechas).dt.date)
@@ -217,12 +217,12 @@ def _get_weather(location_uuid: str, fechas: pd.Series) -> pd.DataFrame:
     missing = sorted(need - have)
 
     if missing:
-        coords = get_location_coords(location_uuid)
+        coords = get_location_coords(ubicacion_id)
         if coords:
             lat, lon = coords
             new_weather = _fetch_weather(lat, lon, str(missing[0]), str(missing[-1]))
             if not new_weather.empty:
-                _cache_weather(location_uuid, new_weather)
+                _cache_weather(ubicacion_id, new_weather)
                 cached = pd.concat(
                     [cached, new_weather.rename(columns={"fecha": "fecha"})], ignore_index=True
                 )
@@ -233,54 +233,54 @@ def _get_weather(location_uuid: str, fechas: pd.Series) -> pd.DataFrame:
 # ── CSV fallback ──────────────────────────────────────────────────────────────
 
 
-def _get_from_csv(location_uuid: str, session_id: str) -> pd.DataFrame:
+def _get_from_csv(ubicacion_id: str, session_id: str) -> pd.DataFrame:
     csv_path = _DATA / f"dataset_{session_id}.csv"
     if not csv_path.exists():
         return pd.DataFrame()
     df = pd.read_csv(csv_path)
     df["fecha"] = pd.to_datetime(df["fecha"])
-    return df[df["location_id"] == location_uuid].copy()
+    return df[df["location_id"] == ubicacion_id].copy()
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 
-def get_df_enriquecido(location_uuid: str, session_id: Optional[str] = None) -> pd.DataFrame:
+def get_df_enriquecido(ubicacion_id: str, session_id: Optional[str] = None) -> pd.DataFrame:
     """
     Returns an enriched DataFrame for ML training, shaped identically to
     enriquecer_datos_ubicacion() output:
 
-        fecha (datetime), location_id, zone_uuid,
+        fecha (datetime), location_id, zona_id,
         total_visits, temp_max, temp_min, llueve, es_festivo
 
-    Priority: DuckDB fact_visitas → session CSV fallback.
-    Weather: store_features_ext cache → Open-Meteo API.
+    Priority: PostgreSQL visitas → session CSV fallback.
+    Weather: valores_señales cache → Open-Meteo API.
     Holidays: computed from org's pais_codigo.
     """
     conn = get_conn()
-    org = get_org_info(location_uuid)
+    org = get_org_info(ubicacion_id)
     pais = org["pais_codigo"]
 
     # 1. Raw visit data
     n_db = conn.execute(
-        "SELECT COUNT(*) FROM fact_visitas WHERE location_uuid = ?",
-        [location_uuid],
+        "SELECT COUNT(*) FROM visitas WHERE ubicacion_id = ?",
+        [ubicacion_id],
     ).fetchone()[0]
 
     if n_db > 0:
         df = conn.execute(
             """
-            SELECT fecha, location_uuid AS location_id, zone_uuid,
+            SELECT fecha, ubicacion_id AS location_id, zona_id,
                    total_visits, unique_visitors, new_visitors
-            FROM fact_visitas
-            WHERE location_uuid = ?
+            FROM visitas
+            WHERE ubicacion_id = ?
             ORDER BY fecha
         """,
-            [location_uuid],
+            [ubicacion_id],
         ).df()
         df["fecha"] = pd.to_datetime(df["fecha"])
     elif session_id:
-        df = _get_from_csv(location_uuid, session_id)
+        df = _get_from_csv(ubicacion_id, session_id)
     else:
         return pd.DataFrame()
 
@@ -288,7 +288,7 @@ def get_df_enriquecido(location_uuid: str, session_id: Optional[str] = None) -> 
         return df
 
     # 2. Weather enrichment
-    weather = _get_weather(location_uuid, df["fecha"])
+    weather = _get_weather(ubicacion_id, df["fecha"])
     if not weather.empty:
         weather["fecha"] = pd.to_datetime(weather["fecha"])
         df = df.merge(weather, on="fecha", how="left")
@@ -303,8 +303,8 @@ def get_df_enriquecido(location_uuid: str, session_id: Optional[str] = None) -> 
 
     # 3. Holidays (country-aware)
     region_code = conn.execute(
-        "SELECT region_code FROM dim_ubicaciones WHERE location_uuid = ?",
-        [location_uuid],
+        "SELECT region_code FROM ubicaciones WHERE ubicacion_id = ?",
+        [ubicacion_id],
     ).fetchone()
     region = region_code[0] if region_code else None
 
@@ -316,22 +316,21 @@ def get_df_enriquecido(location_uuid: str, session_id: Optional[str] = None) -> 
     return df
 
 
-def get_df_visitas(location_uuids) -> pd.DataFrame:
+def get_df_visitas(ubicacion_ids) -> pd.DataFrame:
     """
-    Datos crudos de visitas para múltiples locations desde fact_visitas.
-    Equivalent to reading the old dataset_{session}.csv filtered by location.
+    Datos crudos de visitas para múltiples ubicaciones desde visitas.
     Alias dwell_time_min → dwell_time para compatibilidad con callbacks.
     Acepta un UUID como string o lista de UUIDs.
     """
-    if not location_uuids:
+    if not ubicacion_ids:
         return pd.DataFrame()
     conn = get_conn()
-    placeholders = ",".join(["?" for _ in location_uuids])
+    placeholders = ",".join(["?" for _ in ubicacion_ids])
     df = conn.execute(
         f"""
         SELECT fecha,
-               location_uuid   AS location_id,
-               zone_uuid,
+               ubicacion_id   AS location_id,
+               zona_id,
                total_visits,
                unique_visitors,
                new_visitors,
@@ -340,11 +339,11 @@ def get_df_visitas(location_uuids) -> pd.DataFrame:
                dwell_time_min  AS dwell_time,
                dwell_hist,
                hourly_visits
-        FROM fact_visitas
-        WHERE location_uuid IN ({placeholders})
+        FROM visitas
+        WHERE ubicacion_id IN ({placeholders})
         ORDER BY fecha
     """,
-        location_uuids,
+        ubicacion_ids,
     ).df()
     if not df.empty:
         df["fecha"] = pd.to_datetime(df["fecha"])
@@ -352,13 +351,13 @@ def get_df_visitas(location_uuids) -> pd.DataFrame:
 
 
 def get_ultima_fecha_por_location() -> dict:
-    """Devuelve {location_uuid: fecha_max} con la última fecha en fact_visitas."""
+    """Devuelve {ubicacion_id: fecha_max} con la última fecha en visitas."""
     conn = get_conn()
     rows = conn.execute(
         """
-        SELECT location_uuid, MAX(fecha) AS ultima_fecha
-        FROM fact_visitas
-        GROUP BY location_uuid
+        SELECT ubicacion_id, MAX(fecha) AS ultima_fecha
+        FROM visitas
+        GROUP BY ubicacion_id
     """
     ).fetchall()
     return {r[0]: r[1] for r in rows}
@@ -367,7 +366,7 @@ def get_ultima_fecha_por_location() -> dict:
 # ── Geo feature temporal join ─────────────────────────────────────────────────
 
 
-def get_geo_snapshot_df(location_uuid: str, fechas: pd.Series) -> pd.DataFrame:
+def get_geo_snapshot_df(ubicacion_id: str, fechas: pd.Series) -> pd.DataFrame:
     """
     Returns a DataFrame with one row per date in fechas, columns = geo feature keys.
     Each row gets the Esri snapshot that was valid at that date.
@@ -380,26 +379,28 @@ def get_geo_snapshot_df(location_uuid: str, fechas: pd.Series) -> pd.DataFrame:
     # Load all snapshots for this location
     snaps = conn.execute(
         """
-        SELECT feature_key, value, valid_from, valid_to
-        FROM store_geo_snapshots
-        WHERE location_uuid = ?
-        ORDER BY feature_key, valid_from
+        SELECT señal_id, valor, vigente_desde, vigente_hasta
+        FROM snapshots_geo
+        WHERE ubicacion_id = ?
+        ORDER BY señal_id, vigente_desde
     """,
-        [location_uuid],
+        [ubicacion_id],
     ).df()
 
     if snaps.empty:
         return pd.DataFrame()
 
-    snaps["valid_from"] = pd.to_datetime(snaps["valid_from"])
-    snaps["valid_to"] = pd.to_datetime(snaps["valid_to"]).fillna(pd.Timestamp("2099-12-31"))
+    snaps["vigente_desde"] = pd.to_datetime(snaps["vigente_desde"])
+    snaps["vigente_hasta"] = pd.to_datetime(snaps["vigente_hasta"]).fillna(
+        pd.Timestamp("2099-12-31")
+    )
 
     dates = pd.to_datetime(fechas).rename("fecha")
-    geo_cols = snaps["feature_key"].unique()
+    geo_cols = snaps["señal_id"].unique()
     result = pd.DataFrame({"fecha": dates})
 
     for col in geo_cols:
-        col_snaps = snaps[snaps["feature_key"] == col].sort_values("valid_from")
+        col_snaps = snaps[snaps["señal_id"] == col].sort_values("vigente_desde")
         # For each date, find the snapshot valid at that date
         result[col] = result["fecha"].apply(lambda d: _snap_value(col_snaps, d))
 
@@ -411,62 +412,62 @@ def get_geo_snapshot_df(location_uuid: str, fechas: pd.Series) -> pd.DataFrame:
 
 
 def get_all_orgs() -> list[dict]:
-    """[{org_uuid, nombre, pais_codigo}, ...]"""
+    """[{org_id, nombre, pais_codigo}, ...]"""
     return [
-        {"org_uuid": r[0], "nombre": r[1], "pais_codigo": r[2]}
+        {"org_id": r[0], "nombre": r[1], "pais_codigo": r[2]}
         for r in get_conn()
-        .execute("SELECT org_uuid, nombre, pais_codigo FROM dim_organizaciones ORDER BY nombre")
+        .execute("SELECT org_id, nombre, pais_codigo FROM organizaciones ORDER BY nombre")
         .fetchall()
     ]
 
 
-def get_locs_for_org(org_uuid: str) -> list[dict]:
-    """[{location_uuid, nombre}, ...] para una org."""
+def get_locs_for_org(org_id: str) -> list[dict]:
+    """[{ubicacion_id, nombre}, ...] para una org."""
     return [
-        {"location_uuid": r[0], "nombre": r[1]}
+        {"ubicacion_id": r[0], "nombre": r[1]}
         for r in get_conn()
         .execute(
-            "SELECT location_uuid, nombre FROM dim_ubicaciones WHERE org_uuid = ? AND activa = TRUE ORDER BY nombre",
-            [org_uuid],
+            "SELECT ubicacion_id, nombre FROM ubicaciones WHERE org_id = ? AND activa = TRUE ORDER BY nombre",
+            [org_id],
         )
         .fetchall()
     ]
 
 
-def get_zones_for_loc(location_uuid: str) -> list[dict]:
-    """[{zone_uuid, nombre, zone_type, hidden, parent_zone_uuid}, ...] para una ubicación."""
+def get_zones_for_loc(ubicacion_id: str) -> list[dict]:
+    """[{zona_id, nombre, zone_type, hidden, parent_zona_id}, ...] para una ubicación."""
     return [
         {
-            "zone_uuid": r[0],
+            "zona_id": r[0],
             "nombre": r[1],
             "zone_type": r[2] or "",
             "hidden": r[3],
-            "parent_zone_uuid": r[4],
+            "parent_zona_id": r[4],
         }
         for r in get_conn()
         .execute(
-            "SELECT zone_uuid, nombre, zone_type, hidden, parent_zone_uuid"
-            " FROM dim_zonas WHERE location_uuid = ? ORDER BY nombre",
-            [location_uuid],
+            "SELECT zona_id, nombre, zone_type, hidden, parent_zona_id"
+            " FROM zonas WHERE ubicacion_id = ? ORDER BY nombre",
+            [ubicacion_id],
         )
         .fetchall()
     ]
 
 
-def get_location_by_uuid(location_uuid: str) -> Optional[dict]:
+def get_location_by_uuid(ubicacion_id: str) -> Optional[dict]:
     """Devuelve dict completo de ubicación + org_nombre, o None."""
     row = (
         get_conn()
         .execute(
             """
-        SELECT u.location_uuid, u.nombre, u.lat, u.lon, u.ciudad, u.provincia,
+        SELECT u.ubicacion_id, u.nombre, u.lat, u.lon, u.ciudad, u.provincia,
                u.pais_codigo, u.region_code, u.codigo_postal, u.direccion,
-               o.nombre AS org_nombre, o.org_uuid
-        FROM dim_ubicaciones u
-        JOIN dim_organizaciones o ON o.org_uuid = u.org_uuid
-        WHERE u.location_uuid = ?
+               o.nombre AS org_nombre, o.org_id
+        FROM ubicaciones u
+        JOIN organizaciones o ON o.org_id = u.org_id
+        WHERE u.ubicacion_id = ?
     """,
-            [location_uuid],
+            [ubicacion_id],
         )
         .fetchone()
     )
@@ -484,7 +485,7 @@ def get_location_by_uuid(location_uuid: str) -> Optional[dict]:
         "codigo_postal": row[8],
         "direccion": row[9],
         "org": row[10],
-        "org_uuid": row[11],
+        "org_id": row[11],
     }
 
 
@@ -493,14 +494,14 @@ def get_location_by_name(nombre: str) -> Optional[dict]:
     row = (
         get_conn()
         .execute(
-            "SELECT location_uuid, lat, lon, region_code FROM dim_ubicaciones WHERE lower(nombre) = lower(?) LIMIT 1",
+            "SELECT ubicacion_id, lat, lon, region_code FROM ubicaciones WHERE lower(nombre) = lower(?) LIMIT 1",
             [nombre],
         )
         .fetchone()
     )
     if row is None:
         return None
-    return {"location_uuid": row[0], "lat": row[1], "lon": row[2], "region_code": row[3]}
+    return {"ubicacion_id": row[0], "lat": row[1], "lon": row[2], "region_code": row[3]}
 
 
 def get_locations_with_coords() -> list[str]:
@@ -509,34 +510,39 @@ def get_locations_with_coords() -> list[str]:
         r[0]
         for r in get_conn()
         .execute(
-            "SELECT location_uuid FROM dim_ubicaciones WHERE lat IS NOT NULL AND lon IS NOT NULL AND codigo_postal IS NOT NULL AND activa = TRUE"
+            "SELECT ubicacion_id FROM ubicaciones WHERE lat IS NOT NULL AND lon IS NOT NULL AND codigo_postal IS NOT NULL AND activa = TRUE"
         )
         .fetchall()
     ]
 
 
 def get_all_zones_flat() -> list[dict]:
-    """[{zone_uuid, location_uuid, nombre, zone_type}, ...] para todas las zonas visibles."""
+    """[{zona_id, ubicacion_id, nombre, zone_type}, ...] para todas las zonas visibles."""
     return [
-        {"zone_uuid": r[0], "location_uuid": r[1], "nombre": r[2], "zone_type": r[3] or ""}
+        {
+            "zona_id": r[0],
+            "ubicacion_id": r[1],
+            "nombre": r[2],
+            "zone_type": r[3] or "",
+        }
         for r in get_conn()
         .execute(
-            "SELECT zone_uuid, location_uuid, nombre, zone_type FROM dim_zonas WHERE hidden = FALSE ORDER BY nombre"
+            "SELECT zona_id, ubicacion_id, nombre, zone_type FROM zonas WHERE hidden = FALSE ORDER BY nombre"
         )
         .fetchall()
     ]
 
 
 def get_active_ext_features(
-    location_uuid: str,
+    ubicacion_id: str,
     fecha_min: pd.Timestamp,
     fecha_max: pd.Timestamp,
 ) -> pd.DataFrame:
     """
     Devuelve un DataFrame (índice DatetimeIndex diario) con una columna por cada
-    feature activa en feature_flags para esta location.
+    señal activa en activacion_señales para esta ubicación.
 
-    Forward-fill diario aplicado: features mensuales (ICM) se propagan al resto del mes.
+    Forward-fill diario aplicado: señales mensuales (ICM) se propagan al resto del mes.
     """
     from src.db.store import get_conn
 
@@ -544,55 +550,55 @@ def get_active_ext_features(
 
     rows = conn.execute(
         """
-        SELECT feature_key
-        FROM   feature_flags
-        WHERE  location_uuid = ?
+        SELECT señal_id
+        FROM   activacion_señales
+        WHERE  ubicacion_id = ?
           AND  status = 'active'
-        ORDER  BY feature_key
+        ORDER  BY señal_id
     """,
-        [location_uuid],
+        [ubicacion_id],
     ).fetchall()
 
-    feature_keys = [r[0] for r in rows]
-    if not feature_keys:
+    señal_ids = [r[0] for r in rows]
+    if not señal_ids:
         return pd.DataFrame(index=pd.date_range(fecha_min, fecha_max, freq="D"))
 
     full_idx = pd.date_range(fecha_min, fecha_max, freq="D")
     result = pd.DataFrame(index=full_idx)
 
-    for fk in feature_keys:
+    for fk in señal_ids:
         df = conn.execute(
             """
-            SELECT fecha, value::double precision AS value
-            FROM   store_features_ext
-            WHERE  location_uuid = ?
-              AND  feature_key   = ?
+            SELECT fecha, valor::double precision AS valor
+            FROM   valores_señales
+            WHERE  ubicacion_id = ?
+              AND  señal_id   = ?
               AND  fecha BETWEEN ? AND ?
             ORDER  BY fecha
         """,
-            [location_uuid, fk, fecha_min.date(), fecha_max.date()],
+            [ubicacion_id, fk, fecha_min.date(), fecha_max.date()],
         ).df()
 
         if df.empty:
             continue
         df["fecha"] = pd.to_datetime(df["fecha"])
-        serie = df.set_index("fecha")["value"].reindex(full_idx).fillna(0.0)
+        serie = df.set_index("fecha")["valor"].reindex(full_idx).fillna(0.0)
         result[fk] = serie.values
 
     return result
 
 
-def get_pois_for_location(location_uuid: str) -> list[dict]:
+def get_pois_for_location(ubicacion_id: str) -> list[dict]:
     """Returns all active POIs for a location, ordered by category and relevance."""
     rows = (
         get_conn()
         .execute(
             """SELECT nombre, lat, lon, categoria, valor_relativo, detalle,
                   radio_m, isocrona_minutos, isocrona_geojson::text
-           FROM location_pois
-           WHERE location_uuid = ? AND activo = TRUE
+           FROM puntos_interes
+           WHERE ubicacion_id = ? AND activo = TRUE
            ORDER BY categoria, valor_relativo DESC""",
-            [location_uuid],
+            [ubicacion_id],
         )
         .fetchall()
     )
@@ -611,8 +617,8 @@ def get_pois_for_location(location_uuid: str) -> list[dict]:
 
 
 def upsert_poi(
-    location_uuid: str,
-    org_uuid: str,
+    ubicacion_id: str,
+    org_id: str,
     nombre: str,
     lat: float,
     lon: float,
@@ -626,12 +632,12 @@ def upsert_poi(
 ) -> None:
     """Insert or update a POI for a location."""
     get_conn().execute(
-        """INSERT INTO location_pois
-           (location_uuid, org_uuid, nombre, lat, lon, categoria,
+        """INSERT INTO puntos_interes
+           (ubicacion_id, org_id, nombre, lat, lon, categoria,
             valor_relativo, detalle, radio_m, isocrona_minutos,
             isocrona_geojson, fuente)
            VALUES (?,?,?,?,?,?,?,?,?,?,?::jsonb,?)
-           ON CONFLICT (location_uuid, nombre, categoria)
+           ON CONFLICT (ubicacion_id, nombre, categoria)
            DO UPDATE SET lat = excluded.lat, lon = excluded.lon,
                valor_relativo = excluded.valor_relativo,
                detalle = excluded.detalle, radio_m = excluded.radio_m,
@@ -639,8 +645,8 @@ def upsert_poi(
                isocrona_geojson = excluded.isocrona_geojson,
                fuente = excluded.fuente, activo = TRUE""",
         [
-            location_uuid,
-            org_uuid,
+            ubicacion_id,
+            org_id,
             nombre,
             lat,
             lon,
@@ -656,8 +662,8 @@ def upsert_poi(
 
 
 def _snap_value(col_snaps: pd.DataFrame, fecha: pd.Timestamp) -> Optional[float]:
-    mask = (col_snaps["valid_from"] <= fecha) & (col_snaps["valid_to"] >= fecha)
+    mask = (col_snaps["vigente_desde"] <= fecha) & (col_snaps["vigente_hasta"] >= fecha)
     rows = col_snaps[mask]
     if rows.empty:
         return None
-    return rows.iloc[-1]["value"]  # latest valid snapshot if overlapping
+    return rows.iloc[-1]["valor"]  # latest valid snapshot if overlapping

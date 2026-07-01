@@ -284,8 +284,8 @@ def _handler_cruceros(
                 for e in escalas
             ]
             conn.executemany(
-                """INSERT INTO store_calendario_org
-                       (org_uuid, location_uuid, pais_codigo, evento_key,
+                """INSERT INTO eventos
+                       (org_id, ubicacion_id, pais_codigo, evento_key,
                         fecha_inicio, fecha_fin, metadata, fuente, source_key)
                    VALUES (?,?,?,?,?,?,?,?,?)
                    ON CONFLICT (source_key) DO UPDATE SET metadata = excluded.metadata""",
@@ -299,10 +299,10 @@ def _handler_cruceros(
             if daily:
                 ensure_feature_registry(feature_key, "cruceros", "turismo")
                 conn.executemany(
-                    "INSERT INTO store_features_ext (fecha, location_uuid, feature_key, value) "
+                    "INSERT INTO valores_señales (fecha, ubicacion_id, señal_id, valor) "
                     "VALUES (?,?,?,?) "
-                    "ON CONFLICT (fecha, location_uuid, feature_key) "
-                    "DO UPDATE SET value = excluded.value, ingested_at = NOW()",
+                    "ON CONFLICT (fecha, ubicacion_id, señal_id) "
+                    "DO UPDATE SET valor = excluded.valor, ingested_at = NOW()",
                     [(f, uuid, feature_key, v) for f, v in daily.items()],
                 )
             return len(cal_rows)
@@ -761,8 +761,8 @@ def sync_cruceros_months(
             for e in escalas
         ]
         conn.executemany(
-            """INSERT INTO store_calendario_org
-                   (org_uuid, location_uuid, pais_codigo, evento_key,
+            """INSERT INTO eventos
+                   (org_id, ubicacion_id, pais_codigo, evento_key,
                     fecha_inicio, fecha_fin, metadata, fuente, source_key)
                VALUES (?,?,?,?,?,?,?,?,?)
                ON CONFLICT (source_key) DO UPDATE SET metadata = excluded.metadata""",
@@ -776,10 +776,10 @@ def sync_cruceros_months(
         if daily:
             ensure_feature_registry(_FK_DIA, "cruceros", "turismo")
             conn.executemany(
-                "INSERT INTO store_features_ext (fecha, location_uuid, feature_key, value) "
+                "INSERT INTO valores_señales (fecha, ubicacion_id, señal_id, valor) "
                 "VALUES (?,?,?,?) "
-                "ON CONFLICT (fecha, location_uuid, feature_key) "
-                "DO UPDATE SET value = excluded.value, ingested_at = NOW()",
+                "ON CONFLICT (fecha, ubicacion_id, señal_id) "
+                "DO UPDATE SET valor = excluded.valor, ingested_at = NOW()",
                 [(f, location_uuid, _FK_DIA, v) for f, v in daily.items()],
             )
 

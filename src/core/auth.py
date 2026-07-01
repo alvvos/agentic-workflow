@@ -145,20 +145,20 @@ def login():
         authenticated = False
         role = "user"
 
-        # Primary: DuckDB dim_usuarios
+        # Primary: PostgreSQL usuarios
         try:
             from src.db.store import get_conn
 
             conn = get_conn()
             row = conn.execute(
-                "SELECT password_hash, role FROM dim_usuarios WHERE user_id = ?",
+                "SELECT password_hash, role FROM usuarios WHERE usuario_id = ?",
                 [username],
             ).fetchone()
             if row and check_password_hash(row[0], password):
                 authenticated = True
                 role = row[1] or "user"
                 conn.execute(
-                    "UPDATE dim_usuarios SET last_login = current_timestamp WHERE user_id = ?",
+                    "UPDATE usuarios SET last_login = current_timestamp WHERE usuario_id = ?",
                     [username],
                 )
         except Exception:
@@ -182,7 +182,7 @@ def login():
                     rows = (
                         get_conn()
                         .execute(
-                            "SELECT org_uuid FROM user_org_access WHERE user_id = ?", [username]
+                            "SELECT org_id FROM accesos_usuario WHERE usuario_id = ?", [username]
                         )
                         .fetchall()
                     )

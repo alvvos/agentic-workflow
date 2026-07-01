@@ -44,7 +44,7 @@ def _color_zona(idx: int) -> str:
 def _ordenar_zonas_fuera_dentro(zonas: list[dict]) -> list[dict]:
     """Ordena zonas de exterior (sin padre) a interior (con padre) por profundidad BFS.
     Dentro del mismo nivel, alfabéticamente por nombre."""
-    by_uuid = {z["zone_uuid"]: z for z in zonas}
+    by_uuid = {z["zona_id"]: z for z in zonas}
     # Calcula profundidad de cada zona
     depth: dict[str, int] = {}
 
@@ -52,15 +52,15 @@ def _ordenar_zonas_fuera_dentro(zonas: list[dict]) -> list[dict]:
         if uuid in depth:
             return depth[uuid]
         z = by_uuid.get(uuid)
-        if z is None or not z.get("parent_zone_uuid"):
+        if z is None or not z.get("parent_zona_id"):
             depth[uuid] = 0
         else:
-            depth[uuid] = _depth(z["parent_zone_uuid"]) + 1
+            depth[uuid] = _depth(z["parent_zona_id"]) + 1
         return depth[uuid]
 
     for z in zonas:
         _depth(z["zone_uuid"])
-    return sorted(zonas, key=lambda z: (_depth(z["zone_uuid"]), z["nombre"]))
+    return sorted(zonas, key=lambda z: (_depth(z["zona_id"]), z["nombre"]))
 
 
 def _zona_card(nombre: str, res: dict, color: str) -> dbc.Col:
@@ -340,7 +340,7 @@ def actualizar_prediccion_publica(tab, locs, session_id):
         zonas_ordenadas = _ordenar_zonas_fuera_dentro(zonas)
         zona_cols = []
         for idx, z in enumerate(zonas_ordenadas):
-            res = ejecutar_auditoria_predictiva(df_e, loc_uuid, z["zone_uuid"], falso_hoy, 7)
+            res = ejecutar_auditoria_predictiva(df_e, loc_uuid, z["zona_id"], falso_hoy, 7)
             if res.get("status") != "success":
                 continue
             zona_cols.append(_zona_card(z["nombre"], res, _color_zona(idx)))

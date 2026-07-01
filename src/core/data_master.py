@@ -34,16 +34,16 @@ def _load_from_db() -> None:
 
     _org_order = []
     for org_uuid, nombre in conn.execute(
-        "SELECT org_uuid, nombre FROM dim_organizaciones ORDER BY nombre"
+        "SELECT org_id, nombre FROM organizaciones ORDER BY nombre"
     ).fetchall():
         mapa_orgs[org_uuid] = nombre
         mapa_locs_por_org[org_uuid] = []
         _org_order.append((org_uuid, nombre))
 
     for loc_uuid, org_uuid, nombre in conn.execute(
-        "SELECT location_uuid, org_uuid, nombre FROM dim_ubicaciones"
+        "SELECT ubicacion_id, org_id, nombre FROM ubicaciones"
         " WHERE activa = TRUE"
-        "   AND EXISTS (SELECT 1 FROM fact_visitas fv WHERE fv.location_uuid = dim_ubicaciones.location_uuid)"
+        "   AND EXISTS (SELECT 1 FROM visitas v WHERE v.ubicacion_id = ubicaciones.ubicacion_id)"
         " ORDER BY nombre"
     ).fetchall():
         mapa_tiendas[loc_uuid] = nombre
@@ -57,8 +57,8 @@ def _load_from_db() -> None:
             opciones_orgs.append({"label": nombre, "value": org_uuid})
 
     all_zones = conn.execute(
-        "SELECT zone_uuid, location_uuid, nombre, zone_type, parent_zone_uuid"
-        " FROM dim_zonas WHERE hidden = FALSE ORDER BY nombre"
+        "SELECT zona_id, ubicacion_id, nombre, zone_type, parent_zona_id"
+        " FROM zonas WHERE hidden = FALSE ORDER BY nombre"
     ).fetchall()
 
     # First pass: build uuid→name map so child zones can resolve parent name
@@ -83,7 +83,7 @@ def get_opciones_orgs_for_user(org_access: list | None) -> list:
     """Devuelve las opciones de org filtradas por acceso.
     None  → admin/dev: ve todo.
     []    → usuario sin asignaciones explícitas: ve todo (acceso abierto por defecto).
-    [..] → restringido a las orgs asignadas vía user_org_access."""
+    [..] → restringido a las orgs asignadas vía accesos_usuario."""
     if not org_access:  # None o lista vacía
         return list(opciones_orgs)
     allowed = set(org_access)

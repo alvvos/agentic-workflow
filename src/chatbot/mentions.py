@@ -57,8 +57,8 @@ def get_mention_map() -> dict:
     try:
         for org in get_all_orgs():
             org_token = _normalize(org["nombre"])
-            for loc in get_locs_for_org(org["org_uuid"]):
-                loc_uuid = loc["location_uuid"]
+            for loc in get_locs_for_org(org["org_id"]):
+                loc_uuid = loc["ubicacion_id"]
                 loc_token = _normalize(loc["nombre"])
                 if not loc_uuid or not loc_token:
                     continue
@@ -75,7 +75,7 @@ def get_mention_map() -> dict:
                 for zone in get_zones_for_loc(loc_uuid):
                     if zone["hidden"]:
                         continue
-                    zone_uuid = zone["zone_uuid"]
+                    zone_uuid = zone["zona_id"]
                     zone_name = zone["nombre"]
                     zone_token = _normalize(zone_name)
                     if not zone_uuid or not zone_token:

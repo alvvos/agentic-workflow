@@ -158,7 +158,7 @@ NODE_INFO = {
                             className="small text-muted",
                         ),
                         html.Li(
-                            "Compara UUIDs entrantes con dim_ubicaciones y captura los nuevos",
+                            "Compara UUIDs entrantes con ubicaciones y captura los nuevos",
                             className="small text-muted",
                         ),
                         html.Li(
@@ -268,7 +268,7 @@ NODE_INFO = {
                             className="small text-muted",
                         ),
                         html.Li(
-                            "Registra en feature_registry (status=incompleto) y feature_flags (status=contexto)",
+                            "Registra en señales (status=incompleto) y activacion_señales (status=contexto)",
                             className="small text-muted",
                         ),
                         html.Li(
@@ -307,7 +307,7 @@ NODE_INFO = {
                             className="small text-muted",
                         ),
                         html.Li(
-                            "Si fact_visitas tiene < 50 días, la evaluación se aplaza sin bloquear el pipeline",
+                            "Si visitas tiene < 50 días, la evaluación se aplaza sin bloquear el pipeline",
                             className="small text-muted",
                         ),
                     ],
@@ -332,19 +332,19 @@ NODE_INFO = {
                 html.Ol(
                     [
                         html.Li(
-                            "Ubicación: activa=TRUE y lat/lon presentes en dim_ubicaciones",
+                            "Ubicación: activa=TRUE y lat/lon presentes en ubicaciones",
                             className="small text-muted",
                         ),
                         html.Li(
-                            "Visitas: ≥ 30 días en fact_visitas (historial mínimo para el modelo)",
+                            "Visitas: ≥ 30 días en visitas (historial mínimo para el modelo)",
                             className="small text-muted",
                         ),
                         html.Li(
-                            "Cobertura: cada feature con status='active' tiene datos en store_features_ext",
+                            "Cobertura: cada feature con status='active' tiene datos en valores_señales",
                             className="small text-muted",
                         ),
                         html.Li(
-                            "Zonas: al menos una zona visible (hidden=FALSE) en dim_zonas",
+                            "Zonas: al menos una zona visible (hidden=FALSE) en zonas",
                             className="small text-muted",
                         ),
                     ],

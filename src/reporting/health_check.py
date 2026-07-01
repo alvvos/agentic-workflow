@@ -115,13 +115,13 @@ def _load_narrative_meta(conn) -> tuple[dict, dict, list]:
     try:
         for ck, lbl, icon, _ in conn.execute(
             "SELECT category_key, label, icon_cls, sort_order "
-            "FROM narrative_category_registry ORDER BY sort_order"
+            "FROM categorias_narrativa ORDER BY sort_order"
         ).fetchall():
             cat_meta[ck] = (icon or "fas fa-circle", lbl or ck)
             cat_order.append(ck)
         for lk, tc, bc, _ in conn.execute(
             "SELECT level_key, text_color, bg_color, sort_order "
-            "FROM alert_level_registry ORDER BY sort_order"
+            "FROM niveles_alerta ORDER BY sort_order"
         ).fetchall():
             level_meta[lk] = (tc, bc)
     except Exception:
@@ -144,8 +144,7 @@ def _load_norm_tipo(conn) -> dict:
     """Devuelve {raw_event_key: canonical_type} desde feature_registry."""
     try:
         rows = conn.execute(
-            "SELECT feature_key, canonical_type FROM feature_registry "
-            "WHERE canonical_type IS NOT NULL"
+            "SELECT señal_id, canonical_type FROM señales " "WHERE canonical_type IS NOT NULL"
         ).fetchall()
         return {fk: canon for fk, canon in rows}
     except Exception:
@@ -161,9 +160,7 @@ def obtener_zonas_validas(ruta=None):
 
         rows = (
             get_conn()
-            .execute(
-                "SELECT nombre FROM dim_zonas WHERE zone_type = 'last_zone' AND hidden = FALSE"
-            )
+            .execute("SELECT nombre FROM zonas WHERE zone_type = 'last_zone' AND hidden = FALSE")
             .fetchall()
         )
         return {r[0] for r in rows}
@@ -563,8 +560,8 @@ def _eventos_narrativa(location_uuid: str, fecha_ini, fecha_max) -> dict:
         hasta = fecha_max + timedelta(days=28)
         rows = conn.execute(
             """SELECT evento_key, fecha_inicio, metadata
-               FROM store_calendario_org
-               WHERE location_uuid = ? AND fecha_inicio >= ? AND fecha_inicio <= ?
+               FROM eventos
+               WHERE ubicacion_id = ? AND fecha_inicio >= ? AND fecha_inicio <= ?
                ORDER BY fecha_inicio""",
             [
                 location_uuid,
@@ -614,15 +611,15 @@ def _eventos_narrativa(location_uuid: str, fecha_ini, fecha_max) -> dict:
         ev = {"titulo": titulo, "fecha": fi_d}
         (pasados if fi_d <= hoy else proximos).append(ev)
 
-    # Cruceros desde store_calendario_org (evento_key = 'escala_crucero')
+    # Cruceros desde eventos (evento_key = 'escala_crucero')
     cruceros: list[dict] = []
     try:
         fi_str = str(fecha_ini.date() if hasattr(fecha_ini, "date") else fecha_ini)
         hasta_str = str(hasta.date() if hasattr(hasta, "date") else hasta)
         cr_rows = conn.execute(
             """SELECT fecha_inicio::text, metadata
-               FROM store_calendario_org
-               WHERE location_uuid = ? AND evento_key = 'escala_crucero'
+               FROM eventos
+               WHERE ubicacion_id = ? AND evento_key = 'escala_crucero'
                  AND fecha_inicio >= ? AND fecha_inicio <= ?
                ORDER BY fecha_inicio""",
             [location_uuid, fi_str, hasta_str],
@@ -2152,22 +2149,22 @@ _DEFAULT_COLOR = "#0052CC"
 
 def _load_feature_meta(conn, location_uuid: str) -> dict:
     """
-    Returns {feature_key: {"label", "sublabel", "color", "icon_cls", "agg_fn", "display_mode", "notas"}}
-    for all features registered in feature_registry that either:
-      - have an active/contexto flag for this location (features_ext / cruceros / calendario features)
+    Returns {señal_id: {"label", "sublabel", "color", "icon_cls", "agg_fn", "display_mode", "notas"}}
+    for all features registered in señales that either:
+      - have an active/contexto flag for this location (valores_señales / cruceros / calendario features)
       - OR are of display_mode='events_count' (calendar eventos — shown if data exists, no flag needed)
     """
     try:
         rows = conn.execute(
-            """SELECT fr.feature_key, fr.label, fr.sublabel, fr.color, fr.icon_cls,
+            """SELECT fr.señal_id, fr.label, fr.sublabel, fr.color, fr.icon_cls,
                       fr.agg_fn, COALESCE(fr.display_mode, 'yoy') AS display_mode, fr.notas,
-                      fr.fallback_feature_key
-               FROM feature_registry fr
+                      fr.fallback_señal_id
+               FROM señales fr
                WHERE fr.display_mode = 'events_count'
                   OR EXISTS (
-                       SELECT 1 FROM feature_flags ff
-                       WHERE ff.feature_key = fr.feature_key
-                         AND ff.location_uuid = ?
+                       SELECT 1 FROM activacion_señales ff
+                       WHERE ff.señal_id = fr.señal_id
+                         AND ff.ubicacion_id = ?
                          AND ff.status IN ('active', 'contexto')
                   )""",
             [location_uuid],
@@ -2203,12 +2200,12 @@ def _render_eventos_externos(location_uuid: str, fecha_max) -> html.Div | None:
 
         desde = fecha_max - timedelta(days=119)  # ~4 meses para cubrir 4 semanas + 3 meses
         rows = conn.execute(
-            """SELECT feature_key, fecha::text, value
-               FROM   store_features_ext
-               WHERE  location_uuid = ?
-                 AND  value IS NOT NULL
+            """SELECT señal_id, fecha::text, valor
+               FROM   valores_señales
+               WHERE  ubicacion_id = ?
+                 AND  valor IS NOT NULL
                  AND  fecha >= ?
-               ORDER  BY feature_key, fecha""",
+               ORDER  BY señal_id, fecha""",
             [location_uuid, str(desde.date() if hasattr(desde, "date") else desde)],
         ).fetchall()
     except Exception:
@@ -2405,10 +2402,10 @@ def _render_eventos_signals(
             else pd.Timestamp(fecha_max).replace(year=anio_actual - 1, month=1, day=1)
         )
         rows = conn.execute(
-            """SELECT feature_key, fecha::text, value
-               FROM store_features_ext
-               WHERE location_uuid = ? AND value IS NOT NULL AND fecha >= ?
-               ORDER BY feature_key, fecha""",
+            """SELECT señal_id, fecha::text, valor
+               FROM valores_señales
+               WHERE ubicacion_id = ? AND valor IS NOT NULL AND fecha >= ?
+               ORDER BY señal_id, fecha""",
             [location_uuid, str(desde.date() if hasattr(desde, "date") else desde)],
         ).fetchall()
     except Exception:
@@ -2931,15 +2928,15 @@ def _render_calendario_eventos_clima(location_uuid: str, fecha_max) -> html.Div 
         hasta_d = hoy_d + timedelta(days=28)
         ev_rows = conn.execute(
             """SELECT evento_key, fecha_inicio, metadata
-               FROM store_calendario_org
-               WHERE location_uuid = ? AND fecha_fin >= ? AND fecha_inicio <= ?
+               FROM eventos
+               WHERE ubicacion_id = ? AND fecha_fin >= ? AND fecha_inicio <= ?
                ORDER BY fecha_inicio""",
             [location_uuid, str(desde_d), str(hasta_d)],
         ).fetchall()
         cl_rows = conn.execute(
-            """SELECT feature_key, fecha::text, value
-               FROM store_features_ext
-               WHERE location_uuid = ? AND feature_key IN ('llueve','temp_max','temp_min')
+            """SELECT señal_id, fecha::text, valor
+               FROM valores_señales
+               WHERE ubicacion_id = ? AND señal_id IN ('llueve','temp_max','temp_min')
                  AND fecha >= ? AND fecha <= ?""",
             [location_uuid, str(desde_d), str(hasta_d)],
         ).fetchall()
@@ -3297,8 +3294,8 @@ def _render_eventos_mensual_section(
         desde = fecha_max - timedelta(days=760)
         rows = conn.execute(
             """SELECT evento_key, fecha_inicio::text, metadata
-               FROM store_calendario_org
-               WHERE location_uuid = ? AND fecha_inicio >= ?
+               FROM eventos
+               WHERE ubicacion_id = ? AND fecha_inicio >= ?
                ORDER BY fecha_inicio""",
             [location_uuid, str(desde.date() if hasattr(desde, "date") else desde)],
         ).fetchall()
@@ -3610,12 +3607,12 @@ def _render_cruceros_section(
         conn = get_conn()
         desde_yoy = fecha_max - timedelta(days=760)
         yoy_rows = conn.execute(
-            """SELECT e.fecha::text, e.value
-               FROM store_features_ext e
-               JOIN feature_flags f ON f.feature_key = e.feature_key
-                 AND f.location_uuid = e.location_uuid AND f.status = 'active'
-               WHERE e.location_uuid = ? AND e.feature_key = 'n_pasajeros_crucero_oficial'
-                 AND e.value IS NOT NULL AND e.fecha >= ?
+            """SELECT e.fecha::text, e.valor
+               FROM valores_señales e
+               JOIN activacion_señales f ON f.señal_id = e.señal_id
+                 AND f.ubicacion_id = e.ubicacion_id AND f.status = 'active'
+               WHERE e.ubicacion_id = ? AND e.señal_id = 'n_pasajeros_crucero_oficial'
+                 AND e.valor IS NOT NULL AND e.fecha >= ?
                ORDER BY e.fecha""",
             [location_uuid, str(desde_yoy.date() if hasattr(desde_yoy, "date") else desde_yoy)],
         ).fetchall()
@@ -3648,8 +3645,8 @@ def _render_cruceros_section(
     try:
         meta_rows = conn.execute(
             """SELECT fecha_inicio::text, metadata
-               FROM store_calendario_org
-               WHERE location_uuid = ? AND evento_key = 'escala_crucero'
+               FROM eventos
+               WHERE ubicacion_id = ? AND evento_key = 'escala_crucero'
                  AND fecha_inicio >= ?
                ORDER BY fecha_inicio""",
             [location_uuid, str(desde_yoy.date() if hasattr(desde_yoy, "date") else desde_yoy)],
@@ -3674,8 +3671,8 @@ def _render_cruceros_section(
                           CASE WHEN (metadata->>'n_pasajeros') ~ '^[0-9]+$'
                                THEN (metadata->>'n_pasajeros')::int ELSE 0 END
                       ), 0)
-               FROM   store_calendario_org
-               WHERE  location_uuid = ? AND evento_key = 'escala_crucero'
+               FROM   eventos
+               WHERE  ubicacion_id = ? AND evento_key = 'escala_crucero'
                  AND  fecha_inicio > CURRENT_DATE
                  AND  EXTRACT(YEAR FROM fecha_inicio::date)::int = ?
                GROUP  BY 1""",
@@ -3690,9 +3687,9 @@ def _render_cruceros_section(
     if fallback_feature_key:
         try:
             fb_rows = conn.execute(
-                """SELECT fecha::text, value FROM store_features_ext
-                   WHERE location_uuid = ? AND feature_key = ?
-                     AND value IS NOT NULL AND fecha >= ?""",
+                """SELECT fecha::text, valor FROM valores_señales
+                   WHERE ubicacion_id = ? AND señal_id = ?
+                     AND valor IS NOT NULL AND fecha >= ?""",
                 [
                     location_uuid,
                     fallback_feature_key,
@@ -4043,14 +4040,14 @@ def _render_senal_contexto_modal(
         feature_meta = _load_feature_meta(conn, location_uuid)
         desde = fecha_max - timedelta(days=760)
         ts_rows = conn.execute(
-            """SELECT e.feature_key, e.fecha::text, e.value
-               FROM store_features_ext e
-               JOIN feature_flags f
-                 ON f.feature_key = e.feature_key
-                AND f.location_uuid = e.location_uuid
+            """SELECT e.señal_id, e.fecha::text, e.valor
+               FROM valores_señales e
+               JOIN activacion_señales f
+                 ON f.señal_id = e.señal_id
+                AND f.ubicacion_id = e.ubicacion_id
                 AND f.status IN ('active', 'contexto')
-               WHERE e.location_uuid = ? AND e.value IS NOT NULL AND e.fecha >= ?
-               ORDER BY e.feature_key, e.fecha""",
+               WHERE e.ubicacion_id = ? AND e.valor IS NOT NULL AND e.fecha >= ?
+               ORDER BY e.señal_id, e.fecha""",
             [location_uuid, str(desde)],
         ).fetchall()
     except Exception:
@@ -4061,7 +4058,9 @@ def _render_senal_contexto_modal(
 
     charts = []
     if ts_rows:
-        df_ts = pd.DataFrame(ts_rows, columns=["feature_key", "fecha", "value"])
+        df_ts = pd.DataFrame(
+            ts_rows, columns=["feature_key", "fecha", "value"]
+        )  # señal_id→feature_key alias
         df_ts["fecha"] = pd.to_datetime(df_ts["fecha"])
         df_ts["anio"] = df_ts["fecha"].dt.year
         df_ts["mes_num"] = df_ts["fecha"].dt.month

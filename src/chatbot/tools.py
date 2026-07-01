@@ -47,10 +47,10 @@ def _load_dataset(session_id: str = "local_dev") -> pd.DataFrame:
             get_conn()
             .execute(
                 """
-            SELECT fecha, location_uuid AS location_id, zone_uuid,
+            SELECT fecha, ubicacion_id AS location_id, zona_id,
                    total_visits, unique_visitors, new_visitors,
                    dwell_time_min AS dwell_time, hourly_visits
-            FROM fact_visitas ORDER BY fecha
+            FROM visitas ORDER BY fecha
         """
             )
             .df()
@@ -110,7 +110,7 @@ def get_pm_data(
 
     mask = (df["location_id"] == location_id) & (df["fecha"] >= t0) & (df["fecha"] <= t1)
     if zone_uuid:
-        mask &= df["zone_uuid"] == zone_uuid
+        mask &= df["zona_id"] == zone_uuid
 
     sub = df[mask].copy()
     if sub.empty:
@@ -374,19 +374,19 @@ def get_anomalies(
 
     mask = (df["location_id"] == location_uuid) & (df["fecha"] >= t0) & (df["fecha"] <= t1)
     if zone_uuid:
-        mask &= df["zone_uuid"] == zone_uuid
+        mask &= df["zona_id"] == zone_uuid
     sub = df[mask].copy()
     if sub.empty:
         return {"error": f"Sin datos para el rango {fecha_inicio}→{fecha_fin}."}
 
-    agg = sub.groupby(["fecha", "zone_uuid"])["total_visits"].sum().reset_index()
+    agg = sub.groupby(["fecha", "zona_id"])["total_visits"].sum().reset_index()
 
     loc_info = _find_location(location_uuid)
     nombre = loc_info.get("name", location_uuid) if loc_info else location_uuid
     zone_map = {z["uuid"]: z["zoneName"] for z in (loc_info or {}).get("zones", [])}
 
     anomalias = []
-    for zona, grp in agg.groupby("zone_uuid"):
+    for zona, grp in agg.groupby("zona_id"):
         grp = grp.sort_values("fecha")
         valores = grp["total_visits"].values
         if len(valores) < 7:
@@ -443,7 +443,7 @@ def get_hourly_breakdown(
 
     mask = (df["location_id"] == location_uuid) & (df["fecha"] >= t0) & (df["fecha"] <= t1)
     if zone_uuid:
-        mask &= df["zone_uuid"] == zone_uuid
+        mask &= df["zona_id"] == zone_uuid
     sub = df[mask].dropna(subset=["hourly_visits"]).copy()
     if sub.empty:
         return {"error": "Sin datos de desglose horario en el periodo indicado."}
@@ -686,12 +686,12 @@ def get_location_info(location_uuid: str) -> dict:
 
         conn = get_conn()
         row = conn.execute(
-            """SELECT u.location_uuid, u.nombre, u.ciudad, u.provincia,
+            """SELECT u.ubicacion_id, u.nombre, u.ciudad, u.provincia,
                       u.direccion, u.lat, u.lon, u.codigo_postal,
-                      o.nombre AS org_nombre, o.org_uuid
-               FROM dim_ubicaciones u
-               JOIN dim_organizaciones o ON o.org_uuid = u.org_uuid
-               WHERE u.location_uuid = ?""",
+                      o.nombre AS org_nombre, o.org_id
+               FROM ubicaciones u
+               JOIN organizaciones o ON o.org_id = u.org_id
+               WHERE u.ubicacion_id = ?""",
             [location_uuid],
         ).fetchone()
     except Exception as e:
@@ -707,9 +707,9 @@ def get_location_info(location_uuid: str) -> dict:
 
         conn = get_conn()
         zonas = conn.execute(
-            """SELECT zone_uuid, nombre, zone_type, hidden, last_zone
-               FROM dim_zonas WHERE location_uuid = ?
-               ORDER BY sort_order NULLS LAST, nombre""",
+            """SELECT zona_id, nombre, zone_type, hidden
+               FROM zonas WHERE ubicacion_id = ?
+               ORDER BY nombre""",
             [location_uuid],
         ).fetchall()
     except Exception:
@@ -721,7 +721,6 @@ def get_location_info(location_uuid: str) -> dict:
             "nombre": z[1],
             "tipo": z[2],
             "oculta": bool(z[3]),
-            "zona_hoja": bool(z[4]),
         }
         for z in zonas
     ]
@@ -756,12 +755,12 @@ def get_active_features(location_uuid: str) -> dict:
 
         conn = get_conn()
         rows = conn.execute(
-            """SELECT f.feature_key, r.source, r.categoria, r.notas,
-                      f.wmape_delta, f.evaluated_at
-               FROM feature_flags f
-               LEFT JOIN feature_registry r ON r.feature_key = f.feature_key
-               WHERE f.location_uuid = ? AND f.status = 'active'
-               ORDER BY r.categoria NULLS LAST, f.feature_key""",
+            """SELECT f.señal_id, r.fuente, r.categoria, r.notas,
+                      f.evaluated_at
+               FROM activacion_señales f
+               LEFT JOIN señales r ON r.señal_id = f.señal_id
+               WHERE f.ubicacion_id = ? AND f.status = 'active'
+               ORDER BY r.categoria NULLS LAST, f.señal_id""",
             [location_uuid],
         ).fetchall()
     except Exception as e:
@@ -785,10 +784,10 @@ def get_active_features(location_uuid: str) -> dict:
         conn = get_conn()
         placeholders = ",".join(["?"] * len(feature_keys))
         lv_rows = conn.execute(
-            f"""SELECT feature_key, value, fecha::text
-                FROM store_features_ext
-                WHERE location_uuid = ? AND feature_key IN ({placeholders})
-                  AND value IS NOT NULL
+            f"""SELECT señal_id, valor, fecha::text
+                FROM valores_señales
+                WHERE ubicacion_id = ? AND señal_id IN ({placeholders})
+                  AND valor IS NOT NULL
                 ORDER BY fecha DESC""",
             [location_uuid] + feature_keys,
         ).fetchall()
@@ -801,15 +800,13 @@ def get_active_features(location_uuid: str) -> dict:
         pass
 
     features = []
-    for fk, source, categoria, notas, wmape_delta, evaluated_at in rows:
+    for fk, source, categoria, notas, evaluated_at in rows:
         entry: dict = {
             "feature_key": fk,
             "fuente": source,
             "categoria": categoria,
             "notas": notas,
         }
-        if wmape_delta is not None:
-            entry["impacto_wmape_pct"] = round(float(wmape_delta) * 100, 2)
         if fk in last_values:
             entry["ultimo_valor"] = last_values[fk]["value"]
             entry["ultima_fecha"] = last_values[fk]["fecha"]
@@ -858,18 +855,18 @@ def get_external_features(
         conn = get_conn()
         placeholders = ",".join(["?"] * len(feature_keys))
         rows = conn.execute(
-            f"""SELECT feature_key, fecha::text, value
-                FROM store_features_ext
-                WHERE location_uuid = ? AND feature_key IN ({placeholders})
-                  AND fecha >= ? AND fecha <= ? AND value IS NOT NULL
-                ORDER BY feature_key, fecha""",
+            f"""SELECT señal_id, fecha::text, valor
+                FROM valores_señales
+                WHERE ubicacion_id = ? AND señal_id IN ({placeholders})
+                  AND fecha >= ? AND fecha <= ? AND valor IS NOT NULL
+                ORDER BY señal_id, fecha""",
             [location_uuid] + feature_keys + [str(t0.date()), str(t1.date())],
         ).fetchall()
     except Exception as e:
         return {"error": f"Error al consultar features: {e}"}
 
     by_key: dict = {}
-    for fk, fecha, val in rows:
+    for fk, fecha, val in rows:  # fk=señal_id, val=valor
         by_key.setdefault(fk, []).append({"fecha": fecha, "valor": round(float(val), 2)})
 
     yoy_deltas: dict = {}
@@ -881,11 +878,11 @@ def get_external_features(
 
             conn = get_conn()
             py_rows = conn.execute(
-                f"""SELECT feature_key, SUM(value)
-                    FROM store_features_ext
-                    WHERE location_uuid = ? AND feature_key IN ({placeholders})
-                      AND fecha >= ? AND fecha <= ? AND value IS NOT NULL
-                    GROUP BY feature_key""",
+                f"""SELECT señal_id, SUM(valor)
+                    FROM valores_señales
+                    WHERE ubicacion_id = ? AND señal_id IN ({placeholders})
+                      AND fecha >= ? AND fecha <= ? AND valor IS NOT NULL
+                    GROUP BY señal_id""",
                 [location_uuid] + feature_keys + [str(t0_py.date()), str(t1_py.date())],
             ).fetchall()
             py_totals = {r[0]: float(r[1]) for r in py_rows if r[1] is not None}
@@ -948,8 +945,8 @@ def get_calendar_events(
 
         conn = get_conn()
         query = """SELECT evento_key, fecha_inicio, fecha_fin, metadata
-                   FROM store_calendario_org
-                   WHERE location_uuid = ? AND fecha_fin >= ? AND fecha_inicio <= ?"""
+                   FROM eventos
+                   WHERE ubicacion_id = ? AND fecha_fin >= ? AND fecha_inicio <= ?"""
         params: list = [location_uuid, str(t0.date()), str(t1.date())]
         if evento_key:
             query += " AND evento_key = ?"
@@ -1044,8 +1041,8 @@ def get_cruise_calls(
         conn = get_conn()
         raw_rows = conn.execute(
             """SELECT fecha_inicio::text, metadata
-               FROM store_calendario_org
-               WHERE location_uuid = ? AND evento_key = 'escala_crucero'
+               FROM eventos
+               WHERE ubicacion_id = ? AND evento_key = 'escala_crucero'
                  AND fecha_inicio >= ? AND fecha_inicio <= ?
                ORDER BY fecha_inicio""",
             [location_uuid, str(t0.date()), str(t1.date())],
@@ -1102,9 +1099,9 @@ def get_cruise_calls(
         t0_py = t0 - pd.DateOffset(years=1)
         t1_py = t1 - pd.DateOffset(years=1)
         py_row = conn.execute(
-            """SELECT SUM(value) FROM store_features_ext
-               WHERE location_uuid = ? AND feature_key = 'n_pasajeros_crucero_dia'
-                 AND fecha >= ? AND fecha <= ? AND value IS NOT NULL""",
+            """SELECT SUM(valor) FROM valores_señales
+               WHERE ubicacion_id = ? AND señal_id = 'n_pasajeros_crucero_dia'
+                 AND fecha >= ? AND fecha <= ? AND valor IS NOT NULL""",
             [location_uuid, str(t0_py.date()), str(t1_py.date())],
         ).fetchone()
         if py_row and py_row[0]:
@@ -1151,14 +1148,8 @@ def get_model_metrics(
         from src.db.store import get_conn
 
         conn = get_conn()
-        query = """SELECT model_id, zone_uuid, trained_at, features, metrics, is_valid
-                   FROM model_registry WHERE location_uuid = ?"""
-        params: list = [location_uuid]
-        if zone_uuid:
-            query += " AND zone_uuid = ?"
-            params.append(zone_uuid)
-        query += " ORDER BY trained_at DESC LIMIT 10"
-        model_rows = conn.execute(query, params).fetchall()
+        # model_registry fue eliminado — devolvemos mensaje informativo
+        model_rows = []
     except Exception as e:
         return {"error": f"No se pudo consultar el registro de modelos: {e}"}
 
@@ -1201,9 +1192,9 @@ def get_model_metrics(
         from src.db.store import get_conn
 
         conn = get_conn()
-        q2 = """SELECT feature_key, fecha_eval_ini, fecha_eval_fin,
+        q2 = """SELECT señal_id, fecha_eval_ini, fecha_eval_fin,
                        wmape_baseline, wmape_con_feat, wmape_delta, horizonte
-                FROM feature_eval_results WHERE location_uuid = ?"""
+                FROM evaluaciones_señales WHERE ubicacion_id = ?"""
         p2: list = [location_uuid]
         if zone_uuid:
             q2 += " AND (split_idx IS NULL OR split_idx = 0)"
@@ -1281,11 +1272,11 @@ def get_ev_ranks(
         conn = get_conn()
         placeholders = ",".join(["?"] * len(_EV_KEYS))
         rows = conn.execute(
-            f"""SELECT feature_key, fecha::text, value
-                FROM store_features_ext
-                WHERE location_uuid = ? AND feature_key IN ({placeholders})
-                  AND fecha >= ? AND fecha <= ? AND value IS NOT NULL
-                ORDER BY fecha, feature_key""",
+            f"""SELECT señal_id, fecha::text, valor
+                FROM valores_señales
+                WHERE ubicacion_id = ? AND señal_id IN ({placeholders})
+                  AND fecha >= ? AND fecha <= ? AND valor IS NOT NULL
+                ORDER BY fecha, señal_id""",
             [location_uuid] + _EV_KEYS + [str(t0.date()), str(t1.date())],
         ).fetchall()
     except Exception as e:
