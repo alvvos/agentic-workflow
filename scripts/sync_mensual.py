@@ -82,9 +82,29 @@ def _build_ingestores(hoy: date) -> dict[str, Callable]:
       1. Crear src/data_ingestion/mensual/<source>.py con SOURCE, sync() y CATALOG_ENTRY.
       2. Nada más — el scanner lo registra automáticamente aquí y en Context Scout.
     """
-    from src.data_ingestion.mensual import cargar_ingestores
+    from src.data_ingestion.sync_mensual import _HANDLERS
 
-    return cargar_ingestores()
+    # Devuelve {source: sync_fn} usando la interfaz sync(jobs, fecha) de cada handler.
+    # Los handlers en sync_mensual usan la firma (loc_uuid, params, max_age_hours, verbose),
+    # por lo que construimos adaptadores compatibles con la interfaz sync(jobs, fecha).
+    def _make_sync_adapter(handler_fn):
+        from src.data_ingestion._common import get_configured_locations
+
+        def _adapter(jobs, fecha):
+            from src.data_ingestion.sync_mensual import _HANDLERS as _h  # noqa: F401
+
+            # Descubrir el source de este handler
+            source = next((k for k, v in _h.items() if v is handler_fn), None)
+            if source is None:
+                return 0
+            total = 0
+            for lu, params in get_configured_locations(source):
+                total += handler_fn(lu, params, 0, True)
+            return total
+
+        return _adapter
+
+    return {src: _make_sync_adapter(fn) for src, fn in _HANDLERS.items()}
 
 
 # ── Tasks Prefect ─────────────────────────────────────────────────────────────
@@ -101,12 +121,25 @@ def _ingestar_source(source: str, jobs: list[SyncJob], hoy: date) -> int:
 
 @task(name="cruceros-calendario")
 def _cruceros_calendario(hoy: date) -> int:
-    """Refresca el calendario completo de escalas (ene año-anterior → dic año-actual)."""
+    """Refresca el calendario completo de escalas (ene anyo-anterior → dic anyo-actual)."""
     logger = get_run_logger()
     try:
-        from src.data_ingestion.diaria.cruceros import sync_months
+        from src.data_ingestion._common import get_configured_locations
+        from src.data_ingestion.sync_diaria import sync_cruceros_months
 
-        n = sync_months(desde=(1, hoy.year - 1), hasta=(12, hoy.year))
+        total = 0
+        for loc_uuid, params in get_configured_locations("cruceros"):
+            ajax_url = params.get("ajax_url", "")
+            if not ajax_url:
+                continue
+            total += sync_cruceros_months(
+                location_uuid=loc_uuid,
+                ajax_url=ajax_url,
+                pais_codigo=params.get("pais_codigo", "ES"),
+                desde=(1, hoy.year - 1),
+                hasta=(12, hoy.year),
+            )
+        n = total
         logger.info("cruceros-calendario — %d escalas", n)
         return n
     except Exception as exc:

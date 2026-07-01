@@ -91,9 +91,15 @@ def activar_clima_task(location_uuid: str, routing: RoutingResult) -> int:
         [(fk, location_uuid) for fk in climate_keys],
     )
 
-    from src.data_ingestion.diaria.weather import run as weather_run
+    from src.data_ingestion.sync_diaria import run_all as _run_all
 
-    result = weather_run(location_uuid=location_uuid, max_age_hours=0, verbose=False)
+    result_all = _run_all(
+        location_uuid=location_uuid,
+        only={"weather"},
+        max_age_hours=0,
+        verbose=False,
+    )
+    result = result_all.get("weather", {})
     return result.get(location_uuid, 0)
 
 

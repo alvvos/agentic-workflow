@@ -1,12 +1,15 @@
 """
 Helpers compartidos para todos los ingestores diarios y mensuales.
 
-Cada source usa un sync marker (_sync_{source}) para rastrear su última ejecución
-de forma unívoca — sin depender del nombre de columna ML (que es compartido entre sources).
+Merge de diaria/_common.py + mensual/_common.py.
+
+Cada source usa un sync marker (_sync_{source}) para rastrear su ultima ejecucion
+de forma univoca — sin depender del nombre de columna ML (que es compartido entre sources).
 """
 
 from __future__ import annotations
 
+import calendar
 import json
 from datetime import date
 
@@ -17,12 +20,12 @@ from src.db.store import get_conn
 # ── Ventanas de tiempo ────────────────────────────────────────────────────────
 
 EVENTS_DATE_FROM = date(2024, 1, 1)
-EVENTS_HORIZON = 90  # días adelante para eventos
-WEATHER_ARCHIVE_LAG = 7  # días de retraso del archivo Open-Meteo
-WEATHER_FORECAST = 16  # días de pronóstico (límite free tier)
+EVENTS_HORIZON = 90  # dias adelante para eventos
+WEATHER_ARCHIVE_LAG = 7  # dias de retraso del archivo Open-Meteo
+WEATHER_FORECAST = 16  # dias de pronostico (limite free tier)
 
 # ── Feature columns ───────────────────────────────────────────────────────────
-# Definidas aquí para que eventos_client.py las importe sin dependencia circular.
+# Definidas aqui para que eventos_client.py las importe sin dependencia circular.
 
 EVENTOS_FEATURE_COLS: list[str] = [
     "ev_vacaciones_escolares",
@@ -176,8 +179,8 @@ def write_calendario_org(location_uuid: str, events: list[dict], pais_codigo: st
 
 def update_ev_rank_total(location_uuid: str, date_from: date, date_to: date) -> None:
     """
-    Recalcula ev_rank_total = max(deportivo, concierto, festival, municipal) por día.
-    Debe llamarse después de que todos los sources de eventos hayan escrito sus datos.
+    Recalcula ev_rank_total = max(deportivo, concierto, festival, municipal) por dia.
+    Debe llamarse despues de que todos los sources de eventos hayan escrito sus datos.
     """
     try:
         get_conn().execute(
@@ -207,11 +210,89 @@ def update_ev_rank_total(location_uuid: str, date_from: date, date_to: date) -> 
         pass
 
 
+# ── Mensual helpers ───────────────────────────────────────────────────────────
+
+
+def get_configured_locations(source: str) -> list[tuple[str, dict]]:
+    """
+    Lee location_source_config para el source dado.
+    Devuelve [(location_uuid, params_dict), ...] solo para filas activas.
+    """
+    rows = (
+        get_conn()
+        .execute(
+            "SELECT location_uuid, params "
+            "FROM location_source_config "
+            "WHERE source = ? AND activo = TRUE",
+            [source],
+        )
+        .fetchall()
+    )
+    result = []
+    for loc_uuid, params_raw in rows:
+        params = params_raw if isinstance(params_raw, dict) else json.loads(params_raw or "{}")
+        result.append((loc_uuid, params))
+    return result
+
+
+def write_month_uniform(
+    year: int,
+    month: int,
+    total: float,
+    location_uuid: str,
+    feature_key: str,
+    verbose: bool = False,
+) -> int:
+    """
+    Distribuye un total mensual uniformemente entre todos los dias del mes
+    y hace upsert en store_features_ext.
+
+    Solo escribe meses ya cerrados (ultimo dia < hoy). Idempotente.
+    Devuelve el numero de filas escritas (0 si mes en curso o total <= 0).
+    """
+    if total <= 0:
+        return 0
+    today = date.today()
+    last_day = calendar.monthrange(year, month)[1]
+    if date(year, month, last_day) >= today:
+        return 0
+
+    val_per_day = total / last_day
+    rows = [
+        (str(date(year, month, d)), location_uuid, feature_key, val_per_day)
+        for d in range(1, last_day + 1)
+    ]
+    get_conn().executemany(
+        "INSERT INTO store_features_ext (fecha, location_uuid, feature_key, value) "
+        "VALUES (?,?,?,?) "
+        "ON CONFLICT (fecha, location_uuid, feature_key) "
+        "DO UPDATE SET value = excluded.value, ingested_at = NOW()",
+        rows,
+    )
+    if verbose:
+        print(f"  [{feature_key}] {month:02d}/{year}: {total:,.0f} → {val_per_day:.1f}/dia")
+    return len(rows)
+
+
+def ensure_feature_registry(
+    feature_key: str,
+    source: str,
+    categoria: str,
+    notas: str = "",
+) -> None:
+    """Registra el feature_key en feature_registry si no existe. Usa columnas reales del schema."""
+    get_conn().execute(
+        "INSERT INTO feature_registry (feature_key, source, categoria, notas, status) "
+        "VALUES (?,?,?,?,'con_cobertura') ON CONFLICT (feature_key) DO NOTHING",
+        [feature_key, source, categoria, notas],
+    )
+
+
 # ── CLI helpers ───────────────────────────────────────────────────────────────
 
 
 def make_parser(source_desc: str):
-    """Crea un ArgumentParser estándar para los scripts de prefetch."""
+    """Crea un ArgumentParser estandar para los scripts de prefetch."""
     import argparse
 
     p = argparse.ArgumentParser(description=f"Prefetch {source_desc}")

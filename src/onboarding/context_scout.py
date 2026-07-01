@@ -33,7 +33,7 @@ def _cargar_catalog(pais: str) -> list[dict]:
     Solo señales con ingestor implementado son descubribles.
     """
     try:
-        from src.data_ingestion.mensual import cargar_catalog
+        from src.data_ingestion.sync_mensual import cargar_catalog
 
         return cargar_catalog(pais)
     except Exception:

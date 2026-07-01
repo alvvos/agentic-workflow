@@ -57,7 +57,7 @@ def main() -> int:
     # ── Fase B: Ingestores diarios ────────────────────────────────────────────
     log.info("Fase B — Ingestores diarios (weather, eventos, cruceros…)")
     try:
-        from src.data_ingestion.diaria import run_all
+        from src.data_ingestion.sync_diaria import run_all
 
         results_b = run_all(
             skip=set(),
@@ -73,7 +73,7 @@ def main() -> int:
     # ── Fase C: Ingestores mensuales ──────────────────────────────────────────
     log.info("Fase C — Ingestores mensuales (metro, INE, puertos…)")
     try:
-        from src.data_ingestion.mensual import sync_all
+        from src.data_ingestion.sync_mensual import sync_all
 
         results_c = sync_all(
             max_age_hours=168,  # semanal por defecto (datos con lag de días)

@@ -320,9 +320,9 @@ def _sync_esri_places(n, location_uuid):
     if not n or not location_uuid:
         return no_update, no_update, no_update, no_update
     try:
-        from src.data_ingestion.mensual.esri_places import sync_location
+        from src.data_ingestion.sync_mensual import sync_esri_places_location
 
-        n_upserted = sync_location(location_uuid, verbose=False)
+        n_upserted = sync_esri_places_location(location_uuid, verbose=False)
         msg = f"Esri Places: {n_upserted} POI(s) sincronizados."
         return msg, "success", True, _render_table(location_uuid)
     except ImportError:

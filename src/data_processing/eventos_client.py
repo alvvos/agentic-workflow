@@ -123,7 +123,7 @@ def prefetch_eventos(
     if not force and location_uuid in _prefetched:
         return 0
 
-    from src.data_ingestion.diaria import run_all as _run
+    from src.data_ingestion.sync_diaria import run_all as _run
 
     result = _run(
         location_uuid=location_uuid,
@@ -142,6 +142,6 @@ def prefetch_all_locations(force: bool = False) -> dict:
     Prefetch de todas las locations activas.
     Mantenido por compatibilidad con seed.py.
     """
-    from src.data_ingestion.diaria import run_all as _run
+    from src.data_ingestion.sync_diaria import run_all as _run
 
     return _run(max_age_hours=0 if force else 6, verbose=True)

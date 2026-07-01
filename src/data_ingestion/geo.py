@@ -287,7 +287,7 @@ def run(
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    from src.data_ingestion.diaria._common import make_parser
+    from src.data_ingestion._common import make_parser
 
     parser = make_parser("geoespacial Esri (auditoría de store_geo_snapshots)")
     # max-age y force no aplican, pero se incluyen por convención
