@@ -2626,6 +2626,8 @@ def _render_signal_yoy_chart(
     y_prev = [_get(anio_prev, m) for m in range(1, 13)]
     has_prev = any(v is not None and v > 0 for v in y_prev)
     missing = [v is None or v == 0 for v in y_actual]
+    if all(missing):
+        return None
 
     max_real = max((v for v in y_actual if v), default=1)
     ghost_h = max_real * 0.06
