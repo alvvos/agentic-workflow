@@ -71,6 +71,7 @@ def get_active_locations(location_uuid: str | None = None) -> list[dict]:
 def _to_loc(r) -> dict:
     return {
         "uuid": r[0],
+        "ubicacion_id": r[0],
         "nombre": r[1],
         "lat": float(r[2]),
         "lon": float(r[3]),
