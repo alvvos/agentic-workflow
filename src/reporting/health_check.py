@@ -2160,7 +2160,8 @@ def _load_feature_meta(conn, location_uuid: str) -> dict:
     try:
         rows = conn.execute(
             """SELECT fr.feature_key, fr.label, fr.sublabel, fr.color, fr.icon_cls,
-                      fr.agg_fn, COALESCE(fr.display_mode, 'yoy') AS display_mode, fr.notas
+                      fr.agg_fn, COALESCE(fr.display_mode, 'yoy') AS display_mode, fr.notas,
+                      fr.fallback_feature_key
                FROM feature_registry fr
                WHERE fr.display_mode = 'events_count'
                   OR EXISTS (
@@ -2182,8 +2183,9 @@ def _load_feature_meta(conn, location_uuid: str) -> dict:
             "agg_fn": agg or "sum",
             "display_mode": mode,
             "notas": notas or "",
+            "fallback_feature_key": fallback or "",
         }
-        for fk, lbl, sub, col, icon, agg, mode, notas in rows
+        for fk, lbl, sub, col, icon, agg, mode, notas, fallback in rows
     }
 
 
@@ -3595,7 +3597,11 @@ def _render_eventos_mensual_section(
 
 
 def _render_cruceros_section(
-    location_uuid: str, fecha_max, ventana: str = "semana", tooltip_text: str = ""
+    location_uuid: str,
+    fecha_max,
+    ventana: str = "semana",
+    tooltip_text: str = "",
+    fallback_feature_key: str = "",
 ) -> html.Div | None:
     """Grouped bar: año anterior (ghost) vs año en curso (tier-colored), eje Ene-Dic."""
     try:
@@ -3679,11 +3685,38 @@ def _render_cruceros_section(
     except Exception:
         pass
 
+    # Fallback (estimación): agrega el feature alternativo por mes para cubrir el lag oficial
+    _fallback_by_month: dict[str, float] = {}
+    if fallback_feature_key:
+        try:
+            fb_rows = conn.execute(
+                """SELECT fecha::text, value FROM store_features_ext
+                   WHERE location_uuid = ? AND feature_key = ?
+                     AND value IS NOT NULL AND fecha >= ?""",
+                [
+                    location_uuid,
+                    fallback_feature_key,
+                    str(desde_yoy.date() if hasattr(desde_yoy, "date") else desde_yoy),
+                ],
+            ).fetchall()
+            for fs, fv in fb_rows:
+                ym = pd.Timestamp(fs).strftime("%Y-%m")
+                _fallback_by_month[ym] = _fallback_by_month.get(ym, 0) + (fv or 0)
+        except Exception:
+            pass
+
     _C_CONF = _hex_rgba(color, 0.88)
     _C_PROG = _hex_rgba(color, 0.55)
+    _C_LAG = _hex_rgba(color, 0.42)
     _C_PREV = _hex_rgba(color, 0.25)
     _C_MISS = "rgba(224,224,224,0.45)"
-    _tier_color = {"conf": _C_CONF, "prog": _C_PROG, "prev": _C_PREV, "miss": _C_MISS}
+    _tier_color = {
+        "conf": _C_CONF,
+        "prog": _C_PROG,
+        "lag": _C_LAG,
+        "prev": _C_PREV,
+        "miss": _C_MISS,
+    }
 
     # ── Build per-month arrays (12 months, Ene-Dic) ───────────────────────────
     meses = list(range(1, 13))
@@ -3716,6 +3749,9 @@ def _render_cruceros_section(
         elif date(anio_actual, m, 1) > today.replace(day=1) and m in _fc_by_month:
             va = _fc_by_month[m]
             tier = "prev"
+        elif va == 0 and ym_a in _fallback_by_month:
+            va = _fallback_by_month[ym_a]
+            tier = "lag"
         else:
             tier = "miss"
         y_act.append(va)
@@ -3729,6 +3765,8 @@ def _render_cruceros_section(
         # Bar text
         if tier == "miss":
             act_text.append("")
+        elif tier == "lag":
+            act_text.append(f"<b>{int(va):,}</b><br><i style='font-size:7px'>est.</i>")
         elif tier == "prev":
             act_text.append(f"<b>{int(va):,}</b><br><i style='font-size:7px'>prev.</i>")
         else:
@@ -4067,11 +4105,15 @@ def _render_senal_contexto_modal(
 
     # events_count metadata for the eventos section
     eventos_meta = {fk: m for fk, m in feature_meta.items() if m["display_mode"] == "events_count"}
-    # cruceros notas
-    cruceros_notas = feature_meta.get("n_pasajeros_crucero_oficial", {}).get("notas", "")
+    # cruceros notas + fallback
+    _cr_meta = feature_meta.get("n_pasajeros_crucero_oficial", {})
+    cruceros_notas = _cr_meta.get("notas", "")
+    cruceros_fallback = _cr_meta.get("fallback_feature_key", "")
 
     cal_section = _render_calendario_eventos_clima(location_uuid, fecha_max)
-    cruceros_section = _render_cruceros_section(location_uuid, fecha_max, ventana, cruceros_notas)
+    cruceros_section = _render_cruceros_section(
+        location_uuid, fecha_max, ventana, cruceros_notas, cruceros_fallback
+    )
     eventos_mensual_section = _render_eventos_mensual_section(
         location_uuid, fecha_max, eventos_meta
     )

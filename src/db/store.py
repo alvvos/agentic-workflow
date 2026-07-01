@@ -862,8 +862,9 @@ def _migrate_registries(conn: PgConn) -> None:
         _ALERT_LEVELS,
     )
 
-    # ── feature_registry.canonical_type column + raw event seeds ─────────────
+    # ── feature_registry.canonical_type + fallback_feature_key columns ────────
     conn.execute("ALTER TABLE feature_registry ADD COLUMN IF NOT EXISTS canonical_type TEXT")
+    conn.execute("ALTER TABLE feature_registry ADD COLUMN IF NOT EXISTS fallback_feature_key TEXT")
 
     _RAW_EVENTS = [
         (
