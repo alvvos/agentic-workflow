@@ -6,7 +6,6 @@ import pkgutil
 from pathlib import Path
 
 from src.api.modelos.fuente import ConfigFuente, FuenteDisponible
-from src.api.validadores import validar_params
 from src.db.store import get_conn
 
 _CATALOGO: dict[str, FuenteDisponible] | None = None
@@ -84,11 +83,13 @@ def configurar_fuente(
 ) -> tuple[ConfigFuente | None, str | None]:
     """
     Inserta o actualiza la configuración de una fuente para una ubicación.
-    Devuelve (ConfigFuente, None) si OK o (None, mensaje_error) si falla validación.
+    Devuelve (ConfigFuente, None) si OK o (None, mensaje_error) si el source no existe.
     """
-    ok, err = validar_params(source, params)
-    if not ok:
-        return None, err
+    if not params:
+        return None, "params no puede estar vacío"
+    catalogo = {f.source for f in catalogo_fuentes()}
+    if source not in catalogo:
+        return None, f"source '{source}' no reconocido — consulta GET /fuentes/catalogo"
 
     conn = get_conn()
     conn.execute(

@@ -1,11 +1,12 @@
 """
-Descubre automáticamente los validadores de params por SOURCE.
+Validadores de estructura de datos para cada sección del panel de reporting.
 
-Convención: cada módulo en este paquete expone:
-  SOURCE: str      — nombre de la fuente (ej. 'metro_madrid')
-  Params: BaseModel — modelo Pydantic con los campos requeridos
+Cada módulo define:
+  SECCION: str                          — nombre de la sección
+  validar(df) -> tuple[bool, list[str]] — (ok, lista_errores)
 
-El módulo se auto-carga al importar este paquete.
+El número de validadores es fijo: uno por estructura de datos consumida
+por el panel, independientemente de cuántas fuentes de ingesta existan.
 """
 
 from __future__ import annotations
@@ -13,10 +14,14 @@ from __future__ import annotations
 import importlib
 import pkgutil
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, ValidationError
+if TYPE_CHECKING:
+    import pandas as pd
 
-_validadores: dict[str, type[BaseModel]] = {}
+# ── Registro auto-descubierto ─────────────────────────────────────────────────
+
+_validadores: dict[str, object] = {}  # {seccion: modulo}
 
 
 def _cargar() -> None:
@@ -26,10 +31,9 @@ def _cargar() -> None:
             continue
         try:
             mod = importlib.import_module(f"src.api.validadores.{modname}")
-            cls = getattr(mod, "Params", None)
-            source = getattr(mod, "SOURCE", modname)
-            if cls is not None:
-                _validadores[source] = cls
+            seccion = getattr(mod, "SECCION", None)
+            if seccion and callable(getattr(mod, "validar", None)):
+                _validadores[seccion] = mod
         except Exception:
             pass
 
@@ -37,30 +41,24 @@ def _cargar() -> None:
 _cargar()
 
 
-def validar_params(source: str, params: dict) -> tuple[bool, str | None]:
+# ── API pública ───────────────────────────────────────────────────────────────
+
+
+def validar_seccion(seccion: str, df: pd.DataFrame) -> tuple[bool, list[str]]:
     """
-    Valida los params para el source dado.
-    Devuelve (True, None) si OK o si no existe validador para ese source.
-    Devuelve (False, mensaje) si falla la validación.
+    Valida que df tenga la estructura correcta para la sección indicada.
+
+    Devuelve (True, []) si es válido o si no existe validador para esa sección.
+    Devuelve (False, [mensajes]) si hay errores de estructura.
+
+    Secciones disponibles: visitas, features_ext, calendario, prevision
     """
-    cls = _validadores.get(source)
-    if cls is None:
-        return True, None
-    try:
-        cls.model_validate(params)
-        return True, None
-    except ValidationError as exc:
-        errores = "; ".join(
-            f"{'.'.join(str(loc) for loc in e['loc'])}: {e['msg']}" for e in exc.errors()
-        )
-        return False, errores
+    mod = _validadores.get(seccion)
+    if mod is None:
+        return True, []
+    return mod.validar(df)  # type: ignore[attr-defined]
 
 
-def schema_params(source: str) -> dict | None:
-    """Devuelve el JSON Schema de los params del source, o None si no hay validador."""
-    cls = _validadores.get(source)
-    return cls.model_json_schema() if cls else None
-
-
-def fuentes_con_validador() -> list[str]:
+def secciones_disponibles() -> list[str]:
+    """Lista de secciones con validador registrado."""
     return list(_validadores.keys())
