@@ -112,6 +112,14 @@ def _parse_int(s: str) -> int | None:
 _FK_DIA = "n_pasajeros_crucero_dia"
 
 
+def _ensure_feature_registry() -> None:
+    get_conn().execute(
+        "INSERT INTO feature_registry (feature_key, source, categoria, periodicidad, activo) "
+        "VALUES (?,?,?,?,TRUE) ON CONFLICT (feature_key) DO NOTHING",
+        [_FK_DIA, _SOURCE, "turismo", "diaria"],
+    )
+
+
 def ingestar_escalas(escalas: list[dict]) -> int:
     """
     Inserta escalas en store_calendario_org y agrega pasajeros diarios en store_features_ext.
@@ -164,6 +172,7 @@ def ingestar_escalas(escalas: list[dict]) -> int:
             daily[e["fecha"]] = daily.get(e["fecha"], 0.0) + pax
 
     if daily:
+        _ensure_feature_registry()
         conn.executemany(
             "INSERT INTO store_features_ext (fecha, location_uuid, feature_key, value) "
             "VALUES (?,?,?,?) "
