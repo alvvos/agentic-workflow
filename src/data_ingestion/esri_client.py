@@ -26,14 +26,56 @@ _GEO_ENRICH_URL = (
 )
 
 # {esri_collection.variable → señal_id}  — círculo 800m
-# Solo variables que explican flujo de personas, no perfil demográfico.
 _CIRCLE_VAR_MAP: dict[str, str] = {
     # Densidad e intensidad de uso del área (KeyFacts, 2025)
     "KeyFacts.POPDENS_CY": "densidad_poblacion",
     "KeyFacts.PPIDX_CY": "indice_poder_compra",
     "KeyFacts.PAGE02_CY": "pob_15_29",
-    # Proxy de población diurna — activos laborales residentes (EmploymentTotalsAIS, 2023)
+    # Edad — franjas quinquenales (5YearIncrementsAIS, 2023)
+    "5YearIncrementsAIS.POPAG00": "pob_0_4",
+    "5YearIncrementsAIS.POPAG05": "pob_5_9",
+    "5YearIncrementsAIS.POPAG10": "pob_10_14",
+    "5YearIncrementsAIS.POPAG15": "pob_15_19",
+    "5YearIncrementsAIS.POPAG20": "pob_20_24",
+    "5YearIncrementsAIS.POPAG25": "pob_25_29",
+    "5YearIncrementsAIS.POPAG30": "pob_30_34",
+    "5YearIncrementsAIS.POPAG35": "pob_35_39",
+    "5YearIncrementsAIS.POPAG40": "pob_40_44",
+    "5YearIncrementsAIS.POPAG45": "pob_45_49",
+    "5YearIncrementsAIS.POPAG50": "pob_50_54",
+    "5YearIncrementsAIS.POPAG55": "pob_55_59",
+    "5YearIncrementsAIS.POPAG60": "pob_60_64",
+    "5YearIncrementsAIS.POPAG65": "pob_65_69",
+    "5YearIncrementsAIS.POPAG70": "pob_70_74",
+    "5YearIncrementsAIS.POPAG75": "pob_75_79",
+    "5YearIncrementsAIS.POPAG80": "pob_80_84",
+    "5YearIncrementsAIS.POPAG85": "pob_85_plus",
+    # Renta y composición del hogar (IncomeTotalsAIS, HouseholdTotalsAIS, HouseholdsByIncomeAIS)
+    "IncomeTotalsAIS.NINCHA": "renta_hogar_anual",
+    "IncomeTotalsAIS.NINCCA": "renta_per_capita",
+    "HouseholdTotalsAIS.HHOLDS": "n_hogares_total",
+    "HouseholdsByIncomeAIS.THINC5M": "hogares_renta_alta",
+    "HouseholdsByIncomeAIS.THINC4M": "hogares_renta_media_alta",
+    "IncomeTotalsAIS.TOTYOSI": "hogares_jovenes_solos",
+    "IncomeTotalsAIS.TOTYOCO": "hogares_parejas_jovenes",
+    "IncomeTotalsAIS.TOTFUSMA": "hogares_familias_hijos",
+    # Salud financiera
+    "HouseholdsByIncomeAIS.HORIPOYE": "en_riesgo_pobreza_pct",
+    # Gasto de consumidor (transversal — sin ropa/calzado por política de producto)
+    "SpendingTotalsAIS.SPPCARE": "gasto_cuidado_personal",
+    "EntertainmentAIS.SPLEISU": "gasto_ocio_cultura",
+    "EntertainmentAIS.SPLHOLI": "gasto_vacaciones",
+    "MiscellaneousAIS.SPHOTRE": "gasto_restaurantes",
+    "FoodAndDrinksAIS.SPFOODR": "gasto_alimentacion",
+    "TransportationAIS.SPTRANS": "gasto_transporte",
+    # Mercado laboral (EmploymentTotalsAIS, 2023)
     "EmploymentTotalsAIS.TOTATC": "trabajadores_zona",
+    "EmploymentTotalsAIS.UNERATE": "tasa_desempleo",
+    "EmploymentTotalsAIS.UNERATE24": "tasa_desempleo_jovenes",
+    # Canal online / omnicanalidad (OnlineShoppingAIS, 2023)
+    "OnlineShoppingAIS.PUTHINT": "pct_compras_online",
+    "OnlineShoppingAIS.PROPURSPO": "online_ropa_deporte_pct",
+    "OnlineShoppingAIS.WHELAIN": "online_ultimo_mes_pct",
 }
 
 

@@ -1009,18 +1009,20 @@ def _migrate_registries(conn: PgConn) -> None:
     """
     # ── categorias_poi ────────────────────────────────────────────────────────
     _POI_CATS = [
-        ("metro", "Metro / Transporte", "fas fa-subway", "#0052CC", "primary"),
-        ("transporte_bus", "Bus / Parada", "fas fa-bus", "#3498db", "info"),
-        ("tourist_poi", "Polo turístico", "fas fa-landmark", "#f39c12", "warning"),
-        ("event_venue", "Sala de eventos", "fas fa-theater-masks", "#8e44ad", "info"),
-        ("competitor", "Competidor", "fas fa-store", "#DC3545", "danger"),
-        ("restauracion", "Restauración", "fas fa-utensils", "#e74c3c", "danger"),
-        ("ancla", "Tienda ancla / gran superficie", "fas fa-building", "#9b59b6", "primary"),
+        ("metro", "Metro / Transporte", "fas fa-subway", "#1a3a6b", "primary"),
+        ("transporte_bus", "Bus / Parada", "fas fa-bus", "#2980b9", "info"),
+        ("tourist_poi", "Polo turístico", "fas fa-landmark", "#d35400", "warning"),
+        ("event_venue", "Sala de eventos", "fas fa-theater-masks", "#7d3c98", "info"),
+        ("competitor", "Competidor", "fas fa-store", "#c0392b", "danger"),
+        ("restauracion", "Restauración", "fas fa-utensils", "#e67e22", "warning"),
+        ("ancla", "Tienda ancla / gran superficie", "fas fa-building", "#148f77", "success"),
         ("otro", "Otro", "fas fa-map-pin", "#6c757d", "secondary"),
     ]
     conn.executemany(
         "INSERT INTO categorias_poi (category, label, icon_cls, color, badge_color) "
-        "VALUES (?,?,?,?,?) ON CONFLICT (category) DO NOTHING",
+        "VALUES (?,?,?,?,?) ON CONFLICT (category) DO UPDATE SET "
+        "label = EXCLUDED.label, icon_cls = EXCLUDED.icon_cls, "
+        "color = EXCLUDED.color, badge_color = EXCLUDED.badge_color",
         _POI_CATS,
     )
 

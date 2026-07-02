@@ -7,22 +7,64 @@ import pandas as pd
 # Diseñado para explicar variabilidad de flujos de personas, no perfil demográfico.
 
 GEO_FEATURE_COLS = [
-    # Isócronas peatonales (RingBuffer 400/800/1200 m ≈ 5/10/15 min)
+    # Isócronas peatonales
     "poblacion_5min",
     "poblacion_10min",
     "poblacion_15min",
-    # Intensidad de uso del área (círculo 800m, GeoEnrichment)
-    "densidad_poblacion",  # KeyFacts.POPDENS_CY
-    "trabajadores_zona",  # EmploymentTotalsAIS.TOTATC — proxy población diurna
-    # Poder adquisitivo y perfil joven (círculo 800m, GeoEnrichment)
-    "indice_poder_compra",  # KeyFacts.PPIDX_CY (100 = media nacional)
-    "pob_15_29",  # KeyFacts.PAGE02_CY — target prime de tráfico juvenil
+    # Densidad e intensidad (GeoEnrichment 800m)
+    "densidad_poblacion",
+    "trabajadores_zona",
+    "indice_poder_compra",
+    "pob_15_29",
+    # Edad — pirámide quinquenal (GeoEnrichment 800m)
+    "pob_0_4",
+    "pob_5_9",
+    "pob_10_14",
+    "pob_15_19",
+    "pob_20_24",
+    "pob_25_29",
+    "pob_30_34",
+    "pob_35_39",
+    "pob_40_44",
+    "pob_45_49",
+    "pob_50_54",
+    "pob_55_59",
+    "pob_60_64",
+    "pob_65_69",
+    "pob_70_74",
+    "pob_75_79",
+    "pob_80_84",
+    "pob_85_plus",
+    # Renta y composición del hogar
+    "renta_hogar_anual",
+    "renta_per_capita",
+    "n_hogares_total",
+    "hogares_renta_alta",
+    "hogares_renta_media_alta",
+    "hogares_jovenes_solos",
+    "hogares_parejas_jovenes",
+    "hogares_familias_hijos",
+    "en_riesgo_pobreza_pct",
+    # Gasto de consumidor (sin ropa/calzado — sin tipología de producto por ubicación)
+    "gasto_cuidado_personal",
+    "gasto_ocio_cultura",
+    "gasto_vacaciones",
+    "gasto_restaurantes",
+    "gasto_alimentacion",
+    "gasto_transporte",
+    # Mercado laboral
+    "tasa_desempleo",
+    "tasa_desempleo_jovenes",
+    # Canal online / omnicanalidad
+    "pct_compras_online",
+    "online_ropa_deporte_pct",
+    "online_ultimo_mes_pct",
     # Entorno funcional (scores calculados desde puntos_interes)
-    "n_nodos_transporte",  # metro + bus — accesibilidad
-    "n_restauracion",  # restaurantes — atractor de permanencia
-    "n_atracciones",  # monumentos + museos + salas — polo de destino
-    "n_competidores",  # retail moda/accesorios — presión competitiva
-    "n_anclas",  # supermercados + centros comerciales + hoteles — generadores de tráfico
+    "n_nodos_transporte",
+    "n_restauracion",
+    "n_atracciones",
+    "n_competidores",
+    "n_anclas",
 ]
 
 # ── Esri variable mapping ─────────────────────────────────────────────────────
@@ -36,6 +78,44 @@ ESRI_VAR_MAP: dict = {
     "trabajadores_zona": ("EmploymentTotalsAIS.TOTATC", "circle_800m"),
     "indice_poder_compra": ("KeyFacts.PPIDX_CY", "circle_800m"),
     "pob_15_29": ("KeyFacts.PAGE02_CY", "circle_800m"),
+    "pob_0_4": ("5YearIncrementsAIS.POPAG00", "circle_800m"),
+    "pob_5_9": ("5YearIncrementsAIS.POPAG05", "circle_800m"),
+    "pob_10_14": ("5YearIncrementsAIS.POPAG10", "circle_800m"),
+    "pob_15_19": ("5YearIncrementsAIS.POPAG15", "circle_800m"),
+    "pob_20_24": ("5YearIncrementsAIS.POPAG20", "circle_800m"),
+    "pob_25_29": ("5YearIncrementsAIS.POPAG25", "circle_800m"),
+    "pob_30_34": ("5YearIncrementsAIS.POPAG30", "circle_800m"),
+    "pob_35_39": ("5YearIncrementsAIS.POPAG35", "circle_800m"),
+    "pob_40_44": ("5YearIncrementsAIS.POPAG40", "circle_800m"),
+    "pob_45_49": ("5YearIncrementsAIS.POPAG45", "circle_800m"),
+    "pob_50_54": ("5YearIncrementsAIS.POPAG50", "circle_800m"),
+    "pob_55_59": ("5YearIncrementsAIS.POPAG55", "circle_800m"),
+    "pob_60_64": ("5YearIncrementsAIS.POPAG60", "circle_800m"),
+    "pob_65_69": ("5YearIncrementsAIS.POPAG65", "circle_800m"),
+    "pob_70_74": ("5YearIncrementsAIS.POPAG70", "circle_800m"),
+    "pob_75_79": ("5YearIncrementsAIS.POPAG75", "circle_800m"),
+    "pob_80_84": ("5YearIncrementsAIS.POPAG80", "circle_800m"),
+    "pob_85_plus": ("5YearIncrementsAIS.POPAG85", "circle_800m"),
+    "renta_hogar_anual": ("IncomeTotalsAIS.NINCHA", "circle_800m"),
+    "renta_per_capita": ("IncomeTotalsAIS.NINCCA", "circle_800m"),
+    "n_hogares_total": ("HouseholdTotalsAIS.HHOLDS", "circle_800m"),
+    "hogares_renta_alta": ("HouseholdsByIncomeAIS.THINC5M", "circle_800m"),
+    "hogares_renta_media_alta": ("HouseholdsByIncomeAIS.THINC4M", "circle_800m"),
+    "hogares_jovenes_solos": ("IncomeTotalsAIS.TOTYOSI", "circle_800m"),
+    "hogares_parejas_jovenes": ("IncomeTotalsAIS.TOTYOCO", "circle_800m"),
+    "hogares_familias_hijos": ("IncomeTotalsAIS.TOTFUSMA", "circle_800m"),
+    "en_riesgo_pobreza_pct": ("HouseholdsByIncomeAIS.HORIPOYE", "circle_800m"),
+    "gasto_cuidado_personal": ("SpendingTotalsAIS.SPPCARE", "circle_800m"),
+    "gasto_ocio_cultura": ("EntertainmentAIS.SPLEISU", "circle_800m"),
+    "gasto_vacaciones": ("EntertainmentAIS.SPLHOLI", "circle_800m"),
+    "gasto_restaurantes": ("MiscellaneousAIS.SPHOTRE", "circle_800m"),
+    "gasto_alimentacion": ("FoodAndDrinksAIS.SPFOODR", "circle_800m"),
+    "gasto_transporte": ("TransportationAIS.SPTRANS", "circle_800m"),
+    "tasa_desempleo": ("EmploymentTotalsAIS.UNERATE", "circle_800m"),
+    "tasa_desempleo_jovenes": ("EmploymentTotalsAIS.UNERATE24", "circle_800m"),
+    "pct_compras_online": ("OnlineShoppingAIS.PUTHINT", "circle_800m"),
+    "online_ropa_deporte_pct": ("OnlineShoppingAIS.PROPURSPO", "circle_800m"),
+    "online_ultimo_mes_pct": ("OnlineShoppingAIS.WHELAIN", "circle_800m"),
     "n_nodos_transporte": None,
     "n_restauracion": None,
     "n_atracciones": None,
@@ -53,8 +133,46 @@ GEO_FEATURES_BACKDATABLE = [
     "trabajadores_zona",
     "indice_poder_compra",
     "pob_15_29",
-    "n_nodos_transporte",  # infraestructura de transporte: estable
-    "n_atracciones",  # monumentos y museos: estables
+    "pob_0_4",
+    "pob_5_9",
+    "pob_10_14",
+    "pob_15_19",
+    "pob_20_24",
+    "pob_25_29",
+    "pob_30_34",
+    "pob_35_39",
+    "pob_40_44",
+    "pob_45_49",
+    "pob_50_54",
+    "pob_55_59",
+    "pob_60_64",
+    "pob_65_69",
+    "pob_70_74",
+    "pob_75_79",
+    "pob_80_84",
+    "pob_85_plus",
+    "renta_hogar_anual",
+    "renta_per_capita",
+    "n_hogares_total",
+    "hogares_renta_alta",
+    "hogares_renta_media_alta",
+    "hogares_jovenes_solos",
+    "hogares_parejas_jovenes",
+    "hogares_familias_hijos",
+    "en_riesgo_pobreza_pct",
+    "gasto_cuidado_personal",
+    "gasto_ocio_cultura",
+    "gasto_vacaciones",
+    "gasto_restaurantes",
+    "gasto_alimentacion",
+    "gasto_transporte",
+    "tasa_desempleo",
+    "tasa_desempleo_jovenes",
+    "pct_compras_online",
+    "online_ropa_deporte_pct",
+    "online_ultimo_mes_pct",
+    "n_nodos_transporte",
+    "n_atracciones",
 ]
 
 # Dinámicas: entorno competitivo y de restauración (apertura/cierre frecuente).

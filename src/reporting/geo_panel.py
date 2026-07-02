@@ -1178,10 +1178,11 @@ def _insight_box(text):
     )
 
 
-def _chart_card(fig, gid, height, title=None, insight=None):
+def _chart_card(fig, gid, height, title=None, insight=None, fullscreen=False):
     children = []
+    header_items = []
     if title:
-        children.append(
+        header_items.append(
             html.P(
                 title,
                 style={
@@ -1191,6 +1192,34 @@ def _chart_card(fig, gid, height, title=None, insight=None):
                     "letterSpacing": "0.5px",
                     "fontWeight": "600",
                     "marginBottom": "6px",
+                    "flex": "1",
+                },
+            )
+        )
+    if fullscreen:
+        header_items.append(
+            html.A(
+                html.I(className="fas fa-expand-arrows-alt"),
+                href=f"javascript:void(document.getElementById('{gid}').closest('.card').requestFullscreen())",
+                title="Pantalla completa",
+                style={
+                    "color": _C_MUTED,
+                    "fontSize": "0.80rem",
+                    "cursor": "pointer",
+                    "flexShrink": "0",
+                    "marginBottom": "6px",
+                    "alignSelf": "flex-start",
+                },
+            )
+        )
+    if header_items:
+        children.append(
+            html.Div(
+                header_items,
+                style={
+                    "display": "flex",
+                    "justifyContent": "space-between",
+                    "alignItems": "flex-start",
                 },
             )
         )
@@ -2042,8 +2071,8 @@ def _get_pois(uuid: str) -> list[dict]:
 def _fig_mapa(vals, lat, lon, uuid):
     if lat is None or lon is None:
         return None
-    n_comp = int(vals.get("n_competidores_500m") or 0)
-    dist_near = vals.get("dist_competidor_cercano_m") or 200
+    n_comp = int(vals.get("n_competidores") or 0)
+    dist_near = 300
     pob5 = vals.get("poblacion_5min")
     comp_seed = int(uuid.replace("-", ""), 16) % (2**31)
 
@@ -2166,7 +2195,7 @@ def _fig_mapa(vals, lat, lon, uuid):
             lat=[lat],
             lon=[lon],
             mode="markers",
-            marker=dict(size=20, color=_C_PRIMARY),
+            marker=dict(size=22, color="#111111"),
             name="Ubicación",
             hovertemplate=store_tip,
         )
@@ -2516,7 +2545,12 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
         sec_a_charts.append(
             dbc.Col(
                 _chart_card(
-                    fig_mapa, f"geo-map-{uid}", _H_CHART, title=iso_label, insight=ins_captacion
+                    fig_mapa,
+                    f"geo-map-{uid}",
+                    _H_CHART,
+                    title=iso_label,
+                    insight=ins_captacion,
+                    fullscreen=True,
                 ),
                 xs=12,
                 lg=7,
@@ -2808,12 +2842,38 @@ def _leaflet_mapa(vals: dict, lat: float, lon: float, uuid: str):
         )
     )
 
-    return dl.MapContainer(
-        layers,
-        center=[lat, lon],
-        zoom=14,
-        style={"height": "520px", "width": "100%"},
-        id=f"leaflet-map-{uuid[:8]}",
+    map_id = f"leaflet-map-{uuid[:8]}"
+    return html.Div(
+        [
+            html.A(
+                html.I(className="fas fa-expand-arrows-alt"),
+                href=f"javascript:void(document.getElementById('{map_id}').requestFullscreen())",
+                title="Pantalla completa",
+                style={
+                    "position": "absolute",
+                    "top": "10px",
+                    "right": "44px",
+                    "zIndex": 1000,
+                    "background": "rgba(255,255,255,0.85)",
+                    "border": "2px solid rgba(0,0,0,0.2)",
+                    "borderRadius": "4px",
+                    "padding": "5px 7px",
+                    "color": "#333",
+                    "fontSize": "0.80rem",
+                    "cursor": "pointer",
+                    "lineHeight": "1",
+                    "textDecoration": "none",
+                },
+            ),
+            dl.MapContainer(
+                layers,
+                center=[lat, lon],
+                zoom=14,
+                style={"height": "520px", "width": "100%"},
+                id=map_id,
+            ),
+        ],
+        style={"position": "relative"},
     )
 
 
