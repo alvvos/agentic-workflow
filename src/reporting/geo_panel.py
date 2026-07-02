@@ -1612,6 +1612,183 @@ def _render_cards(cards_data, max_per_row=3):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Entorno funcional — tarjetas con YoY y tooltip
+# ─────────────────────────────────────────────────────────────────────────────
+
+_ENTORNO_META = {
+    "n_nodos_transporte": {
+        "label": "Accesibilidad en transporte",
+        "icon": "fas fa-bus",
+        "color": "#0052CC",
+        "unit": "paradas metro + bus en 1200 m",
+        "tooltip": "Suma de paradas de metro y bus en radio 1200 m. Mayor accesibilidad → mayor captación de tráfico no-local.",
+        "umbrales": (3, 8),  # (bajo→medio, medio→alto)
+        "badge_bajo": "Accesibilidad baja",
+        "badge_medio": "Accesibilidad media",
+        "badge_alto": "Alta accesibilidad",
+    },
+    "n_restauracion": {
+        "label": "Densidad de restauración",
+        "icon": "fas fa-utensils",
+        "color": "#e74c3c",
+        "unit": "restaurantes en 1200 m",
+        "tooltip": "Nº de restaurantes en radio 1200 m. Señal de polo de permanencia: a más restauración, más tiempo de estancia del comprador.",
+        "umbrales": (5, 20),
+        "badge_bajo": "Poca restauración",
+        "badge_medio": "Restauración media",
+        "badge_alto": "Alta restauración",
+    },
+    "n_atracciones": {
+        "label": "Polo turístico-cultural",
+        "icon": "fas fa-landmark",
+        "color": "#f39c12",
+        "unit": "atracciones en 1200 m",
+        "tooltip": "Monumentos, museos, teatros y salas de conciertos en radio 1200 m. Proxy de tráfico turístico y cultural que genera oportunidad de compra.",
+        "umbrales": (2, 6),
+        "badge_bajo": "Polo bajo",
+        "badge_medio": "Polo medio",
+        "badge_alto": "Polo alto",
+    },
+    "n_competidores": {
+        "label": "Competencia directa",
+        "icon": "fas fa-store",
+        "color": "#DC3545",
+        "unit": "tiendas de moda en 1200 m",
+        "tooltip": "Tiendas de ropa, accesorios y moda en radio 1200 m. Efecto cluster (calle comercial) también positivo — competencia alta puede indicar zona de alta demanda.",
+        "umbrales": (3, 10),
+        "badge_bajo": "Competencia baja",
+        "badge_medio": "Competencia media",
+        "badge_alto": "Competencia alta",
+    },
+    "n_anclas": {
+        "label": "Tiendas ancla y hoteles",
+        "icon": "fas fa-building",
+        "color": "#9b59b6",
+        "unit": "anclas en 1200 m",
+        "tooltip": "Supermercados, centros comerciales y hoteles en radio 1200 m. Generadores de tráfico masivo recurrente que benefician a tiendas cercanas.",
+        "umbrales": (1, 4),
+        "badge_bajo": "Sin anclas cercanas",
+        "badge_medio": "Anclas moderadas",
+        "badge_alto": "Buenas anclas",
+    },
+}
+
+
+def _entorno_card(key: str, val: float, prev_val: float | None, uuid_prefix: str):
+    meta = _ENTORNO_META[key]
+    umb_bajo, umb_alto = meta["umbrales"]
+    n = int(val)
+    if n >= umb_alto:
+        badge_txt, badge_col = meta["badge_alto"], "success"
+    elif n >= umb_bajo:
+        badge_txt, badge_col = meta["badge_medio"], "warning"
+    else:
+        badge_txt, badge_col = meta["badge_bajo"], "danger"
+
+    # Delta interanual
+    if prev_val is not None:
+        diff = n - int(prev_val)
+        pct = (diff / max(1, int(prev_val))) * 100
+        signo = f"+{diff}" if diff >= 0 else str(diff)
+        pct_str = f"+{pct:.0f}%" if pct >= 0 else f"{pct:.0f}%"
+        detail = f"{signo} ({pct_str}) vs año ant. · {meta['unit']}"
+    else:
+        detail = f"Sin dato año ant. · {meta['unit']}"
+
+    tip_id = f"tip-entorno-{key}-{uuid_prefix}"
+    card_id = f"card-entorno-{key}-{uuid_prefix}"
+
+    card = dbc.Card(
+        dbc.CardBody(
+            [
+                html.Div(
+                    className="d-flex justify-content-between align-items-center",
+                    children=[
+                        html.Div(
+                            [
+                                html.I(
+                                    className=f"{meta['icon']} me-1",
+                                    style={"color": meta["color"], "fontSize": "0.72rem"},
+                                ),
+                                html.Span(
+                                    meta["label"],
+                                    style={
+                                        "fontSize": "0.65rem",
+                                        "color": _C_MUTED,
+                                        "textTransform": "uppercase",
+                                        "letterSpacing": "0.4px",
+                                        "fontWeight": "600",
+                                    },
+                                ),
+                                html.I(
+                                    className="fas fa-info-circle ms-1",
+                                    id=tip_id,
+                                    style={
+                                        "color": _C_MUTED,
+                                        "fontSize": "0.60rem",
+                                        "cursor": "help",
+                                    },
+                                ),
+                                dbc.Tooltip(meta["tooltip"], target=tip_id, placement="top"),
+                            ],
+                            className="d-flex align-items-center",
+                        ),
+                        dbc.Badge(
+                            badge_txt, color=badge_col, pill=True, style={"fontSize": "0.76rem"}
+                        ),
+                    ],
+                ),
+                html.Div(
+                    [
+                        html.Div(
+                            str(n),
+                            style={
+                                "fontSize": "1.28rem",
+                                "fontWeight": "700",
+                                "color": _C_DARK,
+                                "lineHeight": "1.2",
+                                "marginTop": "6px",
+                            },
+                        ),
+                    ]
+                ),
+                html.Div(
+                    detail,
+                    style={
+                        "fontSize": "0.70rem",
+                        "color": _C_MUTED,
+                        "marginTop": "4px",
+                        "borderTop": "1px solid #f0f0f0",
+                        "paddingTop": "4px",
+                    },
+                ),
+            ],
+            className="p-3",
+        ),
+        id=card_id,
+        className="border-0 shadow-sm rounded-4 h-100",
+        style={"borderLeft": f"4px solid {meta['color']}"},
+    )
+    return card
+
+
+def _render_entorno_funcional(vals: dict, prev_vals: dict, uuid_prefix: str):
+    keys = ["n_nodos_transporte", "n_restauracion", "n_atracciones", "n_competidores", "n_anclas"]
+    cols = []
+    for k in keys:
+        v = vals.get(k)
+        if v is None:
+            continue
+        pv = prev_vals.get(k) if prev_vals else None
+        cols.append(
+            dbc.Col(_entorno_card(k, v, pv, uuid_prefix), xs=12, sm=6, lg=4, className="mb-3")
+        )
+    if not cols:
+        return html.Div()
+    return dbc.Row(cols, className="g-3 mb-3")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Charts — Sección A: Alcance
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -2248,8 +2425,19 @@ def _fig_canal_online(vals):
 
 
 def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None):
+    from datetime import date
+
+    from src.data_processing.geo_enrichment import get_geo_vals
+
     activos = {k: v for k, v in vals.items() if v is not None}
     nombre, lat, lon = _info_ubicacion(location_uuid)
+
+    # Snapshot del año anterior para deltas interanuales del entorno funcional
+    hoy = date.today()
+    try:
+        prev_vals = get_geo_vals(location_uuid, fecha=date(hoy.year - 1, hoy.month, 1))
+    except Exception:
+        prev_vals = {}
     all_cards = _build_metric_cards(activos)
 
     if not activos:
@@ -2279,13 +2467,6 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
         for c in all_cards
         if c["label"] in {"Gasto ropa y calzado", "Canal online (presión omnicanal)"}
     ]
-    # ── Tarjetas D: Entorno competitivo (Phase 2) ─────────────────────────────
-    cards_d = [
-        c
-        for c in all_cards
-        if c["label"] in {"Transporte público", "Competencia directa", "Movilidad peatonal"}
-    ]
-
     # ── Charts ───────────────────────────────────────────────────────────────
     fig_cap = _fig_captacion(activos)
     fig_mapa = _fig_mapa(activos, lat, lon, location_uuid)
@@ -2476,29 +2657,32 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
         className="mb-4",
     )
 
-    # ── SECCIÓN D: ENTORNO COMPETITIVO (Phase 2) ──────────────────────────────
-    has_phase2 = any(
-        activos.get(k) is not None
-        for k in ["dist_transporte_min_m", "n_competidores_500m", "indice_movilidad_peatonal"]
-    )
-    seccion_d = html.Div()
-    if has_phase2 and cards_d:
+    # ── SECCIÓN D: ENTORNO FUNCIONAL (POI scores) ─────────────────────────────
+    _entorno_keys = [
+        "n_nodos_transporte",
+        "n_restauracion",
+        "n_atracciones",
+        "n_competidores",
+        "n_anclas",
+    ]
+    has_entorno = any(activos.get(k) is not None for k in _entorno_keys)
+    if has_entorno:
         seccion_d = html.Div(
             [
                 _section_header(
-                    "fas fa-map-marker-alt",
-                    "Entorno competitivo",
-                    "¿Qué tan accesible es la ubicación y a cuánta competencia directa se enfrenta?",
+                    "fas fa-map-marked-alt",
+                    "Entorno funcional",
+                    "¿Qué hay alrededor que genera o absorbe tráfico de personas?",
                 ),
-                _render_cards(cards_d, max_per_row=3),
+                _render_entorno_funcional(activos, prev_vals, uid),
             ],
             className="mb-4",
         )
-    elif not has_phase2:
+    else:
         seccion_d = dbc.Alert(
             [
-                html.I(className="fas fa-info-circle me-2"),
-                "Datos de entorno competitivo pendientes — se activan con Places API y Routing (Fase 2).",
+                html.I(className="fas fa-sync me-2"),
+                "Scores de entorno pendientes — se calculan en el próximo sync mensual (Places API).",
             ],
             color="secondary",
             className="small py-2 px-3 rounded-4 mb-4",
@@ -2599,18 +2783,27 @@ def _leaflet_mapa(vals: dict, lat: float, lon: float, uuid: str):
                 )
             )
 
-    # Marcador de la tienda
+    # Marcador de la tienda — dl.Marker en markerPane (z 600+offset) para
+    # que quede siempre encima de los pines SVG de POI (también en markerPane).
     store_tip = "Tu ubicación"
     if pob5:
         store_tip += f" · {pob5:,.0f} hab. en 5 min"
+    _store_svg = (
+        b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 30">'
+        b'<circle cx="15" cy="15" r="11" fill="#0052CC" stroke="white" stroke-width="3"/>'
+        b'<circle cx="15" cy="15" r="4" fill="white" opacity="0.9"/>'
+        b"</svg>"
+    )
+    _store_icon_url = "data:image/svg+xml;base64," + base64.b64encode(_store_svg).decode()
     layers.append(
-        dl.CircleMarker(
-            center=[lat, lon],
-            radius=12,
-            color="white",
-            weight=3,
-            fillColor=_C_PRIMARY,
-            fillOpacity=1.0,
+        dl.Marker(
+            position=[lat, lon],
+            icon={
+                "iconUrl": _store_icon_url,
+                "iconSize": [30, 30],
+                "iconAnchor": [15, 15],
+            },
+            zIndexOffset=1000,
             children=[dl.Tooltip(store_tip)],
         )
     )
