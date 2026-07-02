@@ -44,14 +44,14 @@ def _upsert_visitas(rows: list) -> None:
         return
     get_conn().executemany(
         """
-        INSERT INTO fact_visitas
-            (fecha, zone_uuid, location_uuid, org_uuid,
+        INSERT INTO visitas
+            (fecha, zona_id, ubicacion_id, org_id,
              total_visits, unique_visitors, new_visitors,
              uv_7d, uv_28d, uv_month, uv_year,
              freq_7d, freq_28d, freq_month, freq_year,
              dwell_time_min, dwell_hist, hourly_visits)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-        ON CONFLICT (fecha, zone_uuid) DO UPDATE SET
+        ON CONFLICT (fecha, zona_id) DO UPDATE SET
             total_visits    = excluded.total_visits,
             unique_visitors = excluded.unique_visitors,
             new_visitors    = excluded.new_visitors,
@@ -71,7 +71,7 @@ def actualizar_datos(
     ubicaciones_seleccionadas=None, stop_event=None, progress_cb=None, desde=None, hasta=None
 ):
     """
-    Descarga datos de Aitanna y los persiste directamente en fact_visitas (PostgreSQL).
+    Descarga datos de Aitanna y los persiste directamente en visitas (PostgreSQL).
     Incremental: solo descarga desde la última fecha registrada por location.
     desde/hasta (YYYY-MM-DD): fuerzan el rango ignorando ultima_fecha_db — útil para backfill de huecos.
     """
@@ -80,8 +80,7 @@ def actualizar_datos(
 
     conn = get_conn()
 
-    # org_uuid map para el INSERT
-    org_map = dict(conn.execute("SELECT location_uuid, org_uuid FROM dim_ubicaciones").fetchall())
+    org_map = dict(conn.execute("SELECT ubicacion_id, org_id FROM ubicaciones").fetchall())
 
     ultima_fecha_db = get_ultima_fecha_por_location()
 
@@ -179,7 +178,7 @@ def actualizar_datos(
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Sincronizador Aitanna → fact_visitas")
+    parser = argparse.ArgumentParser(description="Sincronizador Aitanna → visitas")
     parser.add_argument("--loc", nargs="+", metavar="UUID", help="location_uuid(s) a sincronizar")
     parser.add_argument(
         "--desde",
