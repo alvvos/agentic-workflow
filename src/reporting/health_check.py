@@ -4260,28 +4260,24 @@ def _render_zona_section_jerarquica(
         block = [dbc.Row([dbc.Col(parent_card, xs=12)], className="mb-2 g-2")]
 
         if children_data:
-            children_inner = []
+            # Split children: those with grandchildren act as sub-parents (full-width
+            # card + indented grandchildren); simple children go into a grid row.
+            simple_cols = []
+            sub_parent_blocks = []
             for cz in sorted(children_data, key=lambda z: _sort_zona_key(z["zona"])):
                 gc_names = zona_children_map.get(cz["zona"], [])
                 gc_data = [z for z in zonas_data if z["zona"] in gc_names]
-                children_inner.append(
-                    dbc.Col(
-                        _render_zona_card(
-                            cz["zona"],
-                            cz["r"],
-                            cz["a"],
-                            cz["d"],
-                            cz["dias_28"],
-                            uid,
-                            periodo_label,
-                            has_children=bool(gc_names),
-                            gap_actual=cz.get("gap_actual", False),
-                            gap_anterior=cz.get("gap_anterior", False),
-                        ),
-                        xs=12,
-                        sm=6,
-                        className="mb-2",
-                    )
+                child_card = _render_zona_card(
+                    cz["zona"],
+                    cz["r"],
+                    cz["a"],
+                    cz["d"],
+                    cz["dias_28"],
+                    uid,
+                    periodo_label,
+                    has_children=bool(gc_names),
+                    gap_actual=cz.get("gap_actual", False),
+                    gap_anterior=cz.get("gap_anterior", False),
                 )
                 if gc_data:
                     gc_cols = [
@@ -4304,23 +4300,31 @@ def _render_zona_section_jerarquica(
                         )
                         for gz in sorted(gc_data, key=lambda z: _sort_zona_key(z["zona"]))
                     ]
-                    children_inner.append(
-                        dbc.Col(
-                            html.Div(
-                                dbc.Row(gc_cols, className="g-2"),
-                                className="ps-4",
-                                style={
-                                    "borderLeft": f"3px solid {_color_zona(cz['zona'])}",
-                                    "marginLeft": "8px",
-                                },
-                            ),
-                            xs=12,
+                    sub_parent_blocks.append(
+                        html.Div(
+                            [
+                                dbc.Row([dbc.Col(child_card, xs=12)], className="mb-2 g-2"),
+                                html.Div(
+                                    dbc.Row(gc_cols, className="g-2"),
+                                    className="ps-4",
+                                    style={
+                                        "borderLeft": f"3px solid {_color_zona(cz['zona'])}",
+                                        "marginLeft": "8px",
+                                    },
+                                ),
+                            ],
                             className="mb-2",
                         )
                     )
+                else:
+                    simple_cols.append(dbc.Col(child_card, xs=12, sm=6, className="mb-2"))
+            children_content = []
+            if simple_cols:
+                children_content.append(dbc.Row(simple_cols, className="g-2 mb-2"))
+            children_content.extend(sub_parent_blocks)
             block.append(
                 html.Div(
-                    dbc.Row(children_inner, className="g-2"),
+                    children_content,
                     className="ps-4",
                     style={
                         "borderLeft": f"3px solid {_color_zona(pz['zona'])}",
