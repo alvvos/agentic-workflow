@@ -1010,9 +1010,12 @@ def _migrate_registries(conn: PgConn) -> None:
     # ── categorias_poi ────────────────────────────────────────────────────────
     _POI_CATS = [
         ("metro", "Metro / Transporte", "fas fa-subway", "#0052CC", "primary"),
+        ("transporte_bus", "Bus / Parada", "fas fa-bus", "#3498db", "info"),
         ("tourist_poi", "Polo turístico", "fas fa-landmark", "#f39c12", "warning"),
         ("event_venue", "Sala de eventos", "fas fa-theater-masks", "#8e44ad", "info"),
         ("competitor", "Competidor", "fas fa-store", "#DC3545", "danger"),
+        ("restauracion", "Restauración", "fas fa-utensils", "#e74c3c", "danger"),
+        ("ancla", "Tienda ancla / gran superficie", "fas fa-building", "#9b59b6", "primary"),
         ("otro", "Otro", "fas fa-map-pin", "#6c757d", "secondary"),
     ]
     conn.executemany(
@@ -1824,22 +1827,35 @@ _SOURCE_REGISTRY_SEED = [
             "page_size": 20,
             "max_category_ids_per_call": 10,
             "categorias": {
+                # Transporte público
                 "4bf58dd8d48988d1fd931735": ["metro", "Metro Station"],
                 "4bf58dd8d48988d129951735": ["metro", "Rail Station"],
+                "52f2ab2ebcbc57f1066b8b4f": ["transporte_bus", "Bus Station"],
+                # Atracciones turísticas y culturales
                 "4bf58dd8d48988d12d941735": ["tourist_poi", "Monument / Landmark"],
                 "4deefb944765f83613cdba6e": ["tourist_poi", "Historic Site"],
                 "4bf58dd8d48988d181941735": ["tourist_poi", "Museum"],
                 "4bf58dd8d48988d137941735": ["event_venue", "Theater"],
                 "5032792091d4c4b30a586d5c": ["event_venue", "Concert Hall"],
+                # Restauración (atractor de permanencia y flujo recurrente)
+                "4d4b7105d754a06374d81259": ["restauracion", "Restaurant"],
+                # Competidores directos
                 "4bf58dd8d48988d103951735": ["competitor", "Clothing Store"],
                 "4bf58dd8d48988d1f6941735": ["competitor", "Department Store"],
                 "63be6904847c3692a84b9bec": ["competitor", "Fashion Retail"],
+                # Anclas: generadores de tráfico masivo
+                "52f2ab2ebcbc57f1066b8b46": ["ancla", "Supermarket"],
+                "4bf58dd8d48988d1fd941735": ["ancla", "Shopping Mall"],
+                "4bf58dd8d48988d1fa931735": ["ancla", "Hotel"],
             },
             "valores_categoria": {
                 "metro": 0.85,
+                "transporte_bus": 0.70,
                 "tourist_poi": 0.70,
                 "event_venue": 0.65,
+                "restauracion": 0.60,
                 "competitor": 0.80,
+                "ancla": 0.80,
                 "otro": 0.50,
             },
         },

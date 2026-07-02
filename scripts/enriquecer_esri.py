@@ -44,7 +44,7 @@ def cmd_estado():
 
 def cmd_enriquecer(uuids: list, org: str, fecha: str | None, dry_run: bool):
     from src.data_ingestion.esri_client import fetch_geoenrich
-    from src.data_ingestion.geo import ingestar_snapshot_esri
+    from src.data_ingestion.geo import calcular_scores_poi, ingestar_snapshot_esri
     from src.db.store import get_conn
 
     conn = get_conn()
@@ -91,6 +91,7 @@ def cmd_enriquecer(uuids: list, org: str, fecha: str | None, dry_run: bool):
             continue
         try:
             valores = fetch_geoenrich(ubicacion_id, lat=lat, lon=lon)
+            valores.update(calcular_scores_poi(ubicacion_id))
             n_valores = sum(1 for v in valores.values() if v is not None)
             if dry_run:
                 print(f"  [dry-run] {nombre} ({ubicacion_id[:8]}…)")

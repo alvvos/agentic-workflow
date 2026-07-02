@@ -48,6 +48,38 @@ def listar_estado(verbose: bool = True) -> list[dict]:
     return estado
 
 
+def calcular_scores_poi(ubicacion_id: str) -> dict[str, float]:
+    """
+    Cuenta POIs activos por categoría funcional y devuelve {señal_id: count}.
+    Listo para merge con los valores de GeoEnrichment antes de ingestar.
+    """
+    from src.db.store import get_conn
+
+    rows = (
+        get_conn()
+        .execute(
+            """
+            SELECT categoria, COUNT(*) AS n
+            FROM puntos_interes
+            WHERE ubicacion_id = ? AND activo = TRUE
+            GROUP BY categoria
+            """,
+            [ubicacion_id],
+        )
+        .fetchall()
+    )
+
+    by_cat = {cat: n for cat, n in rows}
+
+    return {
+        "n_nodos_transporte": float(by_cat.get("metro", 0) + by_cat.get("transporte_bus", 0)),
+        "n_restauracion": float(by_cat.get("restauracion", 0)),
+        "n_atracciones": float(by_cat.get("tourist_poi", 0) + by_cat.get("event_venue", 0)),
+        "n_competidores": float(by_cat.get("competitor", 0)),
+        "n_anclas": float(by_cat.get("ancla", 0)),
+    }
+
+
 def ingestar_snapshot_esri(
     ubicacion_id: str,
     valores: dict[str, float | None],

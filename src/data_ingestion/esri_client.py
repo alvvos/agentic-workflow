@@ -25,76 +25,15 @@ _GEO_ENRICH_URL = (
     "World/geoenrichmentserver/GeoEnrichment/enrich"
 )
 
-# {esri_collection.variable → señal_id}  — usado en el círculo 800m
+# {esri_collection.variable → señal_id}  — círculo 800m
+# Solo variables que explican flujo de personas, no perfil demográfico.
 _CIRCLE_VAR_MAP: dict[str, str] = {
-    # ── Edad 5 años (5YearIncrementsAIS, 2023) ────────────────────────────────
-    "5YearIncrementsAIS.POPAG00": "pob_0_4",
-    "5YearIncrementsAIS.POPAG05": "pob_5_9",
-    "5YearIncrementsAIS.POPAG10": "pob_10_14",
-    "5YearIncrementsAIS.POPAG15": "pob_15_19",
-    "5YearIncrementsAIS.POPAG20": "pob_20_24",
-    "5YearIncrementsAIS.POPAG25": "pob_25_29",
-    "5YearIncrementsAIS.POPAG30": "pob_30_34",
-    "5YearIncrementsAIS.POPAG35": "pob_35_39",
-    "5YearIncrementsAIS.POPAG40": "pob_40_44",
-    "5YearIncrementsAIS.POPAG45": "pob_45_49",
-    "5YearIncrementsAIS.POPAG50": "pob_50_54",
-    "5YearIncrementsAIS.POPAG55": "pob_55_59",
-    "5YearIncrementsAIS.POPAG60": "pob_60_64",
-    "5YearIncrementsAIS.POPAG65": "pob_65_69",
-    "5YearIncrementsAIS.POPAG70": "pob_70_74",
-    "5YearIncrementsAIS.POPAG75": "pob_75_79",
-    "5YearIncrementsAIS.POPAG80": "pob_80_84",
-    "5YearIncrementsAIS.POPAG85": "pob_85_plus",
-    # ── Renta (IncomeTotalsAIS, 2023) ─────────────────────────────────────────
-    "IncomeTotalsAIS.NINCHA": "renta_hogar_anual",
-    "IncomeTotalsAIS.NINCHM": "renta_hogar_mensual",
-    "IncomeTotalsAIS.NINCCA": "renta_per_capita",
-    # ── Composición de hogar (IncomeTotalsAIS, 2023) ──────────────────────────
-    "IncomeTotalsAIS.TOTYOSI": "hogares_jovenes_solos",
-    "IncomeTotalsAIS.TOTYOCO": "hogares_parejas_jovenes",
-    "IncomeTotalsAIS.TOTADCO": "hogares_parejas_adultas",
-    "IncomeTotalsAIS.TOTFUSMA": "hogares_familias_hijos",
-    "IncomeTotalsAIS.TOTSIFA": "hogares_monoparentales",
-    # ── Totales de hogar (HouseholdTotalsAIS, 2023) ───────────────────────────
-    "HouseholdTotalsAIS.HHOLDS": "n_hogares_total",
-    "HouseholdTotalsAIS.PEOFAM": "tamanio_medio_hogar",
-    # ── Ingresos por quintil (HouseholdsByIncomeAIS, 2023) ────────────────────
-    "HouseholdsByIncomeAIS.THINC5M": "hogares_renta_alta",
-    "HouseholdsByIncomeAIS.THINC4M": "hogares_renta_media_alta",
-    # ── Salud financiera del hogar (HouseholdsByIncomeAIS, 2023) ─────────────
-    "HouseholdsByIncomeAIS.DOCAYE": "puede_afrontar_imprevistos_pct",
-    "HouseholdsByIncomeAIS.HOMAEASE": "llega_mes_con_facilidad_pct",
-    "HouseholdsByIncomeAIS.HORIPOYE": "en_riesgo_pobreza_pct",
-    # ── Gasto en ropa y calzado (ClothingAIS, 2023) ───────────────────────────
-    "ClothingAIS.SPCLOFO": "gasto_ropa_calzado",
-    "ClothingAIS.SPCLOTH": "gasto_ropa",
-    "ClothingAIS.SPFOOTW": "gasto_calzado",
-    # ── Cuidado personal (SpendingTotalsAIS, 2023) ────────────────────────────
-    "SpendingTotalsAIS.SPPCARE": "gasto_cuidado_personal",
-    # ── Ocio y cultura (EntertainmentAIS, 2023) ───────────────────────────────
-    "EntertainmentAIS.SPLEISU": "gasto_ocio_cultura",
-    "EntertainmentAIS.SPLHOLI": "gasto_vacaciones",
-    # ── Restaurantes y comunicaciones (MiscellaneousAIS, 2023) ───────────────
-    "MiscellaneousAIS.SPHOTRE": "gasto_restaurantes",
-    "MiscellaneousAIS.SPCOMM": "gasto_comunicaciones",
-    # ── Alimentación (FoodAndDrinksAIS, 2023) ─────────────────────────────────
-    "FoodAndDrinksAIS.SPFOODR": "gasto_alimentacion",
-    # ── Transporte (TransportationAIS, 2023) ──────────────────────────────────
-    "TransportationAIS.SPTRANS": "gasto_transporte",
-    # ── Empleo (EmploymentTotalsAIS, 2023) ────────────────────────────────────
-    "EmploymentTotalsAIS.UNERATE": "tasa_desempleo",
-    "EmploymentTotalsAIS.UNERATE24": "tasa_desempleo_jovenes",
-    "EmploymentTotalsAIS.TOTOCCME": "empleados_por_hogar",
-    # ── Compras online (OnlineShoppingAIS, 2023) ──────────────────────────────
-    "OnlineShoppingAIS.PUTHINT": "pct_compras_online",
-    "OnlineShoppingAIS.PROPURSPO": "online_ropa_deporte_pct",
-    "OnlineShoppingAIS.WHELAIN": "online_ultimo_mes_pct",
-    # ── Precio inmobiliario (PropertyValueAIS, 2023) ──────────────────────────
-    "PropertyValueAIS.AVPRIRENP": "precio_piso_alquiler",
-    # ── Poder de compra (KeyFacts, 2025) ──────────────────────────────────────
+    # Densidad e intensidad de uso del área (KeyFacts, 2025)
+    "KeyFacts.POPDENS_CY": "densidad_poblacion",
     "KeyFacts.PPIDX_CY": "indice_poder_compra",
-    "KeyFacts.PPPC_CY": "poder_compra_pc",
+    "KeyFacts.PAGE02_CY": "pob_15_29",
+    # Proxy de población diurna — activos laborales residentes (EmploymentTotalsAIS, 2023)
+    "EmploymentTotalsAIS.TOTATC": "trabajadores_zona",
 }
 
 
