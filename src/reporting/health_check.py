@@ -4238,8 +4238,35 @@ def _render_zona_section_jerarquica(
         ]
         return dbc.Row(cols, className="g-3")
 
+    # Root zones with no registered children → render as leaf cards in a flat grid.
+    lone_roots = [pz for pz in parent_zones if not zona_children_map.get(pz["zona"])]
+    true_parents = [pz for pz in parent_zones if zona_children_map.get(pz["zona"])]
+
     sections = []
-    for pz in parent_zones:
+    if lone_roots:
+        lone_cols = [
+            dbc.Col(
+                _render_zona_card(
+                    pz["zona"],
+                    pz["r"],
+                    pz["a"],
+                    pz["d"],
+                    pz["dias_28"],
+                    uid,
+                    periodo_label,
+                    has_children=False,
+                    gap_actual=pz.get("gap_actual", False),
+                    gap_anterior=pz.get("gap_anterior", False),
+                ),
+                xs=12,
+                sm=6,
+                className="mb-2",
+            )
+            for pz in lone_roots
+        ]
+        sections.append(html.Div(dbc.Row(lone_cols, className="g-2"), className="mb-4"))
+
+    for pz in true_parents:
         children_names = zona_children_map.get(pz["zona"], [])
         children_data = [z for z in zonas_data if z["zona"] in children_names]
 
