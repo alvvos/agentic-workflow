@@ -2826,18 +2826,24 @@ def _render_signal_yoy_chart(
         className="d-flex align-items-center gap-3 mb-1",
     )
 
-    tt_id = f"tt-{uid}-{fk[:20]}"
+    tt_id = f"tt-{re.sub(r'[^a-z0-9]', '-', uid.lower())[:16]}-{re.sub(r'[^a-z0-9]', '-', fk.lower())[:16]}"
     info_els = (
         [
-            html.I(
+            html.Span(
+                html.I(className="fas fa-info-circle", style={"fontSize": "0.75rem"}),
                 id=tt_id,
-                className="fas fa-info-circle ms-1 me-1",
-                style={"color": "#ced4da", "fontSize": "0.75rem", "cursor": "pointer"},
+                style={
+                    "color": "#ced4da",
+                    "cursor": "pointer",
+                    "display": "inline-flex",
+                    "alignItems": "center",
+                    "padding": "0 4px",
+                },
             ),
             dbc.Tooltip(
                 tooltip_text,
                 target=tt_id,
-                placement="right",
+                placement="top",
                 style={"fontSize": "0.76rem", "maxWidth": "300px", "textAlign": "left"},
             ),
         ]
@@ -4006,18 +4012,24 @@ def _render_cruceros_section(
     )
 
     _cr_tt_text = tooltip_text
-    _cr_tt_id = f"tt-crucero-{location_uuid[:8]}"
+    _cr_tt_id = f"tt-crucero-{re.sub(r'[^a-z0-9]', '-', location_uuid.lower())[:16]}"
     _cr_info_els = (
         [
-            html.I(
+            html.Span(
+                html.I(className="fas fa-info-circle", style={"fontSize": "0.75rem"}),
                 id=_cr_tt_id,
-                className="fas fa-info-circle ms-1 me-1",
-                style={"color": "#ced4da", "fontSize": "0.75rem", "cursor": "pointer"},
+                style={
+                    "color": "#ced4da",
+                    "cursor": "pointer",
+                    "display": "inline-flex",
+                    "alignItems": "center",
+                    "padding": "0 4px",
+                },
             ),
             dbc.Tooltip(
                 _cr_tt_text,
                 target=_cr_tt_id,
-                placement="right",
+                placement="top",
                 style={"fontSize": "0.76rem", "maxWidth": "300px", "textAlign": "left"},
             ),
         ]
