@@ -603,6 +603,7 @@ def _migrar_renombrar_columnas(conn: PgConn) -> None:
     # org_uuid → org_id
     _rename_col("organizaciones", "org_uuid", "org_id")
     _rename_col("ubicaciones", "org_uuid", "org_id")
+    _rename_col("visitas", "org_uuid", "org_id")
     _rename_col("eventos", "org_uuid", "org_id")
     _rename_col("accesos_usuario", "org_uuid", "org_id")
 
