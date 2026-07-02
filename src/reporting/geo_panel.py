@@ -876,7 +876,6 @@ _H_MID = "340px"
 _H_SM = "280px"
 
 _REF_RENTA = 25_000
-_REF_GASTO_ROPA = 1_200
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1063,42 +1062,30 @@ def _auto_insight_salud(vals):
 
 
 def _auto_insight_gasto(vals):
-    gasto_ropa = vals.get("gasto_ropa_calzado")
     gasto_pers = vals.get("gasto_cuidado_personal")
     gasto_ocio = vals.get("gasto_ocio_cultura")
-    if gasto_ropa is None:
+    if not gasto_pers and not gasto_ocio:
         return None
-    pct = (gasto_ropa - _REF_GASTO_ROPA) / _REF_GASTO_ROPA * 100
-    verb = "más" if pct >= 0 else "menos"
-    txt = (
-        f"Los hogares del área gastan {gasto_ropa:,.0f} € al año en ropa y calzado, "
-        f"un {abs(pct):.0f}% {verb} que la media nacional ({_REF_GASTO_ROPA:,.0f} €)."
-    )
+    parts = []
     if gasto_pers:
-        txt += (
-            f" El gasto en cuidado personal suma {gasto_pers:,.0f} €/hogar, "
-            "señal de predisposición a marcas de lifestyle y autocuidado."
+        parts.append(
+            f"Cuidado personal {gasto_pers:,.0f} €/hogar — predisposición a marcas de lifestyle."
         )
     if gasto_ocio:
-        txt += f" El ocio y la cultura absorben {gasto_ocio:,.0f} €/hogar, indicando disponibilidad para gasto no esencial."
-    return txt
+        parts.append(
+            f"Ocio y cultura {gasto_ocio:,.0f} €/hogar — disponibilidad para gasto no esencial."
+        )
+    return " ".join(parts)
 
 
 def _auto_insight_online(vals):
     nhog = vals.get("n_hogares_total")
     puthint = vals.get("pct_compras_online")
-    propuspo = vals.get("online_ropa_deporte_pct")
     whelain = vals.get("online_ultimo_mes_pct")
     if not nhog or puthint is None:
         return None
     pct_online = puthint / nhog * 100
     txt = f"El {pct_online:.0f}% de los hogares compra habitualmente por internet."
-    if propuspo:
-        pct_ropa = propuspo / nhog * 100
-        txt += (
-            f" De ellos, el {pct_ropa:.0f}% ya ha comprado ropa o deporte online, "
-            "presión omnicanal directa sobre la categoría."
-        )
     if whelain:
         pct_mes = whelain / nhog * 100
         txt += (
@@ -1317,31 +1304,6 @@ def _build_metric_cards(vals):
             )
         )
 
-    # ── Gasto ropa y calzado ──────────────────────────────────────────────────
-    gasto_ropa = vals.get("gasto_ropa_calzado")
-    gasto_pers = vals.get("gasto_cuidado_personal")
-    if gasto_ropa is not None:
-        pct = (gasto_ropa - _REF_GASTO_ROPA) / _REF_GASTO_ROPA * 100
-        nivel = "Gasto alto" if pct > 15 else ("Gasto medio" if pct > -15 else "Gasto bajo")
-        badge_col = "success" if pct > 15 else ("warning" if pct > -15 else "danger")
-        signo = f"+{pct:.0f}%" if pct >= 0 else f"{pct:.0f}%"
-        detail_parts = [f"{signo} vs ref. nacional (€{_REF_GASTO_ROPA:,.0f})"]
-        if gasto_pers:
-            detail_parts.append(f"cuidado personal {gasto_pers:,.0f} €/hog.")
-        cards.append(
-            dict(
-                icon="fas fa-shopping-bag",
-                label="Gasto ropa y calzado",
-                main_val=f"{gasto_ropa:,.0f} €",
-                unit="por hogar/año en 800 m",
-                badge_txt=nivel,
-                badge_col=badge_col,
-                border_color=_C_GREEN,
-                funnel=None,
-                detail=" · ".join(detail_parts),
-            )
-        )
-
     # ── Perfil demográfico target ─────────────────────────────────────────────
     jovenes = vals.get("hogares_jovenes_solos")
     familias = vals.get("hogares_familias_hijos")
@@ -1411,10 +1373,8 @@ def _build_metric_cards(vals):
 
     # ── Canal digital ─────────────────────────────────────────────────────────
     puthint = vals.get("pct_compras_online")
-    propuspo = vals.get("online_ropa_deporte_pct")
     if nhog and puthint is not None:
         pct_online = puthint / nhog * 100
-        pct_ropa = propuspo / nhog * 100 if propuspo and nhog else None
         nivel = (
             "Presión alta"
             if pct_online > 70
@@ -1422,8 +1382,6 @@ def _build_metric_cards(vals):
         )
         badge_col = "danger" if pct_online > 70 else ("warning" if pct_online > 45 else "success")
         detail_parts = [f"{pct_online:.0f}% compra online"]
-        if pct_ropa:
-            detail_parts.append(f"{pct_ropa:.0f}% compra ropa/deporte online")
         cards.append(
             dict(
                 icon="fas fa-mobile-alt",
@@ -1687,7 +1645,7 @@ _ENTORNO_META = {
         "icon": "fas fa-store",
         "color": "#DC3545",
         "unit": "tiendas de moda en 1200 m",
-        "tooltip": "Tiendas de ropa, accesorios y moda en radio 1200 m. Efecto cluster (calle comercial) también positivo — competencia alta puede indicar zona de alta demanda.",
+        "tooltip": "Tiendas competidoras en radio 1200 m. Efecto cluster (calle comercial) también positivo — competencia alta puede indicar zona de alta demanda.",
         "umbrales": (3, 10),
         "badge_bajo": "Competencia baja",
         "badge_medio": "Competencia media",
@@ -2255,9 +2213,6 @@ def _fig_gasto_comparativo(vals):
         ("gasto_restaurantes", "Hoteles y restaurantes", "rgba(23,162,184,0.80)"),
         ("gasto_ocio_cultura", "Ocio y cultura", "rgba(142,68,173,0.70)"),
         ("gasto_cuidado_personal", "Cuidado personal", "rgba(243,156,18,0.75)"),
-        ("gasto_calzado", "Calzado", "rgba(0,82,204,0.55)"),
-        ("gasto_ropa", "Ropa", "rgba(0,82,204,0.70)"),
-        ("gasto_ropa_calzado", "Ropa + calzado ★", "rgba(0,82,204,0.92)"),
     ]
     labels, values, colors = [], [], []
     for key, label, color in specs:
@@ -2283,17 +2238,6 @@ def _fig_gasto_comparativo(vals):
             textfont=dict(size=10, color=_C_DARK, **_FONT),
             hovertemplate="%{y}: <b>%{x:,.0f} €</b>/hogar/año<extra></extra>",
         )
-    )
-
-    # Reference line for ropa+calzado benchmark
-    fig.add_vline(
-        x=_REF_GASTO_ROPA,
-        line_dash="dash",
-        line_color="rgba(220,53,69,0.5)",
-        line_width=1.5,
-        annotation_text=f"Ref. nacional ropa+calzado ({_REF_GASTO_ROPA:,.0f} €)",
-        annotation_position="top right",
-        annotation_font=dict(size=9, color=_C_RED),
     )
 
     fig.update_layout(
@@ -2395,7 +2339,6 @@ def _fig_canal_online(vals):
 
     specs = [
         ("online_ultimo_mes_pct", "Compró online el\núltimo mes", "rgba(220,53,69,0.50)"),
-        ("online_ropa_deporte_pct", "Ha comprado ropa/\ndeporte online", "rgba(220,53,69,0.75)"),
         ("pct_compras_online", "Compra online\n(habitual)", "rgba(220,53,69,0.95)"),
     ]
     labels, values, colors = [], [], []
@@ -2497,11 +2440,7 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
         if c["label"] in {"Renta del hogar", "Salud financiera del hogar", "Mercado inmobiliario"}
     ]
     # ── Tarjetas C: Gasto y digital ───────────────────────────────────────────
-    cards_c = [
-        c
-        for c in all_cards
-        if c["label"] in {"Gasto ropa y calzado", "Canal online (presión omnicanal)"}
-    ]
+    cards_c = [c for c in all_cards if c["label"] in {"Canal online (presión omnicanal)"}]
     # ── Charts ───────────────────────────────────────────────────────────────
     fig_cap = _fig_captacion(activos)
     fig_mapa = _fig_mapa(activos, lat, lon, location_uuid)
