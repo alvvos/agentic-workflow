@@ -15,15 +15,26 @@ from __future__ import annotations
 import logging
 import sys
 import time
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_ROOT))
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    stream=sys.stdout,
-)
+_LOG_FILE = _ROOT / "logs" / "miniso_sync.log"
+_LOG_FILE.parent.mkdir(exist_ok=True)
+
+_fmt = logging.Formatter("%(asctime)s [%(levelname)-8s] %(name)-22s %(message)s")
+
+_fh = RotatingFileHandler(_LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=10, encoding="utf-8")
+_fh.setFormatter(_fmt)
+_fh.setLevel(logging.DEBUG)
+
+_sh = logging.StreamHandler(sys.stdout)
+_sh.setFormatter(_fmt)
+_sh.setLevel(logging.INFO)
+
+logging.basicConfig(level=logging.DEBUG, handlers=[_fh, _sh])
 log = logging.getLogger("sync_noche")
 
 

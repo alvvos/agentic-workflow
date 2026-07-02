@@ -1,3 +1,4 @@
+import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
@@ -8,6 +9,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 AITANNA_API_KEY = os.getenv("AITANNA_API_KEY")
+
+log = logging.getLogger("sincronizador")
 
 
 def _get_location_ids(ubicaciones_seleccionadas=None):
@@ -73,33 +76,39 @@ def actualizar_datos(
     """
     Descarga datos de Aitanna y los persiste directamente en visitas (PostgreSQL).
     Incremental: solo descarga desde la última fecha registrada por location.
-    desde/hasta (YYYY-MM-DD): fuerzan el rango ignorando ultima_fecha_db — útil para backfill de huecos.
+    desde/hasta (YYYY-MM-DD): fuerzan el rango ignorando ultima_fecha_db.
     """
     from src.db.queries import get_ultima_fecha_por_location
     from src.db.store import get_conn
 
     conn = get_conn()
 
-    org_map = dict(conn.execute("SELECT ubicacion_id, org_id FROM ubicaciones").fetchall())
+    rows_ubi = conn.execute("SELECT ubicacion_id, org_id, nombre FROM ubicaciones").fetchall()
+    org_map = {r[0]: r[1] for r in rows_ubi}
+    name_map = {r[0]: r[2] for r in rows_ubi}
 
     ultima_fecha_db = get_ultima_fecha_por_location()
 
     location_ids = ubicaciones_seleccionadas if ubicaciones_seleccionadas else list(org_map.keys())
     if not location_ids:
-        print("No hay ubicaciones para sincronizar.")
+        log.warning("No hay ubicaciones para sincronizar.")
         return
 
     fecha_fin = datetime.strptime(hasta, "%Y-%m-%d") if hasta else datetime.today()
     total_locs = len(location_ids)
     registros_nuevos_totales = 0
 
+    log.info("Iniciando sync Aitanna — %d ubicación(es)", total_locs)
+
     for idx, loc_id in enumerate(location_ids, 1):
         if stop_event and stop_event.is_set():
-            print("Sincronización cancelada.")
+            log.warning("Sincronización cancelada por stop_event.")
             break
 
         if progress_cb:
             progress_cb(idx, total_locs)
+
+        nombre = name_map.get(loc_id, loc_id[:8])
 
         if desde:
             ultima_dt = datetime.strptime(desde, "%Y-%m-%d")
@@ -111,17 +120,25 @@ def actualizar_datos(
 
         dias_diferencia = (fecha_fin - ultima_dt).days
         if dias_diferencia <= 0:
+            log.debug("[%d/%d] %s — al día, nada que descargar", idx, total_locs, nombre)
             continue
 
         fechas_a_descargar = [
             (fecha_fin - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(dias_diferencia + 1)
         ]
 
-        print(
-            f"[{idx:02d}/{total_locs}] {loc_id[:8]}... | {len(fechas_a_descargar)} días", end="\r"
+        log.info(
+            "[%02d/%02d] %s — descargando %d día(s) (%s → %s)",
+            idx,
+            total_locs,
+            nombre,
+            len(fechas_a_descargar),
+            fechas_a_descargar[-1],
+            fechas_a_descargar[0],
         )
 
         filas_buffer = []
+        errores_api: list[str] = []
         org_uuid = org_map.get(loc_id, "")
 
         with ThreadPoolExecutor(max_workers=5) as executor:
@@ -129,6 +146,8 @@ def actualizar_datos(
             for futuro in as_completed(futuros):
                 fecha_str, datos, status = futuro.result()
                 if status != "OK" or not datos:
+                    if status != "404":
+                        errores_api.append(f"{fecha_str}:{status}")
                     continue
                 for zona in datos:
                     hours_data = zona.get("visitorsHour", [])
@@ -163,29 +182,44 @@ def actualizar_datos(
                         )
                     )
 
+        if errores_api:
+            log.warning(
+                "[%02d/%02d] %s — %d error(es) API: %s",
+                idx,
+                total_locs,
+                nombre,
+                len(errores_api),
+                ", ".join(errores_api[:10]) + ("..." if len(errores_api) > 10 else ""),
+            )
+
         if filas_buffer:
             _upsert_visitas(filas_buffer)
             registros_nuevos_totales += len(filas_buffer)
-            print(
-                f"[{idx:02d}/{total_locs}] {loc_id[:8]}... | +{len(filas_buffer)} registros guardados."
+            log.info(
+                "[%02d/%02d] %s — OK  +%d registros escritos",
+                idx,
+                total_locs,
+                nombre,
+                len(filas_buffer),
             )
         else:
-            print(f"[{idx:02d}/{total_locs}] {loc_id[:8]}... | Sin datos.              ")
+            log.info("[%02d/%02d] %s — sin datos en el rango", idx, total_locs, nombre)
 
-    print(f"\nSincronización finalizada. Registros nuevos: {registros_nuevos_totales}")
+    log.info(
+        "Sync Aitanna finalizada — %d ubicación(es), %d registros nuevos totales",
+        total_locs,
+        registros_nuevos_totales,
+    )
 
 
 if __name__ == "__main__":
     import argparse
 
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
     parser = argparse.ArgumentParser(description="Sincronizador Aitanna → visitas")
     parser.add_argument("--loc", nargs="+", metavar="UUID", help="location_uuid(s) a sincronizar")
-    parser.add_argument(
-        "--desde",
-        metavar="YYYY-MM-DD",
-        help="Fecha inicio (fuerza backfill ignorando ultima_fecha)",
-    )
-    parser.add_argument("--hasta", metavar="YYYY-MM-DD", help="Fecha fin (por defecto: hoy)")
+    parser.add_argument("--desde", metavar="YYYY-MM-DD")
+    parser.add_argument("--hasta", metavar="YYYY-MM-DD")
     args = parser.parse_args()
     actualizar_datos(
         ubicaciones_seleccionadas=args.loc,
