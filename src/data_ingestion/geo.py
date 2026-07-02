@@ -121,9 +121,9 @@ def ingestar_snapshot_esri(
         conn.execute(
             """
             UPDATE snapshots_geo SET vigente_hasta = ?
-            WHERE ubicacion_id = ? AND vigente_hasta IS NULL
+            WHERE ubicacion_id = ? AND vigente_hasta IS NULL AND vigente_desde < ?
             """,
-            [ayer, ubicacion_id],
+            [ayer, ubicacion_id, fecha],
         )
 
     vigente_desde = "2024-01-01" if primera_entrega else fecha
@@ -140,6 +140,7 @@ def ingestar_snapshot_esri(
         VALUES (?, ?, ?, ?)
         ON CONFLICT (ubicacion_id, señal_id, vigente_desde) DO UPDATE SET
             valor = excluded.valor,
+            vigente_hasta = NULL,
             ingested_at = CURRENT_TIMESTAMP
         """,
         filas,

@@ -1197,11 +1197,12 @@ def _chart_card(fig, gid, height, title=None, insight=None, fullscreen=False):
             )
         )
     if fullscreen:
+        card_id = f"{gid}-card"
         header_items.append(
-            html.A(
+            html.Button(
                 html.I(className="fas fa-expand-arrows-alt"),
-                href=f"javascript:void(document.getElementById('{gid}').closest('.card').requestFullscreen())",
                 title="Pantalla completa",
+                **{"data-fullscreen-for": card_id},
                 style={
                     "color": _C_MUTED,
                     "fontSize": "0.80rem",
@@ -1209,6 +1210,9 @@ def _chart_card(fig, gid, height, title=None, insight=None, fullscreen=False):
                     "flexShrink": "0",
                     "marginBottom": "6px",
                     "alignSelf": "flex-start",
+                    "background": "none",
+                    "border": "none",
+                    "padding": "0",
                 },
             )
         )
@@ -1226,10 +1230,12 @@ def _chart_card(fig, gid, height, title=None, insight=None, fullscreen=False):
     children.append(dcc.Graph(id=gid, figure=fig, config=_CFG, style={"height": height}))
     if insight:
         children.append(_insight_box(insight))
+    card_kwargs = {"id": f"{gid}-card"} if fullscreen else {}
     return dbc.Card(
         dbc.CardBody(children, className="p-3"),
         className="border-0 shadow-sm rounded-4 h-100",
         style={"overflow": "visible"},
+        **card_kwargs,
     )
 
 
@@ -2845,10 +2851,10 @@ def _leaflet_mapa(vals: dict, lat: float, lon: float, uuid: str):
     map_id = f"leaflet-map-{uuid[:8]}"
     return html.Div(
         [
-            html.A(
+            html.Button(
                 html.I(className="fas fa-expand-arrows-alt"),
-                href=f"javascript:void(document.getElementById('{map_id}').requestFullscreen())",
                 title="Pantalla completa",
+                **{"data-fullscreen-for": map_id},
                 style={
                     "position": "absolute",
                     "top": "10px",
@@ -2862,7 +2868,6 @@ def _leaflet_mapa(vals: dict, lat: float, lon: float, uuid: str):
                     "fontSize": "0.80rem",
                     "cursor": "pointer",
                     "lineHeight": "1",
-                    "textDecoration": "none",
                 },
             ),
             dl.MapContainer(
