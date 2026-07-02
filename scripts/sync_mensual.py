@@ -175,6 +175,43 @@ def _cruceros_calendario(hoy: date) -> int:
         return 0
 
 
+@task(name="geo-enriquecer")
+def _geo_enriquecer(hoy: date) -> int:
+    logger = get_run_logger()
+    try:
+        from src.data_ingestion.esri_client import fetch_geoenrich
+        from src.data_ingestion.geo import calcular_scores_poi, ingestar_snapshot_esri
+        from src.db.store import get_conn
+
+        rows = (
+            get_conn()
+            .execute(
+                "SELECT ubicacion_id, nombre, lat, lon FROM ubicaciones "
+                "WHERE activa = TRUE AND lat IS NOT NULL AND lon IS NOT NULL"
+            )
+            .fetchall()
+        )
+
+        ok = errores = 0
+        for ubicacion_id, nombre, lat, lon in rows:
+            try:
+                valores = fetch_geoenrich(ubicacion_id, lat=lat, lon=lon)
+                valores.update(calcular_scores_poi(ubicacion_id))
+                res = ingestar_snapshot_esri(ubicacion_id, valores, str(hoy))
+                tipo = "primera" if res["primera_entrega"] else "actualización"
+                logger.info("  [geo] %-40s — %s, %d features", nombre, tipo, res["n_features"])
+                ok += 1
+            except Exception as exc:
+                logger.warning("  [geo] %-40s ERROR — %s", nombre, exc)
+                errores += 1
+
+        logger.info("Geo enriquecimiento: %d ok, %d errores", ok, errores)
+        return ok
+    except Exception as exc:
+        logger.warning("Geo enriquecimiento FAIL — %s", exc)
+        return 0
+
+
 @task(name="geo-audit")
 def _geo_audit() -> list[str]:
     logger = get_run_logger()
@@ -265,7 +302,8 @@ def sync_mensual_flow() -> int:
     # ── Calendario cruceros: refresco anual independiente del feature loop ────
     _cruceros_calendario(hoy)
 
-    # ── Geo/Esri: audit de snapshots ──────────────────────────────────────────
+    # ── Geo/Esri: enriquecimiento mensual + audit ─────────────────────────────
+    _geo_enriquecer(hoy)
     _geo_audit()
 
     logger.info("── sync_mensual DONE (%.0fs) errores=%d ─", time.time() - t0, errores)
