@@ -41,6 +41,8 @@ _sh.setFormatter(_fmt)
 _sh.setLevel(logging.INFO)
 
 logging.basicConfig(level=logging.DEBUG, handlers=[_fh, _sh])
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("requests").setLevel(logging.WARNING)
 log = logging.getLogger("sync_mensual")
 
 
