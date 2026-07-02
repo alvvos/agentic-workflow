@@ -57,21 +57,22 @@ def _load_from_db() -> None:
             opciones_orgs.append({"label": nombre, "value": org_uuid})
 
     all_zones = conn.execute(
-        "SELECT zona_id, ubicacion_id, nombre, zone_type, parent_zona_id"
+        "SELECT zona_id, ubicacion_id, nombre, zone_type, parent_zona_id, funnel_step"
         " FROM zonas WHERE hidden = FALSE ORDER BY nombre"
     ).fetchall()
 
     # First pass: build uuid→name map so child zones can resolve parent name
-    for zone_uuid, _, nombre, _, _ in all_zones:
+    for zone_uuid, _, nombre, _, _, _ in all_zones:
         mapa_zonas[zone_uuid] = nombre
 
     # Second pass: classify parent vs child
-    for zone_uuid, loc_uuid, nombre, zone_type, parent_uuid in all_zones:
+    for zone_uuid, loc_uuid, nombre, zone_type, parent_uuid, funnel_step in all_zones:
         z = {
             "label": nombre,
             "value": nombre,
             "tipo": zone_type or "",
             "padre_uuid": parent_uuid,
+            "funnel_step": funnel_step,
         }
         mapa_zonas_por_loc.setdefault(loc_uuid, []).append(z)
         if parent_uuid:

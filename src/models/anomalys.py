@@ -663,7 +663,12 @@ def crear_tarjeta_kpi_global(titulo, val_actual, val_hist, es_tiempo=False, es_r
 
 
 def generar_panel_bi_completo(
-    df_actual, df_hist, comparativa, fechas_filtro=None, child_zones: set | None = None
+    df_actual,
+    df_hist,
+    comparativa,
+    fechas_filtro=None,
+    child_zones: set | None = None,
+    funnel_step_map: dict | None = None,
 ):
     if df_actual.empty:
         return dbc.Alert(
@@ -689,8 +694,6 @@ def generar_panel_bi_completo(
         df_hist["fecha_dia"] = df_hist["fecha"].dt.normalize()
     multi_mes = df_actual["fecha_dia"].dt.to_period("M").nunique() > 1
 
-    _child_zones = child_zones or set()
-
     paneles = []
     for ubi in df_actual["Ubicación"].unique():
         df_u = df_actual[df_actual["Ubicación"] == ubi].copy()
@@ -700,13 +703,19 @@ def generar_panel_bi_completo(
         festivos_ubi = _get_festivos_loc(ubi, years)
 
         zonas_presentes = ordenar_zonas(df_u["Zona"].unique())
-        # KPI cards, funnel y heatmaps: solo zonas raíz (sin padre).
-        # Si no hay jerarquía (todas planas) se usan todas.
-        zonas_top = [z for z in zonas_presentes if z not in _child_zones] or zonas_presentes
+        # zonas_kpi: todas las zonas presentes — KPI cards y heatmaps.
+        # zonas_funnel: solo zonas con zone_type definido, ordenadas por posición en el funnel.
+        # Si ninguna zona tiene zone_type: sin funnel (lista vacía).
+        zonas_kpi = zonas_presentes
+        _fsm = funnel_step_map or {}
+        zonas_funnel = sorted(
+            [z for z in zonas_presentes if _fsm.get(z) is not None],
+            key=lambda z: _fsm[z],
+        )
         mapa_colores = obtener_mapa_colores(zonas_presentes)
         cintas_kpis_zonas = []
 
-        for zona in zonas_top:
+        for zona in zonas_kpi:
             df_z = df_u[df_u["Zona"] == zona]
             df_zh = df_h[df_h["Zona"] == zona] if not df_h.empty else pd.DataFrame()
 
@@ -794,11 +803,11 @@ def generar_panel_bi_completo(
 
         # --- SECCIÓN REACTIVA DE FUNNEL (Ratio de Atracción) ---
         seccion_funnel = []
-        if len(zonas_top) > 1:
+        if len(zonas_funnel) > 1:
             kpis_funnel = []
             graficos_funnel = []
-            for i in range(len(zonas_top) - 1):
-                z_out, z_in = zonas_top[i], zonas_top[i + 1]
+            for i in range(len(zonas_funnel) - 1):
+                z_out, z_in = zonas_funnel[i], zonas_funnel[i + 1]
                 df_r_act = preparar_df_ratio(df_u, z_out, z_in)
                 df_r_hist = (
                     preparar_df_ratio(df_h, z_out, z_in) if not df_h.empty else pd.DataFrame()
@@ -978,7 +987,7 @@ def generar_panel_bi_completo(
             rows.append(dbc.Row([col1, col2]))
 
         heatmap_cols = []
-        for zona_hm in zonas_top:
+        for zona_hm in zonas_kpi:
             df_zona_hm = df_u[df_u["Zona"] == zona_hm]
             fig_hm = crear_mapa_calor_horario(df_zona_hm, zona_hm)
             if fig_hm is not None:

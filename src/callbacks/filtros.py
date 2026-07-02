@@ -74,13 +74,53 @@ def auto_fill_zonas(locs):
     for loc in locs:
         for z in data_master.mapa_zonas_por_loc.get(loc, []):
             nombre = z["value"]
-            if nombre not in vistos_bi and not z.get("padre_uuid"):
+            if nombre not in vistos_bi and (not z.get("padre_uuid") or z.get("funnel_step")):
                 opts_bi.append(z)
                 vistos_bi.add(nombre)
 
     opts_bi.sort(key=_funnel_key)
     vals_bi = [z["value"] for z in opts_bi]
     return opts_bi, vals_bi
+
+
+def _build_child_section(locs, parent_name, seen_parents: set) -> list:
+    """Recursively build child zone selector blocks for parent_name."""
+    if parent_name in seen_parents:
+        return []
+    seen_parents.add(parent_name)
+
+    child_zones = []
+    seen_vals: set = set()
+    for loc in locs or []:
+        for z in data_master.mapa_hijos_por_zona.get(loc, {}).get(parent_name, []):
+            if z["value"] not in seen_vals:
+                child_zones.append(z)
+                seen_vals.add(z["value"])
+    if not child_zones:
+        return []
+
+    blocks = [
+        html.Div(
+            [
+                html.Label(
+                    [html.I(className="fas fa-sitemap me-1"), f"Subzonas — {parent_name}"],
+                    className="fw-bold small text-secondary mb-2 ms-1",
+                ),
+                dbc.Checklist(
+                    id={"type": "child-zone-checklist", "index": parent_name},
+                    options=child_zones,
+                    value=[],
+                    inline=True,
+                    input_class_name="btn-check",
+                    label_class_name="btn btn-outline-secondary mb-2 me-2 fw-bold shadow-sm rounded-3",
+                ),
+            ],
+            className="ms-3 mb-3 border-start border-2 border-primary ps-3",
+        )
+    ]
+    for z in child_zones:
+        blocks.extend(_build_child_section(locs, z["value"], seen_parents))
+    return blocks
 
 
 @app.callback(
@@ -92,35 +132,9 @@ def render_child_zone_selectors(locs, selected_parents):
     if not locs or not selected_parents:
         return []
     children_ui = []
+    seen_parents: set = set()
     for parent_name in selected_parents:
-        child_zones = []
-        seen_vals: set = set()
-        for loc in locs or []:
-            for z in data_master.mapa_hijos_por_zona.get(loc, {}).get(parent_name, []):
-                if z["value"] not in seen_vals:
-                    child_zones.append(z)
-                    seen_vals.add(z["value"])
-        if not child_zones:
-            continue
-        children_ui.append(
-            html.Div(
-                [
-                    html.Label(
-                        [html.I(className="fas fa-sitemap me-1"), f"Subzonas — {parent_name}"],
-                        className="fw-bold small text-secondary mb-2 ms-1",
-                    ),
-                    dbc.Checklist(
-                        id={"type": "child-zone-checklist", "index": parent_name},
-                        options=child_zones,
-                        value=[],
-                        inline=True,
-                        input_class_name="btn-check",
-                        label_class_name="btn btn-outline-secondary mb-2 me-2 fw-bold shadow-sm rounded-3",
-                    ),
-                ],
-                className="ms-3 mb-3 border-start border-2 border-primary ps-3",
-            )
-        )
+        children_ui.extend(_build_child_section(locs, parent_name, seen_parents))
     return children_ui
 
 

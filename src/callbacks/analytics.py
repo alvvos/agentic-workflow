@@ -122,10 +122,16 @@ def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, pm_ventana
     visor = html.Div(visor_children)
 
     child_zone_names: set = set()
+    funnel_step_map: dict[str, int] = {}
     for loc in locs or []:
         for children in data_master.mapa_hijos_por_zona.get(loc, {}).values():
             child_zone_names.update(z["label"] for z in children)
-    bi_content = generar_panel_bi_completo(df_bi, df_bi_hist, comp, child_zones=child_zone_names)
+        for z in data_master.mapa_zonas_por_loc.get(loc, []):
+            if z.get("funnel_step") is not None:
+                funnel_step_map[z["value"]] = z["funnel_step"]
+    bi_content = generar_panel_bi_completo(
+        df_bi, df_bi_hist, comp, child_zones=child_zone_names, funnel_step_map=funnel_step_map
+    )
     audit_content = (
         generar_tabla_auditoria(df_actual)
         if not df_actual.empty

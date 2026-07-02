@@ -519,6 +519,7 @@ def _apply_ddl(conn: PgConn) -> None:
     _migrar_renombrar_columnas(conn)
     _migrar_limpiar_columnas(conn)
     _migrate_zonas(conn)
+    _migrate_zone_types_miniso(conn)
     _migrate_visitas(conn)
     _migrate_ubicaciones(conn)
     _migrate_fk_constraints(conn)
@@ -1415,6 +1416,35 @@ def _migrate_señales_fks(conn: PgConn) -> None:
 def _migrate_zonas(conn: PgConn) -> None:
     conn.execute("ALTER TABLE zonas ADD COLUMN IF NOT EXISTS zone_type TEXT DEFAULT ''")
     conn.execute("ALTER TABLE zonas ADD COLUMN IF NOT EXISTS parent_zona_id TEXT DEFAULT NULL")
+    conn.execute("ALTER TABLE zonas ADD COLUMN IF NOT EXISTS funnel_step INT DEFAULT NULL")
+
+
+def _migrate_zone_types_miniso(conn: PgConn) -> None:
+    """Seedea zone_type y funnel_step para Miniso España.
+
+    funnel_step es el orden explícito en el funnel de conversión (entero, nullable).
+    Calle=1 (exterior), Tienda=2 (interior), Caja=3 (checkout).
+    Sub-zonas (Planta 0/1, Caja 0/1) quedan con funnel_step=NULL — el funnel las ignora.
+    Idempotente: solo actualiza filas con funnel_step NULL.
+    """
+    _MINISO_ORG = "5c13b57d-782d-4458-911b-64cd40eebb55"
+    _FUNNEL_ZONES = [
+        ("Calle", "exterior", 1),
+        ("Tienda", "interior", 2),
+        ("Caja", "checkout", 3),
+    ]
+    for nombre, tipo, step in _FUNNEL_ZONES:
+        conn.execute(
+            """
+            UPDATE zonas SET zone_type = ?, funnel_step = ?
+            WHERE nombre = ?
+              AND funnel_step IS NULL
+              AND ubicacion_id IN (
+                  SELECT ubicacion_id FROM ubicaciones WHERE org_id = ?
+              )
+            """,
+            (tipo, step, nombre, _MINISO_ORG),
+        )
 
 
 def _migrate_config_fuentes(conn: PgConn) -> None:
