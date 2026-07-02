@@ -1178,7 +1178,7 @@ def _insight_box(text):
     )
 
 
-def _chart_card(fig, gid, height, title=None, insight=None, fullscreen=False):
+def _chart_card(fig, gid, height, title=None, fullscreen=False):
     children = []
     header_items = []
     if title:
@@ -1228,8 +1228,6 @@ def _chart_card(fig, gid, height, title=None, insight=None, fullscreen=False):
             )
         )
     children.append(dcc.Graph(id=gid, figure=fig, config=_CFG, style={"height": height}))
-    if insight:
-        children.append(_insight_box(insight))
     card_kwargs = {"id": f"{gid}-card"} if fullscreen else {}
     return dbc.Card(
         dbc.CardBody(children, className="p-3"),
@@ -1859,7 +1857,7 @@ def _fig_captacion(vals):
             y=list(labels),
             x=list(values),
             orientation="h",
-            marker=dict(color=list(colors), line=dict(color="white", width=2)),
+            marker=dict(color=list(colors), cornerradius=6, line=dict(color="white", width=2)),
             text=[f"{v:,.0f} hab." for v in values],
             textposition="outside",
             constraintext="none",
@@ -1928,7 +1926,7 @@ def _fig_piramide_edad(vals):
             y=labels,
             x=values,
             orientation="h",
-            marker=dict(color=_C_BAR, line=dict(color="white", width=1)),
+            marker=dict(color=_C_BAR, cornerradius=6, line=dict(color="white", width=1)),
             text=[f"{v:,.0f}" for v in values],
             textposition="outside",
             constraintext="none",
@@ -1984,7 +1982,9 @@ def _fig_estructura_hogar(vals):
         go.Bar(
             x=labels,
             y=values,
-            marker=dict(color=colors, opacity=0.88, line=dict(color="white", width=2)),
+            marker=dict(
+                color=colors, opacity=0.88, cornerradius=6, line=dict(color="white", width=2)
+            ),
             text=[f"{v:,.0f}" for v in values],
             textposition="outside",
             textfont=dict(size=11, color=_C_DARK, **_FONT),
@@ -2276,7 +2276,7 @@ def _fig_gasto_comparativo(vals):
             y=labels,
             x=values,
             orientation="h",
-            marker=dict(color=colors, line=dict(color="white", width=1)),
+            marker=dict(color=colors, cornerradius=6, line=dict(color="white", width=1)),
             text=[f"{v:,.0f} €/hog." for v in values],
             textposition="outside",
             constraintext="none",
@@ -2352,7 +2352,7 @@ def _fig_salud_financiera(vals):
             y=labels,
             x=values,
             orientation="h",
-            marker=dict(color=colors, line=dict(color="white", width=2)),
+            marker=dict(color=colors, cornerradius=6, line=dict(color="white", width=2)),
             text=[f"{v:.1f}%" for v in values],
             textposition="outside",
             constraintext="none",
@@ -2415,7 +2415,7 @@ def _fig_canal_online(vals):
             y=labels,
             x=values,
             orientation="h",
-            marker=dict(color=colors, line=dict(color="white", width=2)),
+            marker=dict(color=colors, cornerradius=6, line=dict(color="white", width=2)),
             text=[f"{v:.1f}%" for v in values],
             textposition="outside",
             constraintext="none",
@@ -2516,17 +2516,7 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
     def _row(cols):
         return dbc.Row(cols, className="g-3 mb-3")
 
-    # Pre-generar todos los insights (texto enriquecido para PM)
-    ins_captacion = _auto_insight_captacion(activos)
-    ins_edad = _auto_insight_edad(activos)
-    ins_hogar = _auto_insight_hogar(activos)
-    ins_renta = _auto_insight_renta(activos)
-    ins_salud = _auto_insight_salud(activos)
-    ins_gasto = _auto_insight_gasto(activos)
-    ins_online = _auto_insight_online(activos)
-
     # ── SECCIÓN A: ALCANCE PEATONAL ───────────────────────────────────────────
-    # El mapa lleva el insight de captación; las barras llevan el de edad+hogar
     sec_a_charts = []
     if fig_cap:
         sec_a_charts.append(
@@ -2555,7 +2545,6 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
                     f"geo-map-{uid}",
                     _H_CHART,
                     title=iso_label,
-                    insight=ins_captacion,
                     fullscreen=True,
                 ),
                 xs=12,
@@ -2573,7 +2562,6 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
                     f"geo-edad-{uid}",
                     _H_CHART,
                     title="Pirámide de edad · radio 800 m",
-                    insight=ins_edad,
                 ),
                 xs=12,
                 lg=6,
@@ -2588,7 +2576,6 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
                     f"geo-hogar-{uid}",
                     _H_MID,
                     title="Composición del hogar · tipos de familia en 800 m",
-                    insight=ins_hogar,
                 ),
                 xs=12,
                 lg=6,
@@ -2611,7 +2598,6 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
     )
 
     # ── SECCIÓN B: CAPACIDAD ECONÓMICA ────────────────────────────────────────
-    # Gasto lleva insight de gasto+renta; salud lleva insight de salud; inmobiliario el suyo
     sec_b_charts = []
     if fig_gasto:
         sec_b_charts.append(
@@ -2621,7 +2607,6 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
                     f"geo-gasto-{uid}",
                     "460px",
                     title="Gasto por categoría · €/hogar/año en radio 800 m",
-                    insight=ins_gasto,
                 ),
                 xs=12,
                 lg=8,
@@ -2637,7 +2622,6 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
                     f"geo-salud-{uid}",
                     _H_SM,
                     title="Salud financiera del hogar · radio 800 m",
-                    insight=ins_salud,
                 ),
                 xs=12,
                 className="mb-3",
@@ -2653,7 +2637,6 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
             )
         )
 
-    # La tarjeta de renta lleva su propio insight (sin gráfico propio — se muestra bajo las tarjetas)
     seccion_b = html.Div(
         [
             _section_header(
@@ -2662,7 +2645,6 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
                 "¿Tienen renta y estabilidad financiera para gastar de forma habitual?",
             ),
             _render_cards(cards_b, max_per_row=3),
-            _insight_box(ins_renta),
             _row(sec_b_charts),
         ],
         className="mb-4",
@@ -2678,7 +2660,6 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
                     f"geo-online-{uid}",
                     _H_SM,
                     title="Hábito de compra online · hogares en radio 800 m",
-                    insight=ins_online,
                 ),
                 xs=12,
             )
