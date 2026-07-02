@@ -1009,14 +1009,14 @@ def _migrate_registries(conn: PgConn) -> None:
     """
     # ── categorias_poi ────────────────────────────────────────────────────────
     _POI_CATS = [
-        ("metro", "Metro / Transporte", "fas fa-subway", "#1a3a6b", "primary"),
-        ("transporte_bus", "Bus / Parada", "fas fa-bus", "#2980b9", "info"),
-        ("tourist_poi", "Polo turístico", "fas fa-landmark", "#d35400", "warning"),
-        ("event_venue", "Sala de eventos", "fas fa-theater-masks", "#7d3c98", "info"),
-        ("competitor", "Competidor", "fas fa-store", "#c0392b", "danger"),
-        ("restauracion", "Restauración", "fas fa-utensils", "#e67e22", "warning"),
-        ("ancla", "Tienda ancla / gran superficie", "fas fa-building", "#148f77", "success"),
-        ("otro", "Otro", "fas fa-map-pin", "#6c757d", "secondary"),
+        ("metro", "Metro / Transporte", "fas fa-subway", "#5E35B1", "primary"),
+        ("transporte_bus", "Bus / Parada", "fas fa-bus", "#039BE5", "info"),
+        ("tourist_poi", "Polo turístico", "fas fa-landmark", "#F9A825", "warning"),
+        ("event_venue", "Sala de eventos", "fas fa-theater-masks", "#00ACC1", "info"),
+        ("competitor", "Competidor", "fas fa-store", "#E53935", "danger"),
+        ("restauracion", "Restauración", "fas fa-utensils", "#F4511E", "warning"),
+        ("ancla", "Tienda ancla / gran superficie", "fas fa-building", "#43A047", "success"),
+        ("otro", "Otro", "fas fa-map-pin", "#78909C", "secondary"),
     ]
     conn.executemany(
         "INSERT INTO categorias_poi (category, label, icon_cls, color, badge_color) "

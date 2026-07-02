@@ -42,7 +42,7 @@ def build_tab_pm():
                                 ),
                             ],
                             className="d-flex align-items-center justify-content-center",
-                            style={"minHeight": "60vh"},
+                            style={"paddingTop": "2rem"},
                         ),
                         delay_show=350,
                         delay_hide=0,
