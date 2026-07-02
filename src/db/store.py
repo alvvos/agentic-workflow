@@ -935,6 +935,7 @@ def _migrate_señales_display(conn: PgConn) -> None:
         )
 
     # ── eventos canonical tipos — display_mode='events_count' (INSERT) ─
+    # (señal_id, fuente, categoria, status, label, sublabel, color, icon_cls, agg_fn, notas)
     _EVENTS_COUNT_ROWS = [
         (
             "concierto",
@@ -946,6 +947,7 @@ def _migrate_señales_display(conn: PgConn) -> None:
             "#8e44ad",
             "fas fa-music",
             "sum",
+            "Conciertos y eventos musicales en el área. Fuente: Ticketmaster + agenda municipal.",
         ),
         (
             "festival",
@@ -957,6 +959,7 @@ def _migrate_señales_display(conn: PgConn) -> None:
             "#2980b9",
             "fas fa-star",
             "sum",
+            "Festivales de música, arte y cultura en el área. Fuente: Ticketmaster + agenda municipal.",
         ),
         (
             "deportivo",
@@ -968,6 +971,7 @@ def _migrate_señales_display(conn: PgConn) -> None:
             "#e74c3c",
             "fas fa-futbol",
             "sum",
+            "Eventos deportivos (partidos, competiciones) en el área. Fuente: TheSportsDB + agenda municipal.",
         ),
         (
             "evento_municipal",
@@ -979,17 +983,19 @@ def _migrate_señales_display(conn: PgConn) -> None:
             "#e67e22",
             "fas fa-city",
             "sum",
+            "Eventos municipales y ferias locales (ferias, verbenas, fiestas mayores). Fuente: agenda municipal.",
         ),
     ]
-    for fk, src, cat, stat, lbl, sub, col, icon, agg in _EVENTS_COUNT_ROWS:
+    for fk, src, cat, stat, lbl, sub, col, icon, agg, notas in _EVENTS_COUNT_ROWS:
         conn.execute(
             "INSERT INTO señales "
-            "(señal_id, fuente, categoria, status, label, sublabel, color, icon_cls, agg_fn, display_mode) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?) "
+            "(señal_id, fuente, categoria, status, label, sublabel, color, icon_cls, agg_fn, display_mode, notas) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?) "
             "ON CONFLICT (señal_id) DO UPDATE SET "
             "label=EXCLUDED.label, sublabel=EXCLUDED.sublabel, color=EXCLUDED.color, "
-            "icon_cls=EXCLUDED.icon_cls, agg_fn=EXCLUDED.agg_fn, display_mode=EXCLUDED.display_mode",
-            [fk, src, cat, stat, lbl, sub, col, icon, agg, "events_count"],
+            "icon_cls=EXCLUDED.icon_cls, agg_fn=EXCLUDED.agg_fn, display_mode=EXCLUDED.display_mode, "
+            "notas=EXCLUDED.notas",
+            [fk, src, cat, stat, lbl, sub, col, icon, agg, "events_count", notas],
         )
 
 

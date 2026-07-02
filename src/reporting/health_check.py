@@ -3572,20 +3572,26 @@ def _render_eventos_mensual_section(
         leyenda = html.Div(legend_blocks, className="d-flex flex-wrap gap-4 mb-2")
 
         icono = tipo_meta.get(tipo, {}).get("icon_cls", "fas fa-calendar-day")
-        uid8 = location_uuid[:8]
+        uid8 = re.sub(r"[^a-z0-9]", "-", location_uuid.lower())[:8]
         _ev_tt_text = tipo_meta.get(tipo, {}).get("notas", "")
-        _ev_tt_id = f"tt-ev-{tipo}-{uid8}"
+        _ev_tt_id = f"tt-ev-{re.sub(r'[^a-z0-9]', '-', tipo.lower())[:16]}-{uid8}"
         _ev_info_els = (
             [
-                html.I(
+                html.Span(
+                    html.I(className="fas fa-info-circle", style={"fontSize": "0.75rem"}),
                     id=_ev_tt_id,
-                    className="fas fa-info-circle ms-1",
-                    style={"color": "#ced4da", "fontSize": "0.75rem", "cursor": "pointer"},
+                    style={
+                        "color": "#ced4da",
+                        "cursor": "pointer",
+                        "display": "inline-flex",
+                        "alignItems": "center",
+                        "padding": "0 4px",
+                    },
                 ),
                 dbc.Tooltip(
                     _ev_tt_text,
                     target=_ev_tt_id,
-                    placement="right",
+                    placement="top",
                     style={"fontSize": "0.76rem", "maxWidth": "300px", "textAlign": "left"},
                 ),
             ]
