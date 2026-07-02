@@ -226,8 +226,8 @@ def sync_esri_places_location(
             continue
         try:
             upsert_poi(
-                location_uuid=location_uuid,
-                org_uuid=org_uuid,
+                ubicacion_id=location_uuid,
+                org_id=org_uuid,
                 fuente="esri_places",
                 **poi,
             )
