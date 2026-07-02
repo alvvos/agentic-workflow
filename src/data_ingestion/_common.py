@@ -17,6 +17,12 @@ import pandas as pd
 
 from src.db.store import get_conn
 
+# ── Barrera de clientes activos ──────────────────────────────────────────────
+# TODO: levantar cuando entren nuevos clientes — quitar el set y la cláusula AND.
+ALLOWED_ORG_IDS: frozenset[str] = frozenset(
+    {"5c13b57d-782d-4458-911b-64cd40eebb55"}
+)  # Miniso España
+
 # ── Ventanas de tiempo ────────────────────────────────────────────────────────
 
 EVENTS_DATE_FROM = date(2024, 1, 1)
@@ -43,14 +49,18 @@ EVENTOS_FEATURE_COLS: list[str] = [
 
 def get_active_locations(location_uuid: str | None = None) -> list[dict]:
     """Devuelve lista de dicts con {uuid, nombre, lat, lon, pais_codigo, region_code, city}."""
+    _org_placeholders = ",".join(["%s"] * len(ALLOWED_ORG_IDS))
+    _org_args = list(ALLOWED_ORG_IDS)
+
     if location_uuid:
         row = (
             get_conn()
             .execute(
-                """SELECT ubicacion_id, nombre, lat, lon, pais_codigo, region_code, ciudad
+                f"""SELECT ubicacion_id, nombre, lat, lon, pais_codigo, region_code, ciudad
                FROM   ubicaciones
-               WHERE  ubicacion_id = ? AND activa = TRUE""",
-                [location_uuid],
+               WHERE  ubicacion_id = %s AND activa = TRUE
+                 AND  org_id IN ({_org_placeholders})""",
+                [location_uuid] + _org_args,
             )
             .fetchone()
         )
@@ -59,9 +69,11 @@ def get_active_locations(location_uuid: str | None = None) -> list[dict]:
     rows = (
         get_conn()
         .execute(
-            """SELECT ubicacion_id, nombre, lat, lon, pais_codigo, region_code, ciudad
+            f"""SELECT ubicacion_id, nombre, lat, lon, pais_codigo, region_code, ciudad
            FROM   ubicaciones
-           WHERE  activa = TRUE AND lat IS NOT NULL AND lon IS NOT NULL"""
+           WHERE  activa = TRUE AND lat IS NOT NULL AND lon IS NOT NULL
+             AND  org_id IN ({_org_placeholders})""",
+            _org_args,
         )
         .fetchall()
     )

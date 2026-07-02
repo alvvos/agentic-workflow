@@ -5,6 +5,8 @@ La API exportada es idéntica a la versión JSON para que los callbacks no neces
 
 import time
 
+from src.data_ingestion._common import ALLOWED_ORG_IDS
+
 # Los módulos externos importan estas variables directamente.
 # Se mutan en lugar de reasignarse para que los módulos ya importados vean los cambios.
 opciones_orgs: list = []
@@ -32,19 +34,24 @@ def _load_from_db() -> None:
     mapa_orgs.clear()
     mapa_hijos_por_zona.clear()
 
+    _org_ph = ",".join(["%s"] * len(ALLOWED_ORG_IDS))
+    _org_args = list(ALLOWED_ORG_IDS)
+
     _org_order = []
     for org_uuid, nombre in conn.execute(
-        "SELECT org_id, nombre FROM organizaciones ORDER BY nombre"
+        f"SELECT org_id, nombre FROM organizaciones WHERE org_id IN ({_org_ph}) ORDER BY nombre",
+        _org_args,
     ).fetchall():
         mapa_orgs[org_uuid] = nombre
         mapa_locs_por_org[org_uuid] = []
         _org_order.append((org_uuid, nombre))
 
     for loc_uuid, org_uuid, nombre in conn.execute(
-        "SELECT ubicacion_id, org_id, nombre FROM ubicaciones"
-        " WHERE activa = TRUE"
-        "   AND EXISTS (SELECT 1 FROM visitas v WHERE v.ubicacion_id = ubicaciones.ubicacion_id)"
-        " ORDER BY nombre"
+        f"SELECT ubicacion_id, org_id, nombre FROM ubicaciones"
+        f" WHERE activa = TRUE AND org_id IN ({_org_ph})"
+        f"   AND EXISTS (SELECT 1 FROM visitas v WHERE v.ubicacion_id = ubicaciones.ubicacion_id)"
+        f" ORDER BY nombre",
+        _org_args,
     ).fetchall():
         mapa_tiendas[loc_uuid] = nombre
         mapa_locs_por_org.setdefault(org_uuid, []).append({"label": nombre, "value": loc_uuid})
