@@ -740,6 +740,7 @@ def _migrate_señales_display(conn: PgConn) -> None:
     )
 
     # ── señales display_mode='yoy' ──────────────────────────────────────
+    # (señal_id, label, sublabel, color, icon_cls, agg_fn, notas)
     _YOY_UPDATES = [
         (
             "afluencia_metro_gran_via",
@@ -748,6 +749,7 @@ def _migrate_señales_display(conn: PgConn) -> None:
             "#e67e22",
             "fas fa-train-subway",
             "sum",
+            "Validaciones diarias en Metro Gran Vía. Proxy del volumen de peatones en el eje.",
         ),
         (
             "afluencia_metro_callao",
@@ -756,6 +758,7 @@ def _migrate_señales_display(conn: PgConn) -> None:
             "#00539B",
             "fas fa-train-subway",
             "sum",
+            "Validaciones diarias en Metro Callao. Proxy del volumen de peatones en el eje.",
         ),
         (
             "n_turistas_isocrona",
@@ -764,6 +767,7 @@ def _migrate_señales_display(conn: PgConn) -> None:
             "#3498db",
             "fas fa-passport",
             "sum",
+            "Turistas activos en la isócrona de la ubicación — estimación de aforo turístico en el área.",
         ),
         (
             "n_eventos_gran_via",
@@ -772,6 +776,7 @@ def _migrate_señales_display(conn: PgConn) -> None:
             "#9b59b6",
             "fas fa-calendar-check",
             "sum",
+            "Eventos registrados en el eje Gran Vía en el rango de fechas — proxy de actividad cultural.",
         ),
         (
             "ev_rank_concierto",
@@ -780,6 +785,7 @@ def _migrate_señales_display(conn: PgConn) -> None:
             "#8e44ad",
             "fas fa-music",
             "max",
+            "Score 0–100 de relevancia de conciertos en el área. 100 = sold-out en múltiples recintos.",
         ),
         (
             "ev_rank_deportivo",
@@ -788,19 +794,45 @@ def _migrate_señales_display(conn: PgConn) -> None:
             "#e74c3c",
             "fas fa-futbol",
             "max",
+            "Score 0–100 de relevancia de eventos deportivos. 100 = derby o final de competición nacional.",
         ),
-        ("ev_rank_festival", "Ranking festivales", "score 0-100", "#2980b9", "fas fa-star", "max"),
-        ("ev_rank_municipal", "Ranking municipal", "score 0-100", "#e67e22", "fas fa-city", "max"),
-        ("ev_rank_total", "Ranking total", "score 0-100", "#2c3e50", "fas fa-chart-bar", "max"),
+        (
+            "ev_rank_festival",
+            "Ranking festivales",
+            "score 0-100",
+            "#2980b9",
+            "fas fa-star",
+            "max",
+            "Score 0–100 de relevancia de festivales en el área.",
+        ),
+        (
+            "ev_rank_municipal",
+            "Ranking municipal",
+            "score 0-100",
+            "#e67e22",
+            "fas fa-city",
+            "max",
+            "Score 0–100 de relevancia de eventos municipales (ferias, verbenas, fiestas mayores).",
+        ),
+        (
+            "ev_rank_total",
+            "Ranking total",
+            "score 0-100",
+            "#2c3e50",
+            "fas fa-chart-bar",
+            "max",
+            "Score compuesto 0–100 que agrega todos los tipos de evento del área.",
+        ),
     ]
-    for fk, lbl, sub, col, icon, agg in _YOY_UPDATES:
+    for fk, lbl, sub, col, icon, agg, notas in _YOY_UPDATES:
         conn.execute(
             "UPDATE señales SET label=?, sublabel=?, color=?, icon_cls=?, "
-            "agg_fn=?, display_mode='yoy' WHERE señal_id=?",
-            [lbl, sub, col, icon, agg, fk],
+            "agg_fn=?, display_mode='yoy', notas=? WHERE señal_id=?",
+            [lbl, sub, col, icon, agg, notas, fk],
         )
 
     # ── señales display_mode='cruceros' ─────────────────────────────────
+    # (señal_id, label, sublabel, color, icon_cls, agg_fn, notas)
     _CRUCEROS_UPDATES = [
         (
             "n_pasajeros_crucero_oficial",
@@ -809,6 +841,7 @@ def _migrate_señales_display(conn: PgConn) -> None:
             "#1abc9c",
             "fas fa-ship",
             "sum",
+            "Pasajeros oficiales de crucero — Puertos del Estado. Latencia ~25 días. Embarques + desembarques.",
         ),
         (
             "n_pasajeros_crucero_dia",
@@ -817,21 +850,55 @@ def _migrate_señales_display(conn: PgConn) -> None:
             "#1abc9c",
             "fas fa-ship",
             "sum",
+            "Escalas de crucero scrapeadas de la web del puerto. Latencia 1 día. Fallback del dato oficial durante el período de lag.",
         ),
     ]
-    for fk, lbl, sub, col, icon, agg in _CRUCEROS_UPDATES:
+    for fk, lbl, sub, col, icon, agg, notas in _CRUCEROS_UPDATES:
         conn.execute(
             "UPDATE señales SET label=?, sublabel=?, color=?, icon_cls=?, "
-            "agg_fn=?, display_mode='cruceros' WHERE señal_id=?",
-            [lbl, sub, col, icon, agg, fk],
+            "agg_fn=?, display_mode='cruceros', notas=? WHERE señal_id=?",
+            [lbl, sub, col, icon, agg, notas, fk],
         )
 
     # ── señales display_mode='calendario' ────────────────────────────────
+    # (señal_id, label, sublabel, color, icon_cls, agg_fn, notas)
     _CAL_UPDATES = [
-        ("llueve", "Lluvia", "días", "#3498db", "fas fa-cloud-rain", "sum"),
-        ("temp_max", "Temperatura máx.", "°C", "#e74c3c", "fas fa-thermometer-full", "mean"),
-        ("temp_min", "Temperatura mín.", "°C", "#3498db", "fas fa-thermometer-empty", "mean"),
-        ("ev_festivo_regional", "Festivo regional", "días", "#27ae60", "fas fa-flag", "sum"),
+        (
+            "llueve",
+            "Lluvia",
+            "días",
+            "#3498db",
+            "fas fa-cloud-rain",
+            "sum",
+            "Días con precipitación registrada. Correlaciona negativamente con la afluencia en zonas exteriores.",
+        ),
+        (
+            "temp_max",
+            "Temperatura máx.",
+            "°C",
+            "#e74c3c",
+            "fas fa-thermometer-full",
+            "mean",
+            "Temperatura máxima diaria en la ubicación (°C). Valores extremos pueden reducir la afluencia.",
+        ),
+        (
+            "temp_min",
+            "Temperatura mín.",
+            "°C",
+            "#3498db",
+            "fas fa-thermometer-empty",
+            "mean",
+            "Temperatura mínima diaria en la ubicación (°C).",
+        ),
+        (
+            "ev_festivo_regional",
+            "Festivo regional",
+            "días",
+            "#27ae60",
+            "fas fa-flag",
+            "sum",
+            "Días de festivo regional o nacional — impacto positivo en afluencia en el propio día.",
+        ),
         (
             "ev_vacaciones_escolares",
             "Vacaciones escolares",
@@ -839,8 +906,17 @@ def _migrate_señales_display(conn: PgConn) -> None:
             "#8e44ad",
             "fas fa-school",
             "sum",
+            "Días de vacaciones escolares — efecto variable según ubicación (turismo vs. residencial).",
         ),
-        ("cal_escolar_is_break", "Período vacacional", "días", "#8e44ad", "fas fa-school", "sum"),
+        (
+            "cal_escolar_is_break",
+            "Período vacacional",
+            "días",
+            "#8e44ad",
+            "fas fa-school",
+            "sum",
+            "Indica si el día cae dentro de un período vacacional escolar.",
+        ),
         (
             "cal_escolar_dias_hasta",
             "Días hasta vacaciones",
@@ -848,13 +924,14 @@ def _migrate_señales_display(conn: PgConn) -> None:
             "#8e44ad",
             "fas fa-school",
             "mean",
+            "Días restantes hasta el próximo período vacacional escolar (media del período).",
         ),
     ]
-    for fk, lbl, sub, col, icon, agg in _CAL_UPDATES:
+    for fk, lbl, sub, col, icon, agg, notas in _CAL_UPDATES:
         conn.execute(
             "UPDATE señales SET label=?, sublabel=?, color=?, icon_cls=?, "
-            "agg_fn=?, display_mode='calendario' WHERE señal_id=?",
-            [lbl, sub, col, icon, agg, fk],
+            "agg_fn=?, display_mode='calendario', notas=? WHERE señal_id=?",
+            [lbl, sub, col, icon, agg, notas, fk],
         )
 
     # ── eventos canonical tipos — display_mode='events_count' (INSERT) ─

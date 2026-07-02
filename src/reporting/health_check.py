@@ -3688,7 +3688,9 @@ def _render_cruceros_section(
     except Exception:
         pass
 
-    # Previsión for future months in current year
+    # Previsión from cruise events for any month in the current year where official
+    # data is absent (covers both future months and the lag period — months where
+    # Puertos del Estado hasn't published yet but we have scheduled cruise calls)
     _fc_by_month: dict[int, float] = {}
     try:
         _fc_rows = conn.execute(
@@ -3699,7 +3701,6 @@ def _render_cruceros_section(
                       ), 0)
                FROM   eventos
                WHERE  ubicacion_id = ? AND evento_key = 'escala_crucero'
-                 AND  fecha_inicio > CURRENT_DATE
                  AND  EXTRACT(YEAR FROM fecha_inicio::date)::int = ?
                GROUP  BY 1""",
             [location_uuid, anio_actual],
@@ -3766,15 +3767,16 @@ def _render_cruceros_section(
         )
 
         # Current year bar
+        # Priority: official data → scraping fallback (lag) → event calendar (prev) → miss
         va = pax_by_month.get(ym_a, 0)
         if va > 0:
             tier = "conf" if last_of_month < today else "prog"
-        elif date(anio_actual, m, 1) > today.replace(day=1) and m in _fc_by_month:
-            va = _fc_by_month[m]
-            tier = "prev"
-        elif va == 0 and ym_a in _fallback_by_month:
+        elif ym_a in _fallback_by_month:
             va = _fallback_by_month[ym_a]
             tier = "lag"
+        elif m in _fc_by_month:
+            va = _fc_by_month[m]
+            tier = "prev"
         else:
             tier = "miss"
         y_act.append(va)
@@ -3994,7 +3996,7 @@ def _render_cruceros_section(
             html.Span(
                 "Puertos del Estado · estadística oficial mensual"
                 + (
-                    " · meses futuros: previsión contractual Puerto de Málaga."
+                    " · meses sin dato oficial: previsión basada en escalas de crucero del calendario portuario."
                     if has_prev_tier
                     else " · publicado con ~4-6 semanas de retraso."
                 ),
