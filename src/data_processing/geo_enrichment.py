@@ -70,6 +70,10 @@ GEO_FEATURE_COLS = [
     "pct_compras_online",  # PUTHINT    — % población que compra online
     "online_ropa_deporte_pct",  # PROPURSPO  — % online en ropa/deporte
     "online_ultimo_mes_pct",  # WHELAIN    — compradores online activos (último mes)
+    # Bloque 6 — Precio inmobiliario y poder de compra
+    "precio_piso_alquiler",  # AVPRIRENP — precio medio alquiler piso (€/mes, proxy gentrificación)
+    "indice_poder_compra",  # PPIDX_CY  — índice poder de compra (media nacional = 100)
+    "poder_compra_pc",  # PPPC_CY   — poder de compra per cápita (€)
     # Bloque 9 — Entorno competitivo y accesibilidad (fase 2: Places + Routing)
     "densidad_comercial_score",
     "indice_movilidad_peatonal",
@@ -79,147 +83,83 @@ GEO_FEATURE_COLS = [
 ]
 
 # ── Esri variable mapping ─────────────────────────────────────────────────────
-# {feature_col: (var_id, radius_index)}
-# radius_index → 0=400m(≈5min), 1=800m(≈10min), 2=1200m(≈15min)
-# None → feature no proviene de GeoEnrichment (fase 2, Places/Routing)
+# {feature_col: (collection.variable, radio)}
+# radio: "ring_400m" | "ring_800m" | "ring_1200m" | "circle_800m"
+# None → no proviene de GeoEnrichment (fase 2, Places/Routing)
+#
+# NOTA: las poblaciones de isócrona son acumuladas (suma de bandas anulares).
+# El resto de variables se obtienen en un círculo único de 800m.
 ESRI_VAR_MAP: dict = {
-    # Bloque 1 — Isócronas
-    "poblacion_5min": ("PEOPLE", 0),
-    "poblacion_10min": ("PEOPLE", 1),
-    "poblacion_15min": ("PEOPLE", 2),
-    # Bloque 2 — Edad (800 m) — pirámide completa
-    "pob_0_4": ("POPAG0", 1),
-    "pob_5_9": ("POPAG5", 1),
-    "pob_10_14": ("POPAG10", 1),
-    "pob_15_19": ("POPAG15", 1),
-    "pob_20_24": ("POPAG20", 1),
-    "pob_25_29": ("POPAG25", 1),
-    "pob_30_34": ("POPAG30", 1),
-    "pob_35_39": ("POPAG35", 1),
-    "pob_40_44": ("POPAG40", 1),
-    "pob_45_49": ("POPAG45", 1),
-    "pob_50_54": ("POPAG50", 1),
-    "pob_55_59": ("POPAG55", 1),
-    "pob_60_64": ("POPAG60", 1),
-    "pob_65_69": ("POPAG65", 1),
-    "pob_70_74": ("POPAG70", 1),
-    "pob_75_79": ("POPAG75", 1),
-    "pob_80_84": ("POPAG80", 1),
-    "pob_85_plus": ("POPAG85", 1),
+    # Bloque 1 — Isócronas peatonales (ring buffer, acumulado)
+    "poblacion_5min": ("KeyFacts.TOTPOP_CY", "ring_400m"),
+    "poblacion_10min": ("KeyFacts.TOTPOP_CY", "ring_800m"),
+    "poblacion_15min": ("KeyFacts.TOTPOP_CY", "ring_1200m"),
+    # Bloque 2 — Edad 5 años (5YearIncrementsAIS, círculo 800m)
+    "pob_0_4": ("5YearIncrementsAIS.POPAG00", "circle_800m"),
+    "pob_5_9": ("5YearIncrementsAIS.POPAG05", "circle_800m"),
+    "pob_10_14": ("5YearIncrementsAIS.POPAG10", "circle_800m"),
+    "pob_15_19": ("5YearIncrementsAIS.POPAG15", "circle_800m"),
+    "pob_20_24": ("5YearIncrementsAIS.POPAG20", "circle_800m"),
+    "pob_25_29": ("5YearIncrementsAIS.POPAG25", "circle_800m"),
+    "pob_30_34": ("5YearIncrementsAIS.POPAG30", "circle_800m"),
+    "pob_35_39": ("5YearIncrementsAIS.POPAG35", "circle_800m"),
+    "pob_40_44": ("5YearIncrementsAIS.POPAG40", "circle_800m"),
+    "pob_45_49": ("5YearIncrementsAIS.POPAG45", "circle_800m"),
+    "pob_50_54": ("5YearIncrementsAIS.POPAG50", "circle_800m"),
+    "pob_55_59": ("5YearIncrementsAIS.POPAG55", "circle_800m"),
+    "pob_60_64": ("5YearIncrementsAIS.POPAG60", "circle_800m"),
+    "pob_65_69": ("5YearIncrementsAIS.POPAG65", "circle_800m"),
+    "pob_70_74": ("5YearIncrementsAIS.POPAG70", "circle_800m"),
+    "pob_75_79": ("5YearIncrementsAIS.POPAG75", "circle_800m"),
+    "pob_80_84": ("5YearIncrementsAIS.POPAG80", "circle_800m"),
+    "pob_85_plus": ("5YearIncrementsAIS.POPAG85", "circle_800m"),
     # Bloque 3 — Renta y hogar
-    "renta_hogar_anual": ("NINCHA", 1),
-    "renta_hogar_mensual": ("NINCHM", 1),
-    "renta_per_capita": ("NINCCA", 1),
-    "n_hogares_total": ("HHOLDS", 1),
-    "tamanio_medio_hogar": ("PEOFAM", 1),
-    "hogares_renta_alta": ("THINC5M", 1),
-    "hogares_renta_media_alta": ("THINC4M", 1),
-    "hogares_jovenes_solos": ("TOTYOSI", 1),
-    "hogares_parejas_jovenes": ("TOTYOCO", 1),
-    "hogares_parejas_adultas": ("TOTADCO", 1),
-    "hogares_familias_hijos": ("TOTFUSMA", 1),
-    "hogares_monoparentales": ("TOTSIFA", 1),
+    "renta_hogar_anual": ("IncomeTotalsAIS.NINCHA", "circle_800m"),
+    "renta_hogar_mensual": ("IncomeTotalsAIS.NINCHM", "circle_800m"),
+    "renta_per_capita": ("IncomeTotalsAIS.NINCCA", "circle_800m"),
+    "n_hogares_total": ("HouseholdTotalsAIS.HHOLDS", "circle_800m"),
+    "tamanio_medio_hogar": ("HouseholdTotalsAIS.PEOFAM", "circle_800m"),
+    "hogares_renta_alta": ("HouseholdsByIncomeAIS.THINC5M", "circle_800m"),
+    "hogares_renta_media_alta": ("HouseholdsByIncomeAIS.THINC4M", "circle_800m"),
+    "hogares_jovenes_solos": ("IncomeTotalsAIS.TOTYOSI", "circle_800m"),
+    "hogares_parejas_jovenes": ("IncomeTotalsAIS.TOTYOCO", "circle_800m"),
+    "hogares_parejas_adultas": ("IncomeTotalsAIS.TOTADCO", "circle_800m"),
+    "hogares_familias_hijos": ("IncomeTotalsAIS.TOTFUSMA", "circle_800m"),
+    "hogares_monoparentales": ("IncomeTotalsAIS.TOTSIFA", "circle_800m"),
     # Bloque 4 — Salud financiera
-    "puede_afrontar_imprevistos_pct": ("DOCAYE", 1),
-    "llega_mes_con_facilidad_pct": ("HOMAEASE", 1),
-    "en_riesgo_pobreza_pct": ("HORIPOYE", 1),
+    "puede_afrontar_imprevistos_pct": ("HouseholdsByIncomeAIS.DOCAYE", "circle_800m"),
+    "llega_mes_con_facilidad_pct": ("HouseholdsByIncomeAIS.HOMAEASE", "circle_800m"),
+    "en_riesgo_pobreza_pct": ("HouseholdsByIncomeAIS.HORIPOYE", "circle_800m"),
     # Bloque 5 — Gasto retail
-    "gasto_ropa_calzado": ("SPCLOFO", 1),
-    "gasto_ropa": ("SPCLOTH", 1),
-    "gasto_calzado": ("SPFOOTW", 1),
-    "gasto_cuidado_personal": ("SPPCARE", 1),
-    "gasto_ocio_cultura": ("SPLEISU", 1),
-    "gasto_vacaciones": ("SPLHOLI", 1),
-    "gasto_restaurantes": ("SPHOTRE", 1),
-    "gasto_alimentacion": ("SPFOODR", 1),
-    "gasto_transporte": ("SPTRANS", 1),
-    "gasto_comunicaciones": ("SPCOMM", 1),
-    # Bloque 6 — Empleo y pobreza
-    "tasa_desempleo": ("UNERATE", 1),
-    "tasa_desempleo_jovenes": ("UNERATE24", 1),
-    "empleados_por_hogar": ("TOTOCCME", 1),
-    "tasa_riesgo_pobreza": ("RISPORA", 1),
+    "gasto_ropa_calzado": ("ClothingAIS.SPCLOFO", "circle_800m"),
+    "gasto_ropa": ("ClothingAIS.SPCLOTH", "circle_800m"),
+    "gasto_calzado": ("ClothingAIS.SPFOOTW", "circle_800m"),
+    "gasto_cuidado_personal": ("SpendingTotalsAIS.SPPCARE", "circle_800m"),
+    "gasto_ocio_cultura": ("EntertainmentAIS.SPLEISU", "circle_800m"),
+    "gasto_vacaciones": ("EntertainmentAIS.SPLHOLI", "circle_800m"),
+    "gasto_restaurantes": ("MiscellaneousAIS.SPHOTRE", "circle_800m"),
+    "gasto_alimentacion": ("FoodAndDrinksAIS.SPFOODR", "circle_800m"),
+    "gasto_transporte": ("TransportationAIS.SPTRANS", "circle_800m"),
+    "gasto_comunicaciones": ("MiscellaneousAIS.SPCOMM", "circle_800m"),
+    # Bloque 6 — Empleo
+    "tasa_desempleo": ("EmploymentTotalsAIS.UNERATE", "circle_800m"),
+    "tasa_desempleo_jovenes": ("EmploymentTotalsAIS.UNERATE24", "circle_800m"),
+    "empleados_por_hogar": ("EmploymentTotalsAIS.TOTOCCME", "circle_800m"),
+    "tasa_riesgo_pobreza": None,  # RISPORA no existe en la API; usar en_riesgo_pobreza_pct
     # Bloque 7 — Canal online
-    "pct_compras_online": ("PUTHINT", 1),
-    "online_ropa_deporte_pct": ("PROPURSPO", 1),
-    "online_ultimo_mes_pct": ("WHELAIN", 1),
+    "pct_compras_online": ("OnlineShoppingAIS.PUTHINT", "circle_800m"),
+    "online_ropa_deporte_pct": ("OnlineShoppingAIS.PROPURSPO", "circle_800m"),
+    "online_ultimo_mes_pct": ("OnlineShoppingAIS.WHELAIN", "circle_800m"),
+    # Bloque 8 — Precio inmobiliario y poder de compra
+    "precio_piso_alquiler": ("PropertyValueAIS.AVPRIRENP", "circle_800m"),
+    "indice_poder_compra": ("KeyFacts.PPIDX_CY", "circle_800m"),
+    "poder_compra_pc": ("KeyFacts.PPPC_CY", "circle_800m"),
     # Fase 2 — no vienen de GeoEnrichment
     "densidad_comercial_score": None,
     "indice_movilidad_peatonal": None,
     "dist_transporte_min_m": None,
     "n_competidores_500m": None,
     "dist_competidor_cercano_m": None,
-}
-
-# Colección AIS a la que pertenece cada variable Esri
-ESRI_COLLECTION_MAP: dict = {
-    # PopulationTotalsAIS
-    "PEOPLE": "PopulationTotalsAIS",
-    "RISPORA": "PopulationTotalsAIS",
-    # 5YearIncrementsAIS
-    "POPAG0": "5YearIncrementsAIS",
-    "POPAG5": "5YearIncrementsAIS",
-    "POPAG10": "5YearIncrementsAIS",
-    "POPAG15": "5YearIncrementsAIS",
-    "POPAG20": "5YearIncrementsAIS",
-    "POPAG25": "5YearIncrementsAIS",
-    "POPAG30": "5YearIncrementsAIS",
-    "POPAG35": "5YearIncrementsAIS",
-    "POPAG40": "5YearIncrementsAIS",
-    "POPAG45": "5YearIncrementsAIS",
-    "POPAG50": "5YearIncrementsAIS",
-    "POPAG55": "5YearIncrementsAIS",
-    "POPAG60": "5YearIncrementsAIS",
-    "POPAG65": "5YearIncrementsAIS",
-    "POPAG70": "5YearIncrementsAIS",
-    "POPAG75": "5YearIncrementsAIS",
-    "POPAG80": "5YearIncrementsAIS",
-    "POPAG85": "5YearIncrementsAIS",
-    # IncomeTotalsAIS
-    "NINCHA": "IncomeTotalsAIS",
-    "NINCHM": "IncomeTotalsAIS",
-    "NINCCA": "IncomeTotalsAIS",
-    "TOTYOSI": "IncomeTotalsAIS",
-    "TOTYOCO": "IncomeTotalsAIS",
-    "TOTADCO": "IncomeTotalsAIS",
-    "TOTFUSMA": "IncomeTotalsAIS",
-    "TOTSIFA": "IncomeTotalsAIS",
-    # HouseholdTotalsAIS
-    "HHOLDS": "HouseholdTotalsAIS",
-    "PEOFAM": "HouseholdTotalsAIS",
-    # HouseholdsByIncomeAIS
-    "THINC5M": "HouseholdsByIncomeAIS",
-    "THINC4M": "HouseholdsByIncomeAIS",
-    "DOCAYE": "HouseholdsByIncomeAIS",
-    "HOMAEASE": "HouseholdsByIncomeAIS",
-    "HORIPOYE": "HouseholdsByIncomeAIS",
-    # ClothingAIS
-    "SPCLOFO": "ClothingAIS",
-    "SPCLOTH": "ClothingAIS",
-    "SPFOOTW": "ClothingAIS",
-    # SpendingTotalsAIS
-    "SPPCARE": "SpendingTotalsAIS",
-    # EntertainmentAIS
-    "SPLEISU": "EntertainmentAIS",
-    "SPLHOLI": "EntertainmentAIS",
-    # MiscellaneousAIS
-    "SPHOTRE": "MiscellaneousAIS",
-    "SPCOMM": "MiscellaneousAIS",
-    # FoodAndDrinksAIS
-    "SPFOODR": "FoodAndDrinksAIS",
-    # TransportationAIS
-    "SPTRANS": "TransportationAIS",
-    # EmploymentTotalsAIS
-    "UNERATE": "EmploymentTotalsAIS",
-    "UNERATE24": "EmploymentTotalsAIS",
-    "TOTOCCME": "EmploymentTotalsAIS",
-    # PropertyValueAIS
-    "AVREAPRI": "PropertyValueAIS",
-    "AVPRIRENP": "PropertyValueAIS",
-    # OnlineShoppingAIS
-    "PUTHINT": "OnlineShoppingAIS",
-    "PROPURSPO": "OnlineShoppingAIS",
-    "WHELAIN": "OnlineShoppingAIS",
 }
 
 # ── Clasificación backdatable / dinámica ──────────────────────────────────────
@@ -288,6 +228,10 @@ GEO_FEATURES_BACKDATABLE = [
     "online_ultimo_mes_pct",
     # Infraestructura urbana (evolución muy lenta)
     "dist_transporte_min_m",
+    # Precio inmobiliario y poder de compra
+    "precio_piso_alquiler",
+    "indice_poder_compra",
+    "poder_compra_pc",
 ]
 
 # Dinámicas: entorno competitivo y de movilidad.

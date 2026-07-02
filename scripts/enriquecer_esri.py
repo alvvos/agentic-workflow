@@ -4,7 +4,7 @@ CLI para enriquecer ubicaciones con datos Esri GeoEnrichment.
 
 Uso:
   python scripts/enriquecer_esri.py --org "Miniso"
-  python scripts/enriquecer_esri.py --uuid 67034276-0d01-4c90-a363-fa75699a19a4 db01e2ed-...
+  python scripts/enriquecer_esri.py --uuid 67034276-0d01-4c90-a363-fa75699a19a4
   python scripts/enriquecer_esri.py --all
   python scripts/enriquecer_esri.py --org "Miniso" --dry-run
   python scripts/enriquecer_esri.py --estado
@@ -12,7 +12,7 @@ Uso:
 Opciones:
   --org <nombre>      Procesa todas las ubicaciones activas de la org (substring, sin caso)
   --uuid <uuid...>    Uno o más UUIDs de ubicación concretos
-  --all               Todas las ubicaciones activas (cuidado con el coste)
+  --all               Todas las ubicaciones activas (cuidado con el coste de API)
   --fecha <ISO>       Fecha de entrega (por defecto: hoy)
   --dry-run           Muestra qué haría sin escribir nada
   --estado            Muestra estado actual de geo snapshots por ubicación y sale
@@ -21,7 +21,6 @@ import argparse
 import os
 import sys
 
-# Asegurar que el raíz del proyecto está en el path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from dotenv import load_dotenv
@@ -34,38 +33,27 @@ def cmd_estado():
 
     filas = listar_estado(verbose=False)
     if not filas:
-        print("No hay snapshots geo registrados.")
+        print("No hay ubicaciones activas.")
         return
-    print(f"{'Ubicación':<40} {'Features':>8} {'Última entrega'}")
-    print("-" * 65)
+    print(f"{'Ubicación':<40} {'Snapshots':>10} {'Datos'}")
+    print("-" * 60)
     for f in filas:
-        from src.db.store import get_conn
-
-        nombre = (
-            get_conn()
-            .execute(
-                "SELECT nombre FROM dim_ubicaciones WHERE location_uuid = ?",
-                [f["location_uuid"]],
-            )
-            .fetchone()
-        )
-        label = nombre[0] if nombre else f["location_uuid"]
-        print(
-            f"{label:<40} {f['features_con_dato']:>3}/{f['features_total']:<4}  {f['ultima_entrega']}"
-        )
+        mark = "✓" if f["tiene_datos"] else "✗"
+        print(f"  {f['nombre']:<38} {f['n_snapshots']:>5}      {mark}")
 
 
-def cmd_enriquecer(uuids: list, org: str, fecha: str, dry_run: bool):
-    from src.data_ingestion.esri_client import fetch_enrich
+def cmd_enriquecer(uuids: list, org: str, fecha: str | None, dry_run: bool):
+    from src.data_ingestion.esri_client import fetch_geoenrich
     from src.data_ingestion.geo import ingestar_snapshot_esri
     from src.db.store import get_conn
 
     conn = get_conn()
 
     if uuids:
+        placeholders = ",".join("?" * len(uuids))
         rows = conn.execute(
-            f"SELECT location_uuid, nombre, lat, lon FROM dim_ubicaciones "
-            f"WHERE location_uuid IN ({','.join('?' * len(uuids))}) AND activa = TRUE",
+            f"SELECT ubicacion_id, nombre, lat, lon FROM ubicaciones "
+            f"WHERE ubicacion_id IN ({placeholders}) AND activa = TRUE",
             uuids,
         ).fetchall()
         no_encontrados = set(uuids) - {r[0] for r in rows}
@@ -73,10 +61,10 @@ def cmd_enriquecer(uuids: list, org: str, fecha: str, dry_run: bool):
             print(f"[warn] UUIDs no encontrados o inactivos: {no_encontrados}", file=sys.stderr)
     elif org:
         rows = conn.execute(
-            "SELECT l.location_uuid, l.nombre, l.lat, l.lon "
-            "FROM dim_ubicaciones l "
-            "JOIN dim_organizaciones o ON o.org_uuid = l.org_uuid "
-            "WHERE LOWER(o.nombre) LIKE ? AND l.activa = TRUE",
+            "SELECT u.ubicacion_id, u.nombre, u.lat, u.lon "
+            "FROM ubicaciones u "
+            "JOIN organizaciones o ON o.org_id = u.org_id "
+            "WHERE LOWER(o.nombre) LIKE ? AND u.activa = TRUE",
             [f"%{org.lower()}%"],
         ).fetchall()
         if not rows:
@@ -84,36 +72,41 @@ def cmd_enriquecer(uuids: list, org: str, fecha: str, dry_run: bool):
             sys.exit(1)
     else:
         rows = conn.execute(
-            "SELECT location_uuid, nombre, lat, lon FROM dim_ubicaciones WHERE activa = TRUE"
+            "SELECT ubicacion_id, nombre, lat, lon FROM ubicaciones "
+            "WHERE activa = TRUE AND lat IS NOT NULL AND lon IS NOT NULL"
         ).fetchall()
+
+    if not rows:
+        print("[warn] Ninguna ubicación encontrada.")
+        return
 
     print(f"{'[dry-run] ' if dry_run else ''}Procesando {len(rows)} ubicación(es)...\n")
 
     ok = 0
     errores = 0
-    for location_uuid, nombre, lat, lon in rows:
+    for ubicacion_id, nombre, lat, lon in rows:
+        if lat is None or lon is None:
+            print(f"  [skip] {nombre} — sin coordenadas", file=sys.stderr)
+            errores += 1
+            continue
         try:
-            valores = fetch_enrich(location_uuid, lat=lat, lon=lon)
+            valores = fetch_geoenrich(ubicacion_id, lat=lat, lon=lon)
+            n_valores = sum(1 for v in valores.values() if v is not None)
             if dry_run:
-                n_reales = sum(
-                    1 for v in valores.values() if v is not None and not str(v).startswith("_")
-                )
-                print(f"  [dry-run] {nombre} ({location_uuid})")
-                print(f"           {n_reales} features con valor")
-                for k, v in valores.items():
-                    if k.startswith("_"):
-                        continue
-                    print(f"           {k}: {v}")
+                print(f"  [dry-run] {nombre} ({ubicacion_id[:8]}…)")
+                print(f"           {n_valores} features con valor")
+                for k, v in sorted(valores.items()):
+                    if v is not None:
+                        print(f"           {k}: {v}")
                 print()
                 ok += 1
             else:
-                resultado = ingestar_snapshot_esri(location_uuid, valores, fecha)
-                n_feat = len(resultado["features_registradas"])
+                resultado = ingestar_snapshot_esri(ubicacion_id, valores, fecha)
                 tipo = "primera entrega" if resultado["primera_entrega"] else "actualización"
-                print(f"  [ok] {nombre} — {tipo}, {n_feat} features")
+                print(f"  [ok] {nombre} — {tipo}, {resultado['n_features']} features")
                 ok += 1
         except Exception as e:
-            print(f"  [error] {nombre} ({location_uuid}): {e}", file=sys.stderr)
+            print(f"  [error] {nombre} ({ubicacion_id}): {e}", file=sys.stderr)
             errores += 1
 
     print(f"\n{'─' * 40}")
@@ -147,7 +140,7 @@ def main():
 
     cmd_enriquecer(
         uuids=args.uuid or [],
-        org=args.org or ("" if args.all else ""),
+        org=args.org or "",
         fecha=args.fecha,
         dry_run=args.dry_run,
     )
