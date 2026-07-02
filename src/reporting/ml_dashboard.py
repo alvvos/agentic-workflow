@@ -421,11 +421,30 @@ def ejecutar_auditoria(n, locs, zone, fecha, horiz, session_id):
         if "error" in res:
             return "-", "-", "-", "-", go.Figure(), f"Error en el motor ML: {res['error']}"
 
+        g = res["grafica"]
+        fechas = g["fechas"]
+
         fig = go.Figure()
+
+        # Banda conforme al 90 % (se añade primero para que quede detrás)
+        if g.get("lower") is not None and g.get("upper") is not None:
+            fig.add_trace(
+                go.Scatter(
+                    x=fechas + fechas[::-1],
+                    y=g["upper"] + g["lower"][::-1],
+                    fill="toself",
+                    fillcolor="rgba(39,174,96,0.10)",
+                    line=dict(color="rgba(0,0,0,0)"),
+                    hoverinfo="skip",
+                    showlegend=True,
+                    name="Intervalo 90 %",
+                )
+            )
+
         fig.add_trace(
             go.Scatter(
-                x=res["grafica"]["fechas"],
-                y=res["grafica"]["reales"],
+                x=fechas,
+                y=g["reales"],
                 name="Datos Reales",
                 mode="lines+markers",
                 line=dict(color="#bdc3c7", width=2),
@@ -434,8 +453,8 @@ def ejecutar_auditoria(n, locs, zone, fecha, horiz, session_id):
         )
         fig.add_trace(
             go.Scatter(
-                x=res["grafica"]["fechas"],
-                y=res["grafica"]["predichos"],
+                x=fechas,
+                y=g["predichos"],
                 name="Predicción del Algoritmo",
                 mode="lines+markers",
                 line=dict(color="#27ae60", width=3, dash="dot", shape="spline"),
