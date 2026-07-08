@@ -20,8 +20,11 @@ from src.db.store import get_conn
 # ── Barrera de clientes activos ──────────────────────────────────────────────
 # TODO: levantar cuando entren nuevos clientes — quitar el set y la cláusula AND.
 ALLOWED_ORG_IDS: frozenset[str] = frozenset(
-    {"5c13b57d-782d-4458-911b-64cd40eebb55"}
-)  # Miniso España
+    {
+        "5c13b57d-782d-4458-911b-64cd40eebb55",  # Miniso España
+        "5345a134-3495-4884-a780-c9b37a50df20",  # Kiosko MX
+    }
+)
 
 # ── Ventanas de tiempo ────────────────────────────────────────────────────────
 
