@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import dash_bootstrap_components as dbc
 from dash import dcc, html
@@ -104,7 +104,7 @@ def build_sidebar(org_options=None):
                                 html.Div(
                                     dcc.DatePickerRange(
                                         id="date-rango",
-                                        start_date=datetime(2025, 9, 1).date(),
+                                        start_date=(datetime.today() - timedelta(days=90)).date(),
                                         end_date=datetime.today().date(),
                                         display_format="YYYY-MM-DD",
                                         className="w-100",
