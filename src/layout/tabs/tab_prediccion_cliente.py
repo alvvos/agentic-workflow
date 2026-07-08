@@ -59,7 +59,7 @@ def _ordenar_zonas_fuera_dentro(zonas: list[dict]) -> list[dict]:
         return depth[uuid]
 
     for z in zonas:
-        _depth(z["zone_uuid"])
+        _depth(z["zona_id"])
     return sorted(zonas, key=lambda z: (_depth(z["zona_id"]), z["nombre"]))
 
 
