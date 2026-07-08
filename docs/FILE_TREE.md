@@ -1,7 +1,7 @@
 # FILE_TREE — Agentic Workflow
 
 Árbol anotado del repositorio. Solo archivos relevantes (excluye `__pycache__`, `venv`, `.git`).
-**Última revisión:** 2026-06-30
+**Última revisión:** 2026-07-08
 
 ---
 
@@ -96,7 +96,7 @@ agentic-workflow/
     │
     ├── data_ingestion/
     │   ├── sincronizador.py        Aitanna API → fact_visitas (ThreadPoolExecutor 5 workers)
-    │   ├── actualizar_arbol_ubicaciones.py  Sync árbol Aitanna → dim_* + geocodificación Nominatim
+    │   ├── actualizar_arbol_ubicaciones.py  GET /api/v1/get-all-locations-and-zones → upsert orgs/ubicaciones/zonas (filtra ALLOWED_ORG_IDS) → onboarding pipeline
     │   ├── esri_client.py          fetch_enrich() Esri GeoEnrichment real + mock (sin ESRI_KEY)
     │   ├── ingesta_geo.py          ingestar_snapshot_esri(), listar_estado_geo()
     │   ├── mensual/                Ingestores de señales mensuales de movilidad/turismo
@@ -153,7 +153,8 @@ agentic-workflow/
     │
     ├── services/
     │   └── ml_predictivo.py        ejecutar_auditoria_predictiva(): features + XGBoost + métricas
-    │                               Incluye temporal join geo, cache model_registry (7 días)
+    │                               Split 70/15/15 (train/cal/val), predicción conformal q_conf al 90%
+    │                               Temporal join geo, cache model_registry (7 días)
     │
     ├── chatbot/
     │   ├── client.py               Claude API streaming

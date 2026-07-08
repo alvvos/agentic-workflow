@@ -1,100 +1,96 @@
-# Context — Handoff sesión 2026-06-30
+# Context — Handoff sesión 2026-07-08
 
 ## Estado general
 
-Versión en producción: **v2.2.47**. Refactor DB-driven completo: toda la capa de render del panel utiliza la DB como única fuente de verdad para labels, colores, iconos y routing de componentes. Cero dicts hardcodeados en Python para display.
+Versión en producción: **v2.2.77**. Esta sesión incorporó Kiosko MX como segundo tenant, implementó predicción conformal al 90 %, añadió la barrera de entrada por org, y reescribió el sync del árbol Aitanna para que sea automático.
 
 ---
 
 ## Cambios de esta sesión
 
-### Principio arquitectónico establecido
+### 1. Barrera de entrada por organización — `ALLOWED_ORG_IDS`
 
-"Todo debe venir explícito de la DB. La DB está para llenarla de información y datos, no para hardcodear en el código." Este principio se aplicó como un barrido completo sobre todo el codebase.
+`src/data_ingestion/_common.py` define un frozenset:
+```python
+ALLOWED_ORG_IDS = frozenset({
+    "5c13b57d-782d-4458-911b-64cd40eebb55",  # Miniso España
+    "5345a134-3495-4884-a780-c9b37a50df20",  # Kiosko MX
+})
+```
+Importado en `_common.get_active_locations()` y en `data_master._load_from_db()`. El API key de Aitanna tiene acceso cross-org — sin este filtro entrarían datos de The Phone House ES, S69, etc. **CRÍTICO: al añadir un cliente nuevo, añadir su org_uuid aquí.**
 
-### Refactor DB-driven — `health_check.py`
+### 2. Kiosko MX — Colima Nueva
 
-Eliminados completamente:
-- `_UNIVERSAL_KEYS`, `_FEATURE_META`, `_FEATURE_FA_ICONS`, `_icon_for_feature()`
-- `_ICONO_TIPO`, `_TIPO_FEATURE_KEY`, `_TIPOS_EXCLUIR`
-- `_C_PRIMARY`, `_C_DARK`, `_C_MUTED` (movidos a `src/core/theme.py`)
-- `_MESES_ES` (movido a `src/core/utils.py`)
+**UUID correcto:** `e160c359-66a5-4366-b1ac-94cb8f846bbd` (obtenido de `/api/v1/get-all-locations-and-zones`).
+**Datos disponibles:** desde 2026-05-08. Sin datos antes de esa fecha.
+**Zonas (con sus UUIDs reales de Aitanna):**
+- `960e1607` → Exterior (funnel_step=1, zone_type=exterior)
+- `5750d14e` → Tienda (funnel_step=2, zone_type=interior)
+- `05809e0f` → Caja (funnel_step=3, zone_type=checkout, parent=Tienda)
 
-Añadidos:
-- `_load_feature_meta(conn, location_uuid)` — query única a `feature_registry` devuelve todo lo necesario para renderizar cualquier señal
-- `_load_zone_meta(conn)` — estilos de zona desde `zone_type_registry`
-- `_load_narrative_meta(conn)` — categorías/niveles desde `narrative_category_registry` + `alert_level_registry`
-- `_load_norm_tipo(conn)` — `canonical_type` desde `feature_registry` reemplaza `_NORM_TIPO` Python dict
+**Incidente UUID:** en sesiones anteriores se identificó `ce86e8a6` como "Colima Nueva" vía logs del sincronizador. Ese UUID pertenece a **The Phone House — Móstoles** (España), no a Kiosko. El API key de Aitanna permite query cross-org, lo que causó la confusión. Se eliminó y se reemplazó por el UUID correcto.
 
-`display_mode` en `feature_registry` controla el componente de render: `'yoy'` · `'events_count'` · `'cruceros'` · `'calendario'` · `'hidden'`. Añadir señal nueva = solo INSERT en DB.
+### 3. Sync automático del árbol Aitanna — `actualizar_arbol_ubicaciones.py`
 
-### Refactor DB-driven — `geo_panel.py`
+Reescrito completamente. Ahora en Fase 0 llama a:
+```
+GET https://platform.aitanna.ai/api/v1/get-all-locations-and-zones
+```
+Devuelve el árbol completo org → ubicación → zona con `zoneName` y jerarquía (`fathers`). La función `_sync_arbol_aitanna()` hace upsert en `organizaciones`, `ubicaciones` y `zonas`, filtrando por `ALLOWED_ORG_IDS`. Los nombres de zona se toman directamente del campo `zoneName` de la API — no se asignan manualmente. Luego se detectan ubicaciones nuevas y se lanza el pipeline de onboarding como antes.
 
-Eliminados: `_SPATIAL_CONTEXT` (POIs hardcodeados para Madrid Gran Vía), `_SPATIAL_COLORS`, `_SPATIAL_LABELS`, `_EV_RANK_META`, `_EV_KEYS`, `_EV_ICONS`, `_EV_LABELS`, `_EV_COLOR`, `_EXT_SERIES_META`.
+**Nota importante:** La Fase 0 no debe nunca asignar nombres de zona a mano. Siempre desde la API.
 
-Añadido: `_load_geo_meta(conn)` — query a `feature_registry` + `poi_category_registry` + `canonical_type`. POIs leídos de `location_pois` DB.
+### 4. Predicción conformal al 90 % — `ml_predictivo.py` + `ml_dashboard.py`
 
-### Módulos compartidos nuevos
+Split cambiado de 85/15 a **70/15/15** (train/calibración/validación).
 
-- `src/core/theme.py` — `C_PRIMARY`, `C_SUCCESS`, `C_DANGER`, `C_AMBER`, `C_DARK`, `C_MUTED`, `C_GRID`, `CFG_GRAPH`, `PALETA_PM`
-- `src/core/utils.py` — `MESES_ES`, `MESES_ES_FULL`, `DIAS_SEMANA_ES`, `DIAS_CORTO`
+Cuantil conformal:
+```python
+resid = |y_cal - max(0, modelo.predict(X_cal))|
+level = min(ceil((n_cal+1) * 0.90) / n_cal, 1.0)
+q_conf = quantile(resid, level, method="higher")
+```
 
-### Nuevas tablas en DB (migración `_migrate_registries`)
+`q_conf` se guarda en el cache de modelo (`.meta.json`) y se devuelve en el resultado como `lower` y `upper`. El dashboard renderiza la banda como polígono `fill="toself"` en Plotly, con `fillcolor="rgba(39,174,96,0.10)"`.
 
-| Tabla | Propósito |
-|---|---|
-| `poi_category_registry` | Display metadata de categorías de POIs |
-| `zone_type_registry` | Estilos por tipo de zona (tienda/caja/exterior) |
-| `narrative_category_registry` | Categorías del acordeón narrativo |
-| `alert_level_registry` | Niveles de alerta (ok/warning/critical) |
+La función `_loop_prediccion()` se extrajo como función standalone (antes era código inline en `ejecutar_auditoria_predictiva`).
 
-Columnas nuevas en `feature_registry`: `label`, `sublabel`, `color`, `icon_cls`, `agg_fn`, `display_mode`, `canonical_type`.
+### 5. Fix DatePickerRange — `sidebar.py`
 
-`canonical_type` registrado para: `tm_concierto→concierto`, `tm_festival→festival`, `tm_deportivo→deportivo`, `concierto_wizink→concierto`, `estreno_callao→concierto`, `festival_madrid→festival`, `manifestacion_gran_via→evento_municipal`, `partido_deportivo→deportivo`.
-
-### Refactor `admin_pois.py`
-
-Eliminados `_CAT_LABELS`, `_CAT_ICONS`, `_CAT_COLORS`. Añadido `_load_poi_categories(conn)` desde `poi_category_registry`.
-
-### Refactor `feature_router.py`
-
-Eliminado `_MALAGA_KEYS = {"malaga", "málaga"}` city name matching. Cruceros ahora activados por `location_source_config WHERE source='cruceros' AND activo=TRUE`.
-
-### Tooltips DB-driven
-
-Tooltips en secciones `ev_rank`, `cruceros` y `eventos` del panel PM provienen de `feature_registry.notas`. No hay `_FEATURE_TOOLTIPS` Python dict. Para añadir/editar un tooltip: `UPDATE feature_registry SET notas='...' WHERE feature_key='...'`.
+`start_date` cambiado de `datetime(2025, 9, 1)` hardcodeado a `datetime.today() - timedelta(days=90)` (rolling 90 días). Evita que el picker abra en 2025 cuando el usuario tiene datos de 2026.
 
 ---
 
-## Estado de features externas
+## Estado de tenants
 
-| Feature | Status global | Notas |
-|---|---|---|
-| `n_pasajeros_crucero_oficial` | `con_cobertura` para Málaga Muelle 1 | Puertos del Estado XLSX |
-| `n_pasajeros_crucero_dia` | `con_cobertura` para Málaga Muelle 1 | Puerto de Málaga API |
-| `open_meteo.*` | `active` todas ubicaciones | Clima histórico + forecast |
-| `afluencia_metro_gran_via` | `contexto` para Madrid Gran Vía | Metro Madrid Excel ✅ |
-| `afluencia_metro_callao` | `contexto` para Madrid Gran Vía | Metro Madrid Excel ✅ |
-| Features `events_count` | display_mode solo, no en feature_flags | `concierto`, `festival`, `deportivo`, `evento_municipal` |
+| Org | UUID | Ubicaciones activas | Datos desde | Esri | Contexto |
+|---|---|---|---|---|---|
+| Miniso España | `5c13b57d` | 4 (Madrid GV, Málaga, Valencia, Tenerife⚠) | ene 2024 | Madrid + Málaga | ✅ completo |
+| Kiosko MX | `5345a134` | 1 (Colima Nueva) | 8 may 2026 | No | Sin señales de contexto |
 
 ---
 
-## Próximos pasos
+## Endpoint Aitanna relevante descubierto
 
-1. **Poblar registros de display** — `zone_type_registry`, `narrative_category_registry`, `alert_level_registry` están creadas con DDL pero vacías. Rellenar con los valores correctos via SQL o panel admin.
-
-2. **Conectar ingestores mensual a `sync_mensual.py`** — añadir `metro_madrid` (y los stubs que se vayan completando) a `_build_ingestores()`.
-
-3. **Verificar estación "Sol"** en Metro Madrid Excel — puede ser "Sol (Metro)" o variante. Investigar nombre exacto de columna.
-
-4. **INE pernoctaciones hoteleras** — stub `ine_eoh.py` listo. Investigar granularidad ciudad vs. provincia.
-
-5. **Validar impacto geo en modelo** — comparar WMAPE antes/después de primeras entregas Esri en Málaga y Madrid Gran Vía.
+`GET https://platform.aitanna.ai/api/v1/get-all-locations-and-zones`
+- Headers: `x-api-key: <AITANNA_API_KEY>`
+- Devuelve: `[{uuid, name, locations: [{uuid, name, zones: [{uuid, zoneName, hidden, fathers?}]}]}]`
+- Filtra: el API key tiene acceso cross-org. Siempre filtrar por `ALLOWED_ORG_IDS`.
 
 ---
 
 ## Bugs conocidos
 
-- `src/models/anomalys.py` (`generar_panel_bi_completo`) — WIP, RuntimeError si se alcanza esa ruta en analytics.
-- `src/data_processing/constructor_master.py` — lee `loc.get('latitude', ...)` pero el JSON usa `lat`. Bug pre-existente, no bloqueante.
-- **Tenerife CC Nivaria** — sin coordenadas en `dim_ubicaciones`. Excluida de todo prefetch.
+- `src/models/anomalys.py` (`generar_panel_bi_completo`) — WIP, RuntimeError si se alcanza en analytics callback.
+- `src/data_processing/constructor_master.py` — lee `loc.get('latitude', ...)` pero el JSON usa `lat`. Pre-existente, no bloqueante.
+- **Tenerife CC Nivaria** — sin coordenadas. Excluida de prefetch.
+
+---
+
+## Próximos pasos
+
+1. **Kiosko MX — más ubicaciones:** Manzanillo (`2ee8181c`) está en el árbol sin datos. Cuando arranque el sensor, `_sync_arbol_aitanna()` lo detectará y lanzará onboarding automáticamente.
+2. **Predicción para Kiosko:** Con datos desde mayo 2026 (~60 días), hay suficiente histórico para entrenar XGBoost. Validar que la predicción funciona en el tab Predicción para Colima Nueva.
+3. **Conformal Fase 2:** Implementar ventana deslizante para calibración (en lugar de bloque fijo) para mejor cobertura empírica en horizontes largos.
+4. **Validar impacto geo en modelo** — comparar WMAPE antes/después de primeras entregas Esri en Málaga y Madrid Gran Vía.
+5. **Poblar registros de display** — `zone_type_registry`, `narrative_category_registry`, `alert_level_registry` creadas pero vacías.

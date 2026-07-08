@@ -1,7 +1,7 @@
 # ARCHITECTURE — Agentic Workflow
 
 **Stack:** Python 3.12 · Dash/Plotly · PostgreSQL 16 (Docker) · XGBoost · Prefect 3 · gunicorn
-**Última revisión:** 2026-06-30 · Versión en producción: v2.2.47
+**Última revisión:** 2026-07-08 · Versión en producción: v2.2.77
 
 ---
 
@@ -11,8 +11,10 @@ Panel de analítica retail multi-tenant en tiempo real. Ingiere datos de flujo d
 
 **Tenants actuales:**
 - Miniso ES — 4 tiendas (Madrid Gran Vía, Málaga Muelle 1, Valencia Bonaire, Tenerife CC Nivaria⚠)
-- Barceló Hotels — 1 propiedad (Barceló Corales Villas)
-- Sam's Club MX, Kiosko MX, The Phone House ES — sin ubicaciones activas aún
+- Kiosko MX — 1 tienda activa (Colima Nueva, datos desde 2026-05-08)
+- Barceló Hotels — 1 propiedad (Barceló Corales Villas, sin datos activos)
+
+**Barrera de entrada (`ALLOWED_ORG_IDS`):** frozenset en `src/data_ingestion/_common.py` importada por todos los ingestores y `data_master.py`. Solo orgs en el set son procesadas. Actualmente: Miniso España + Kiosko MX. El API key de Aitanna tiene acceso cross-org — sin este filtro entraría data de otras organizaciones.
 
 ---
 
@@ -94,7 +96,7 @@ DataFrame enriquecido (en memoria, por request)
 ### `scripts/sync_noche.py` — ejecución diaria @ 02:00
 
 ```
-Fase 0: actualizar_arbol_ubicaciones.py  → dim_organizaciones, dim_ubicaciones, dim_zonas
+Fase 0: actualizar_arbol_ubicaciones.py  → GET /api/v1/get-all-locations-and-zones → upsert orgs/ubicaciones/zonas (filtrado por ALLOWED_ORG_IDS) → trigger onboarding si hay nuevas
 Fase A: sincronizador.py                 → fact_visitas (incremental, Aitanna API)
 Fase B: prefetch/run_all.py              → store_features_ext, store_calendario_org
     ├── weather.py      — Open-Meteo (clima histórico + forecast)
