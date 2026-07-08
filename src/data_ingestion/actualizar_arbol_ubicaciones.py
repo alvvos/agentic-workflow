@@ -1,20 +1,113 @@
 """
-Detección de ubicaciones nuevas y disparo automático del pipeline de onboarding.
+Sincronización del árbol Aitanna (org → ubicacion → zona) con la DB.
 
 descargar_maestro_ubicaciones() es el punto de entrada desde sync_noche.py (Fase 0).
 
-Criterio de "nueva": ubicacion con activa=TRUE sin ninguna entrada en activacion_señales,
-lo que indica que nunca paso por el pipeline de onboarding.
-
-Extensión futura: cuando Aitanna exponga un endpoint para listar el arbol
-org → ubicacion → zona, llamar aqui primero para sincronizar la DB antes de detectar.
+Flujo:
+  1. GET /api/v1/get-all-locations-and-zones  →  upsert orgs/ubicaciones/zonas
+  2. Detectar ubicaciones activas sin activacion_señales  →  onboarding pipeline
 """
 
 from __future__ import annotations
 
 import logging
+import os
+
+import requests
 
 log = logging.getLogger(__name__)
+
+_AITANNA_TREE_URL = "https://platform.aitanna.ai/api/v1/get-all-locations-and-zones"
+_TIMEOUT = 20
+
+
+def _sync_arbol_aitanna() -> int:
+    """
+    Descarga el árbol completo de Aitanna y hace upsert en orgs/ubicaciones/zonas.
+    Solo procesa orgs que estén en ALLOWED_ORG_IDS.
+    Devuelve el número de ubicaciones procesadas.
+    """
+    from src.data_ingestion._common import ALLOWED_ORG_IDS
+    from src.db.store import get_conn
+
+    key = os.getenv("AITANNA_API_KEY", "")
+    try:
+        resp = requests.get(_AITANNA_TREE_URL, headers={"x-api-key": key}, timeout=_TIMEOUT)
+        resp.raise_for_status()
+        tree = resp.json()
+    except Exception as exc:
+        log.warning("actualizar_arbol: no se pudo obtener árbol Aitanna — %s", exc)
+        return 0
+
+    conn = get_conn()
+    n_locs = 0
+
+    for org in tree:
+        org_uuid = org.get("uuid")
+        if not org_uuid or org_uuid not in ALLOWED_ORG_IDS:
+            continue
+
+        org_nombre = org.get("name", "")
+        conn.execute(
+            "INSERT INTO organizaciones (org_id, nombre) VALUES (%s, %s)"
+            " ON CONFLICT (org_id) DO UPDATE SET nombre = EXCLUDED.nombre",
+            [org_uuid, org_nombre],
+        )
+
+        for loc in org.get("locations", []):
+            loc_uuid = loc.get("uuid")
+            if not loc_uuid:
+                continue
+
+            conn.execute(
+                """INSERT INTO ubicaciones
+                   (ubicacion_id, org_id, nombre, ciudad, provincia, pais_codigo,
+                    codigo_postal, direccion, activa)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s, TRUE)
+                   ON CONFLICT (ubicacion_id) DO UPDATE
+                   SET nombre      = EXCLUDED.nombre,
+                       ciudad      = COALESCE(EXCLUDED.ciudad,      ubicaciones.ciudad),
+                       provincia   = COALESCE(EXCLUDED.provincia,   ubicaciones.provincia),
+                       pais_codigo = COALESCE(EXCLUDED.pais_codigo, ubicaciones.pais_codigo),
+                       codigo_postal = COALESCE(EXCLUDED.codigo_postal, ubicaciones.codigo_postal),
+                       direccion   = COALESCE(EXCLUDED.direccion,   ubicaciones.direccion)
+                """,
+                [
+                    loc_uuid,
+                    org_uuid,
+                    loc.get("name", ""),
+                    loc.get("city"),
+                    loc.get("province"),
+                    "MX" if loc.get("country", "").lower() in ("méxico", "mexico") else "ES",
+                    loc.get("postCode") or loc.get("postal_code"),
+                    loc.get("address"),
+                ],
+            )
+
+            for zone in loc.get("zones", []):
+                zone_uuid = zone.get("uuid")
+                if not zone_uuid:
+                    continue
+                zone_name = zone.get("zoneName", "")
+                hidden = zone.get("hidden", False)
+                fathers = zone.get("fathers", [])
+                parent_uuid = fathers[0] if fathers else None
+
+                conn.execute(
+                    """INSERT INTO zonas (zona_id, ubicacion_id, nombre, hidden, parent_zona_id)
+                       VALUES (%s, %s, %s, %s, %s)
+                       ON CONFLICT (zona_id) DO UPDATE
+                       SET nombre        = EXCLUDED.nombre,
+                           hidden        = EXCLUDED.hidden,
+                           parent_zona_id = EXCLUDED.parent_zona_id
+                    """,
+                    [zone_uuid, loc_uuid, zone_name, hidden, parent_uuid],
+                )
+
+            n_locs += 1
+
+    log.info("actualizar_arbol: %d ubicacion(es) sincronizadas desde Aitanna", n_locs)
+    return n_locs
 
 
 def _nuevas() -> list[str]:
@@ -42,10 +135,13 @@ def _nuevas() -> list[str]:
 
 def descargar_maestro_ubicaciones() -> list[str]:
     """
-    Detecta ubicaciones nuevas y lanza el pipeline de onboarding para cada una.
+    Sincroniza el árbol Aitanna en DB, luego detecta ubicaciones nuevas
+    y lanza el pipeline de onboarding para cada una.
 
     Retorna los UUIDs enviados a onboarding (lista vacía si no hay nada nuevo).
     """
+    _sync_arbol_aitanna()
+
     nuevas = _nuevas()
 
     if not nuevas:
