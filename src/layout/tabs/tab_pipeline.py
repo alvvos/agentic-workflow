@@ -368,110 +368,112 @@ def _default_detail():
     )
 
 
+def build_pipeline_content():
+    return html.Div(
+        [
+            dcc.Interval(id="interval-pipeline", interval=30_000, n_intervals=0),
+            dbc.Row(
+                [
+                    dbc.Col(
+                        [
+                            html.Div(
+                                [
+                                    html.H5(
+                                        [
+                                            html.I(
+                                                className="fas fa-project-diagram me-2 text-primary"
+                                            ),
+                                            "Pipeline de onboarding",
+                                        ],
+                                        className="fw-bold text-dark mb-0",
+                                    ),
+                                    html.P(
+                                        "Agentes · estado basado en últimas ejecuciones Prefect",
+                                        className="text-muted small mb-3",
+                                    ),
+                                ]
+                            ),
+                            cyto.Cytoscape(
+                                id="cytoscape-pipeline",
+                                layout={"name": "preset"},
+                                style={
+                                    "width": "100%",
+                                    "height": "700px",
+                                    "border": "1px solid #dee2e6",
+                                    "borderRadius": "12px",
+                                    "background": "#fafbfc",
+                                },
+                                elements=_NODES + _EDGES,
+                                stylesheet=_STYLESHEET,
+                                userZoomingEnabled=True,
+                                userPanningEnabled=True,
+                                minZoom=0.5,
+                                maxZoom=2.0,
+                            ),
+                            html.Div(
+                                [
+                                    html.Span(
+                                        className="badge me-2",
+                                        style={
+                                            "background": "#eef4ff",
+                                            "color": "#0052CC",
+                                            "border": "2px solid #0052CC",
+                                        },
+                                        children="Implementado",
+                                    ),
+                                    html.Span(
+                                        className="badge me-2",
+                                        style={
+                                            "background": "#f0fff4",
+                                            "color": "#28A745",
+                                            "border": "2px solid #28A745",
+                                        },
+                                        children="OK",
+                                    ),
+                                    html.Span(
+                                        className="badge me-2",
+                                        style={
+                                            "background": "#fff5f5",
+                                            "color": "#DC3545",
+                                            "border": "2px solid #DC3545",
+                                        },
+                                        children="Fallido",
+                                    ),
+                                    html.Span(
+                                        className="badge me-2",
+                                        style={
+                                            "background": "#f8f9fa",
+                                            "color": "#adb5bd",
+                                            "border": "2px dashed #ced4da",
+                                        },
+                                        children="Pendiente",
+                                    ),
+                                ],
+                                className="mt-2",
+                            ),
+                        ],
+                        xs=12,
+                        lg=8,
+                        className="mb-4 mb-lg-0",
+                    ),
+                    dbc.Col(
+                        [
+                            html.Div(id="pipeline-node-detail", children=_default_detail()),
+                        ],
+                        xs=12,
+                        lg=4,
+                    ),
+                ]
+            ),
+        ],
+        className="p-3",
+    )
+
+
 def build_tab_pipeline():
     return dcc.Tab(
         label="Pipeline",
         value="tab-pipeline",
         className="fw-bold",
-        children=[
-            html.Div(
-                [
-                    dcc.Interval(id="interval-pipeline", interval=30_000, n_intervals=0),
-                    dbc.Row(
-                        [
-                            dbc.Col(
-                                [
-                                    html.Div(
-                                        [
-                                            html.H5(
-                                                [
-                                                    html.I(
-                                                        className="fas fa-project-diagram me-2 text-primary"
-                                                    ),
-                                                    "Pipeline de onboarding",
-                                                ],
-                                                className="fw-bold text-dark mb-0",
-                                            ),
-                                            html.P(
-                                                "Agentes · estado basado en últimas ejecuciones Prefect",
-                                                className="text-muted small mb-3",
-                                            ),
-                                        ]
-                                    ),
-                                    cyto.Cytoscape(
-                                        id="cytoscape-pipeline",
-                                        layout={"name": "preset"},
-                                        style={
-                                            "width": "100%",
-                                            "height": "700px",
-                                            "border": "1px solid #dee2e6",
-                                            "borderRadius": "12px",
-                                            "background": "#fafbfc",
-                                        },
-                                        elements=_NODES + _EDGES,
-                                        stylesheet=_STYLESHEET,
-                                        userZoomingEnabled=True,
-                                        userPanningEnabled=True,
-                                        minZoom=0.5,
-                                        maxZoom=2.0,
-                                    ),
-                                    html.Div(
-                                        [
-                                            html.Span(
-                                                className="badge me-2",
-                                                style={
-                                                    "background": "#eef4ff",
-                                                    "color": "#0052CC",
-                                                    "border": "2px solid #0052CC",
-                                                },
-                                                children="Implementado",
-                                            ),
-                                            html.Span(
-                                                className="badge me-2",
-                                                style={
-                                                    "background": "#f0fff4",
-                                                    "color": "#28A745",
-                                                    "border": "2px solid #28A745",
-                                                },
-                                                children="OK",
-                                            ),
-                                            html.Span(
-                                                className="badge me-2",
-                                                style={
-                                                    "background": "#fff5f5",
-                                                    "color": "#DC3545",
-                                                    "border": "2px solid #DC3545",
-                                                },
-                                                children="Fallido",
-                                            ),
-                                            html.Span(
-                                                className="badge me-2",
-                                                style={
-                                                    "background": "#f8f9fa",
-                                                    "color": "#adb5bd",
-                                                    "border": "2px dashed #ced4da",
-                                                },
-                                                children="Pendiente",
-                                            ),
-                                        ],
-                                        className="mt-2",
-                                    ),
-                                ],
-                                xs=12,
-                                lg=8,
-                                className="mb-4 mb-lg-0",
-                            ),
-                            dbc.Col(
-                                [
-                                    html.Div(id="pipeline-node-detail", children=_default_detail()),
-                                ],
-                                xs=12,
-                                lg=4,
-                            ),
-                        ]
-                    ),
-                ],
-                className="p-3",
-            )
-        ],
+        children=[build_pipeline_content()],
     )

@@ -15,7 +15,7 @@ Filosofía:
 import calendar
 import json
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import dash_bootstrap_components as dbc
 import holidays
@@ -669,6 +669,285 @@ def _eventos_narrativa(location_uuid: str, fecha_ini, fecha_max) -> dict:
     return {"pasados_alto": pasados, "proximos_alto": proximos, "cruceros": cruceros}
 
 
+# ── Veredictos de contexto ────────────────────────────────────────────────────
+
+
+def _veredictos_contexto(
+    dg: float,
+    fmin_act,
+    fmax_act,
+    fmin_ant,
+    fmax_ant,
+    dias_v: int,
+    clima: dict,
+    eventos: dict,
+    location_uuid: str | None,
+) -> list[tuple[str, str, str]]:
+    """Returns [(nivel, icon_cls, texto), ...] — one verdict per contextual signal."""
+    if abs(dg) < 2:
+        return []
+
+    if dg <= -5:
+        vd = "el descenso"
+    elif dg >= 5:
+        vd = "el crecimiento"
+    else:
+        vd = "la variación observada"
+
+    result: list[tuple[str, str, str]] = []
+    prev_neg = False
+
+    s_act = fmin_act.strftime("%Y-%m-%d")
+    e_act = fmax_act.strftime("%Y-%m-%d")
+    s_ant = fmin_ant.strftime("%Y-%m-%d")
+    e_ant = fmax_ant.strftime("%Y-%m-%d")
+
+    def _pl(n: int) -> str:
+        return "s" if n != 1 else ""
+
+    def _descartar(noun: str, icon: str, dato: str = "") -> None:
+        nonlocal prev_neg
+        if prev_neg:
+            t = f"{noun} tampoco"
+        else:
+            t = f"{noun} no explica {vd}"
+        t += f" ({dato})." if dato else "."
+        prev_neg = True
+        result.append(("secondary", icon, t))
+
+    def _confirmar(nivel: str, icon: str, texto: str) -> None:
+        nonlocal prev_neg
+        prev_neg = False
+        result.append((nivel, icon, texto))
+
+    # ── Lluvia ────────────────────────────────────────────────────────────────
+    if clima:
+        n_act = sum(1 for k, v in clima.items() if s_act <= k <= e_act and v.get("precip", 0) > 2)
+        n_ant = sum(1 for k, v in clima.items() if s_ant <= k <= e_ant and v.get("precip", 0) > 2)
+        if n_act > 0 or n_ant > 0:
+            if (dg < 0 and n_act - n_ant >= 2) or (dg > 0 and n_ant - n_act >= 2):
+                if dg < 0:
+                    _confirmar(
+                        "warning",
+                        "fas fa-cloud-rain",
+                        f"La lluvia contribuyó al descenso: {n_act} día{_pl(n_act)} "
+                        f"de precipitaciones frente a {n_ant} en el período anterior.",
+                    )
+                else:
+                    _confirmar(
+                        "secondary",
+                        "fas fa-cloud-rain",
+                        f"La reducción de lluvia favoreció el crecimiento "
+                        f"({n_act} día{_pl(n_act)} vs. {n_ant} período anterior).",
+                    )
+            else:
+                _descartar(
+                    "La lluvia",
+                    "fas fa-cloud-rain",
+                    f"{n_act} día{_pl(n_act)} vs. {n_ant} anterior",
+                )
+
+        # ── Calor ─────────────────────────────────────────────────────────────
+        n_act = sum(
+            1 for k, v in clima.items() if s_act <= k <= e_act and (v.get("tmax") or 0) >= 30
+        )
+        n_ant = sum(
+            1 for k, v in clima.items() if s_ant <= k <= e_ant and (v.get("tmax") or 0) >= 30
+        )
+        if n_act > 0 or n_ant > 0:
+            if (dg < 0 and n_act - n_ant >= 2) or (dg > 0 and n_ant - n_act >= 2):
+                if dg < 0:
+                    _confirmar(
+                        "warning",
+                        "fas fa-sun",
+                        f"El calor extremo frenó la afluencia: {n_act} día{_pl(n_act)} "
+                        f"con Tmax ≥30°C frente a {n_ant} en el período anterior.",
+                    )
+                else:
+                    _confirmar(
+                        "secondary",
+                        "fas fa-sun",
+                        f"La menor incidencia de calor extremo favoreció el crecimiento "
+                        f"({n_act} día{_pl(n_act)} vs. {n_ant} anterior).",
+                    )
+            else:
+                _descartar(
+                    "El calor", "fas fa-sun", f"{n_act} día{_pl(n_act)} ≥30°C vs. {n_ant} anterior"
+                )
+
+        # ── Frío ──────────────────────────────────────────────────────────────
+        n_act = sum(
+            1
+            for k, v in clima.items()
+            if s_act <= k <= e_act and v.get("tmax") is not None and v["tmax"] < 12
+        )
+        n_ant = sum(
+            1
+            for k, v in clima.items()
+            if s_ant <= k <= e_ant and v.get("tmax") is not None and v["tmax"] < 12
+        )
+        if n_act > 0 or n_ant > 0:
+            if (dg < 0 and n_act - n_ant >= 2) or (dg > 0 and n_ant - n_act >= 2):
+                if dg < 0:
+                    _confirmar(
+                        "warning",
+                        "fas fa-snowflake",
+                        f"El frío frenó la afluencia: {n_act} día{_pl(n_act)} "
+                        f"con Tmax <12°C frente a {n_ant} en el período anterior.",
+                    )
+                else:
+                    _confirmar(
+                        "secondary",
+                        "fas fa-snowflake",
+                        f"La menor incidencia de frío favoreció el crecimiento "
+                        f"({n_act} día{_pl(n_act)} vs. {n_ant} anterior).",
+                    )
+            else:
+                _descartar(
+                    "El frío",
+                    "fas fa-snowflake",
+                    f"{n_act} día{_pl(n_act)} <12°C vs. {n_ant} anterior",
+                )
+
+    # ── Festivos ──────────────────────────────────────────────────────────────
+    n_act = sum(1 for f in festivos_espana if isinstance(f, date) and fmin_act <= f <= fmax_act)
+    n_ant = sum(1 for f in festivos_espana if isinstance(f, date) and fmin_ant <= f <= fmax_ant)
+    if n_act > 0 or n_ant > 0:
+        if (dg > 0 and n_act - n_ant >= 1) or (dg < 0 and n_ant - n_act >= 1):
+            if dg > 0:
+                _confirmar(
+                    "success",
+                    "fas fa-umbrella-beach",
+                    f"Los festivos impulsaron el crecimiento: {n_act} festivo{_pl(n_act)} "
+                    f"frente a {n_ant} en el período anterior.",
+                )
+            else:
+                _confirmar(
+                    "warning",
+                    "fas fa-umbrella-beach",
+                    f"La menor carga de festivos presionó la afluencia a la baja "
+                    f"({n_act} festivo{_pl(n_act)} vs. {n_ant} anterior).",
+                )
+        else:
+            _descartar(
+                "Los festivos",
+                "fas fa-umbrella-beach",
+                f"{n_act} festivo{_pl(n_act)} vs. {n_ant} anterior",
+            )
+
+    # ── Eventos de alto impacto ───────────────────────────────────────────────
+    if eventos:
+        pasados = eventos.get("pasados_alto", [])
+        ev_act = [e for e in pasados if fmin_act <= e["fecha"] <= fmax_act]
+        ev_ant = [e for e in pasados if fmin_ant <= e["fecha"] <= fmax_ant]
+        n_ev_act, n_ev_ant = len(ev_act), len(ev_ant)
+        if n_ev_act > 0 or n_ev_ant > 0:
+            if (dg > 0 and n_ev_act - n_ev_ant >= 1) or (dg < 0 and n_ev_ant - n_ev_act >= 1):
+                if dg > 0:
+                    titulos = "; ".join(f"«{e['titulo']}»" for e in ev_act[:2])
+                    _confirmar(
+                        "success",
+                        "fas fa-star",
+                        f"Los eventos de alto impacto impulsaron el crecimiento: {titulos}.",
+                    )
+                else:
+                    _confirmar(
+                        "warning",
+                        "fas fa-star",
+                        f"La menor presencia de eventos de alto impacto pesó en el descenso "
+                        f"({n_ev_act} vs. {n_ev_ant} en el período anterior).",
+                    )
+            else:
+                _descartar(
+                    "Los eventos del período",
+                    "fas fa-star",
+                    f"{n_ev_act} evento{_pl(n_ev_act)} vs. {n_ev_ant} anterior",
+                )
+
+        # ── Cruceros del período ───────────────────────────────────────────────
+        cruceros = eventos.get("cruceros", [])
+        if cruceros:
+            cr_act = [c for c in cruceros if fmin_act <= c["fecha"] <= fmax_act]
+            cr_ant = [c for c in cruceros if fmin_ant <= c["fecha"] <= fmax_ant]
+            if cr_act or cr_ant:
+                n_cr_act, n_cr_ant = len(cr_act), len(cr_ant)
+                pax_act = sum(c["n_pasajeros"] for c in cr_act)
+                pax_ant = sum(c["n_pasajeros"] for c in cr_ant)
+                if (dg > 0 and n_cr_act - n_cr_ant >= 1) or (dg < 0 and n_cr_ant - n_cr_act >= 1):
+                    if dg > 0:
+                        _confirmar(
+                            "success",
+                            "fas fa-ship",
+                            f"La actividad portuaria contribuyó al crecimiento: "
+                            f"{n_cr_act} escala{_pl(n_cr_act)} ({pax_act:,} pax) "
+                            f"frente a {n_cr_ant} ({pax_ant:,} pax) en el período anterior.",
+                        )
+                    else:
+                        _confirmar(
+                            "warning",
+                            "fas fa-ship",
+                            f"La menor actividad portuaria contribuyó al descenso: "
+                            f"{n_cr_act} escala{_pl(n_cr_act)} vs. {n_cr_ant} en el período anterior.",
+                        )
+                else:
+                    _descartar(
+                        "Las escalas de crucero",
+                        "fas fa-ship",
+                        f"{n_cr_act} escala{_pl(n_cr_act)} vs. {n_cr_ant} anterior",
+                    )
+
+    # ── Señales propias de la ubicación ──────────────────────────────────────
+    if location_uuid:
+        try:
+            from src.db.queries import get_señal_diaria, get_señales_propias_meta
+
+            propias = get_señales_propias_meta(location_uuid)
+            for señal_id, meta in propias.items():
+                label = meta.get("label", señal_id)
+                icon = meta.get("icon_cls", "fas fa-satellite-dish")
+                agg_fn = meta.get("agg_fn", "sum")
+                serie = get_señal_diaria(
+                    location_uuid,
+                    señal_id,
+                    pd.Timestamp(fmin_ant),
+                    pd.Timestamp(fmax_act),
+                )
+                if serie.empty or (serie == 0).all():
+                    continue
+                act_vals = serie[pd.Timestamp(fmin_act) : pd.Timestamp(fmax_act)]
+                ant_vals = serie[pd.Timestamp(fmin_ant) : pd.Timestamp(fmax_ant)]
+                if agg_fn == "mean":
+                    val_act = float(act_vals.mean()) if not act_vals.empty else 0.0
+                    val_ant = float(ant_vals.mean()) if not ant_vals.empty else 0.0
+                else:
+                    val_act = float(act_vals.sum()) if not act_vals.empty else 0.0
+                    val_ant = float(ant_vals.sum()) if not ant_vals.empty else 0.0
+                if val_act == 0 and val_ant == 0:
+                    continue
+                rel_diff = (val_act - val_ant) / max(abs(val_ant), 1)
+                if (dg > 0 and rel_diff >= 0.20) or (dg < 0 and rel_diff <= -0.20):
+                    if dg > 0:
+                        _confirmar(
+                            "success",
+                            icon,
+                            f"{label} impulsó el crecimiento "
+                            f"({val_act:.0f} vs. {val_ant:.0f} en el período anterior).",
+                        )
+                    else:
+                        _confirmar(
+                            "warning",
+                            icon,
+                            f"{label} contribuyó al descenso "
+                            f"({val_act:.0f} vs. {val_ant:.0f} en el período anterior).",
+                        )
+                else:
+                    _descartar(label, icon, f"{val_act:.0f} vs. {val_ant:.0f} anterior")
+        except Exception:
+            pass
+
+    return result
+
+
 def _narrativa(
     zonas_data, fecha_max, clima, ventana="semana", geo_vals=None, location_uuid=None, eventos=None
 ):
@@ -688,34 +967,48 @@ def _narrativa(
     def _add(cat, level, icon, text):
         items.append((cat, level, icon, text))
 
-    # ── AFLUENCIA ────────────────────────────────────────────────────────────
+    # ── AFLUENCIA — cifras y veredictos de contexto ──────────────────────────
 
-    if dg >= 10:
-        _add(
-            "trafico",
-            "success",
-            "fas fa-arrow-trend-up",
-            f"El volumen total de tráfico alcanzó {total_p:,} visitas durante el {periodo} analizado, "
-            f"frente a {total_p_a:,} registradas en el {periodo_ant} precedente. "
-            f"Incremento del {dg:.0f}%.",
-        )
-    elif dg <= -10:
-        _add(
-            "trafico",
-            "danger",
-            "fas fa-arrow-trend-down",
-            f"El volumen total de tráfico registró {total_p:,} visitas durante el {periodo} analizado, "
-            f"frente a {total_p_a:,} en el {periodo_ant} precedente. "
-            f"Descenso del {abs(dg):.0f}%.",
-        )
-    else:
-        _add(
-            "trafico",
-            "secondary",
-            "fas fa-equals",
-            f"El volumen total de tráfico se mantuvo estable: {total_p:,} visitas en el {periodo} analizado "
-            f"frente a {total_p_a:,} en el {periodo_ant} precedente ({dg:+.1f}%).",
-        )
+    def _as_date(d):
+        return d.date() if isinstance(d, datetime) else d
+
+    _fmin_act_d = _as_date(fecha_max - timedelta(days=dias_v - 1))
+    _fmax_act_d = _as_date(fecha_max)
+    _fmin_ant_d = _as_date(fecha_max - timedelta(days=2 * dias_v - 1))
+    _fmax_ant_d = _as_date(fecha_max - timedelta(days=dias_v))
+
+    es_semana = ventana != "mes"
+    _art = "la" if es_semana else "el"
+    _adj = "analizada" if es_semana else "analizado"
+    _nivel_num = (
+        "danger"
+        if dg <= -10
+        else ("warning" if dg < -5 else ("success" if dg >= 5 else "secondary"))
+    )
+    _icon_num = (
+        "fas fa-arrow-trend-down"
+        if dg <= -5
+        else ("fas fa-arrow-trend-up" if dg >= 5 else "fas fa-equals")
+    )
+    _add(
+        "trafico",
+        _nivel_num,
+        _icon_num,
+        f"{total_p:,} visitas en {_art} {periodo} {_adj} "
+        f"frente a {total_p_a:,} en {periodo_ant} precedente ({dg:+.0f}%).",
+    )
+    for _nv, _ic, _tx in _veredictos_contexto(
+        dg,
+        _fmin_act_d,
+        _fmax_act_d,
+        _fmin_ant_d,
+        _fmax_ant_d,
+        dias_v,
+        clima,
+        eventos or {},
+        location_uuid,
+    ):
+        _add("trafico", _nv, _ic, _tx)
 
     all_dias = (
         pd.concat(
@@ -953,128 +1246,10 @@ def _narrativa(
                 f"({z['d']['visitantes']:+.0f}%) puede estar sobreestimada.",
             )
 
-    # ── CLIMA ────────────────────────────────────────────────────────────────
-
-    if clima:
-        fmin_clima = fecha_max - timedelta(days=dias_v - 1)
-        fmin_ant_c = fmin_clima - timedelta(days=dias_v)
-        fmax_ant_c = fmin_clima - timedelta(days=1)
-        s_act = fmin_clima.strftime("%Y-%m-%d")
-        s_ant = fmin_ant_c.strftime("%Y-%m-%d")
-        s_ant_max = fmax_ant_c.strftime("%Y-%m-%d")
-
-        dias_act = {k: v for k, v in clima.items() if s_act <= k <= fecha_max.strftime("%Y-%m-%d")}
-        dias_ant = {k: v for k, v in clima.items() if s_ant <= k <= s_ant_max}
-
-        tmaxes_act = [v["tmax"] for v in dias_act.values() if v.get("tmax") is not None]
-        tmaxes_ant = [v["tmax"] for v in dias_ant.values() if v.get("tmax") is not None]
-
-        if tmaxes_act and tmaxes_ant:
-            avg_act = sum(tmaxes_act) / len(tmaxes_act)
-            avg_ant = sum(tmaxes_ant) / len(tmaxes_ant)
-            diff = avg_act - avg_ant
-            if abs(diff) >= 2:
-                mas_menos = "más cálido" if diff > 0 else "más frío"
-                nivel = "warning" if diff >= 4 else ("info" if diff > 0 else "secondary")
-                _add(
-                    "clima",
-                    nivel,
-                    "fas fa-temperature-half",
-                    f"La temperatura máxima media durante el {periodo} fue de {avg_act:.1f}°C, "
-                    f"frente a {avg_ant:.1f}°C en el {periodo_ant} precedente "
-                    f"({abs(diff):.1f}°C {mas_menos}). "
-                    + (
-                        "El calor adicional puede haber condicionado la afluencia en horas centrales."
-                        if diff >= 4
-                        else ""
-                    ),
-                )
-            else:
-                _add(
-                    "clima",
-                    "secondary",
-                    "fas fa-temperature-half",
-                    f"La temperatura máxima media durante el {periodo} fue de {avg_act:.1f}°C, "
-                    f"similar a la del {periodo_ant} precedente ({avg_ant:.1f}°C). "
-                    f"Sin impacto climático térmico significativo.",
-                )
-
-        if tmaxes_act:
-            n_calor = sum(1 for t in tmaxes_act if t >= 30)
-            n_frio = sum(1 for t in tmaxes_act if t < 12)
-            if n_calor >= 2:
-                _add(
-                    "clima",
-                    "warning",
-                    "fas fa-sun",
-                    f"Se registraron {n_calor} {'días' if n_calor > 1 else 'día'} con temperatura máxima "
-                    f"igual o superior a 30°C durante el {periodo}. "
-                    f"Las altas temperaturas reducen el tráfico peatonal en las franjas centrales del día.",
-                )
-            if n_frio >= 2:
-                _add(
-                    "clima",
-                    "info",
-                    "fas fa-snowflake",
-                    f"Se registraron {n_frio} {'días' if n_frio > 1 else 'día'} con temperatura máxima "
-                    f"por debajo de 12°C durante el {periodo}. "
-                    f"El frío intenso puede acortar la duración de las visitas y reducir el tráfico exterior.",
-                )
-
-        n_lluvia = sum(1 for v in dias_act.values() if v.get("precip", 0) > 2)
-        if n_lluvia >= max(2, dias_v // 4):
-            _add(
-                "clima",
-                "info",
-                "fas fa-cloud-rain",
-                f"Se registraron {n_lluvia} días con precipitaciones superiores a 2 mm durante el {periodo}. "
-                f"Este factor meteorológico puede haber influido negativamente en el tráfico exterior.",
-            )
-
-    # ── EVENTOS Y FESTIVOS ────────────────────────────────────────────────────
-
-    fmin_fest = fecha_max - timedelta(days=dias_v - 1)
-    fest = [
-        (f, n)
-        for f, n in festivos_espana.items()
-        if isinstance(f, date) and fmin_fest <= f <= fecha_max
-    ]
-    if fest:
-        nombres = ", ".join(n for _, n in fest[:2])
-        pl = "s" if len(fest) > 1 else ""
-        verb = "ron" if len(fest) > 1 else ""
-        _add(
-            "eventos",
-            "info",
-            "fas fa-umbrella-beach",
-            f"Durante el {periodo} se registra{verb} {len(fest)} día{pl} festivo{pl} ({nombres}). "
-            f"Las jornadas festivas presentan patrones de tráfico diferenciados "
-            f"respecto a los días laborables.",
-        )
+    # ── EVENTOS PRÓXIMOS ──────────────────────────────────────────────────────
 
     if eventos:
-        pasados = eventos.get("pasados_alto", [])
         proximos = eventos.get("proximos_alto", [])
-        if pasados:
-            if len(pasados) == 1:
-                _add(
-                    "eventos",
-                    "primary",
-                    "fas fa-star",
-                    f"Durante el {periodo} se celebró un evento de alto impacto: "
-                    f"«{pasados[0]['titulo']}» ({formatear_fecha(pasados[0]['fecha'])}). "
-                    f"Este tipo de eventos genera picos de afluencia y puede explicar desviaciones puntuales.",
-                )
-            else:
-                titulos = "; ".join(f"«{e['titulo']}»" for e in pasados[:3])
-                mas = f" y {len(pasados)-3} más" if len(pasados) > 3 else ""
-                _add(
-                    "eventos",
-                    "primary",
-                    "fas fa-star",
-                    f"Durante el {periodo} se registraron {len(pasados)} eventos de alto impacto "
-                    f"({titulos}{mas}). Estos eventos pueden explicar picos y desviaciones puntuales en la afluencia.",
-                )
         if proximos:
             if len(proximos) == 1:
                 _add(
@@ -1096,27 +1271,10 @@ def _narrativa(
                     f"({titulos}{mas}). Se recomienda planificar la operación del establecimiento en consecuencia.",
                 )
 
-        # ── Cruceros ──────────────────────────────────────────────────────────
         cruceros = eventos.get("cruceros", [])
         if cruceros:
-            hoy_d = fecha_max.date() if hasattr(fecha_max, "date") else fecha_max
-            fmin_d = fecha_max - timedelta(days=dias_v - 1)
-            fmin_d = fmin_d.date() if hasattr(fmin_d, "date") else fmin_d
-            cr_periodo = [c for c in cruceros if fmin_d <= c["fecha"] <= hoy_d]
+            hoy_d = _as_date(fecha_max)
             cr_proximos = [c for c in cruceros if c["fecha"] > hoy_d]
-
-            if cr_periodo:
-                n = len(cr_periodo)
-                total_pax = sum(c["n_pasajeros"] for c in cr_periodo)
-                plural = "s" if n > 1 else ""
-                _add(
-                    "eventos",
-                    "info",
-                    "fas fa-ship",
-                    f"Durante el {periodo} se registraron {n} escala{plural} de crucero "
-                    f"con un total estimado de {total_pax:,} pasajeros en puerto. "
-                    f"Los días de escala generan incrementos de tráfico turístico en el área de influencia.",
-                )
             if cr_proximos:
                 n = len(cr_proximos)
                 total_pax = sum(c["n_pasajeros"] for c in cr_proximos)
@@ -4504,7 +4662,8 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
     fecha_captura = get_geo_snapshot_date(location_uuid) if location_uuid else None
 
     # ── Eventos de alto impacto (para narrativa) ─────────────────────────
-    fmin_p_narr = fecha_max - timedelta(days=dias_v - 1)
+    # Arranca 2×dias_v atrás para cubrir también el período de comparación
+    fmin_p_narr = fecha_max - timedelta(days=2 * dias_v - 1)
     eventos_narr = (
         _eventos_narrativa(location_uuid, fmin_p_narr, fecha_max) if location_uuid else None
     )

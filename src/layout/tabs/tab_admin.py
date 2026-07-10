@@ -2,12 +2,9 @@ import dash_bootstrap_components as dbc
 from dash import dcc, html
 
 
-def build_tab_admin():
-    return dcc.Tab(
-        label="Admin",
-        value="tab-admin",
-        className="fw-bold",
-        children=[
+def build_admin_content():
+    return html.Div(
+        [
             html.Br(),
             dcc.Store(id="admin-crud-signal", data=0),
             dcc.Store(id="admin-pending-delete", data=None),
@@ -620,4 +617,14 @@ def build_tab_admin():
                 className="mb-3",
             ),
         ],
+        style={"overflowY": "auto"},
+    )
+
+
+def build_tab_admin():
+    return dcc.Tab(
+        label="Admin",
+        value="tab-admin",
+        className="fw-bold",
+        children=[build_admin_content()],
     )

@@ -5,7 +5,6 @@ import src.callbacks.chat_callbacks  # noqa: F401
 import src.callbacks.estado_callbacks  # noqa: F401
 import src.callbacks.exports  # noqa: F401
 import src.callbacks.filtros  # noqa: F401
-import src.callbacks.pipeline_callbacks  # noqa: F401
 import src.callbacks.sync  # noqa: F401
 import src.core.auth  # noqa: F401 — registers /login, /logout, before_request
 from src.core.config import app, server  # noqa: F401

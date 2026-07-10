@@ -1,8 +1,34 @@
 import dash_bootstrap_components as dbc
-from dash import ALL, Input, Output, html
+from dash import ALL, Input, Output, State, html
 
 from src.core import data_master
 from src.core.config import app
+
+
+@app.callback(
+    Output("sidebar-open", "data"),
+    Input("btn-sidebar-toggle", "n_clicks"),
+    State("sidebar-open", "data"),
+    prevent_initial_call=True,
+)
+def toggle_sidebar_open(_, is_open):
+    return not is_open
+
+
+@app.callback(
+    Output("sidebar-col", "style"),
+    Output("main-col", "style"),
+    Output("sidebar-toggle-icon", "className"),
+    Input("sidebar-open", "data"),
+)
+def apply_sidebar_state(is_open):
+    if is_open:
+        return {}, {}, "fas fa-bars"
+    return (
+        {"display": "none"},
+        {"flex": "0 0 100%", "maxWidth": "100%"},
+        "fas fa-chevron-right",
+    )
 
 
 @app.callback(Output("sidebar-periodo-wrapper", "style"), Input("tabs-panel", "value"))

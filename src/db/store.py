@@ -529,6 +529,7 @@ def _apply_ddl(conn: PgConn) -> None:
     _migrate_activacion_señales_contexto(conn)
     _migrate_activacion_señales_periodicidad(conn)
     _migrate_señales_display(conn)
+    _migrate_señales_display_upsert(conn)
     _migrate_puntos_interes(conn)
     _migrate_config_fuentes(conn)
     _migrate_registries(conn)
@@ -1500,6 +1501,174 @@ def _migrate_config_fuentes(conn: PgConn) -> None:
         "ON CONFLICT (ubicacion_id, fuente) DO NOTHING",
         _ROWS,
     )
+
+
+def _migrate_señales_display_upsert(conn: PgConn) -> None:
+    """
+    Garantiza que todos los señal_id con metadatos canónicos existan en la
+    tabla señales — incluso si ensure_feature_registry() no se ejecutó antes
+    que _migrate_señales_display (que solo hace UPDATE, no INSERT).
+    """
+    # (señal_id, fuente, categoria, display_mode, label, sublabel, color, icon_cls, agg_fn)
+    _KNOWN: list[tuple] = [
+        (
+            "afluencia_metro_gran_via",
+            "metro_madrid",
+            "movilidad",
+            "yoy",
+            "Metro Gran Vía",
+            "validaciones diarias",
+            "#e67e22",
+            "fas fa-train-subway",
+            "sum",
+        ),
+        (
+            "afluencia_metro_callao",
+            "metro_madrid",
+            "movilidad",
+            "yoy",
+            "Metro Callao",
+            "validaciones diarias",
+            "#00539B",
+            "fas fa-train-subway",
+            "sum",
+        ),
+        (
+            "afluencia_metro_sol",
+            "metro_madrid",
+            "movilidad",
+            "yoy",
+            "Metro Sol",
+            "validaciones diarias",
+            "#e67e22",
+            "fas fa-train-subway",
+            "sum",
+        ),
+        (
+            "n_turistas_isocrona",
+            "esri",
+            "turismo",
+            "yoy",
+            "Turistas área",
+            "pers. en isócrona",
+            "#3498db",
+            "fas fa-passport",
+            "sum",
+        ),
+        (
+            "n_eventos_gran_via",
+            "agenda_es",
+            "eventos",
+            "yoy",
+            "Eventos Gran Vía",
+            "eventos en rango",
+            "#9b59b6",
+            "fas fa-calendar-check",
+            "sum",
+        ),
+        (
+            "ev_rank_concierto",
+            "ticketmaster",
+            "eventos",
+            "yoy",
+            "Ranking conciertos",
+            "score 0-100",
+            "#8e44ad",
+            "fas fa-music",
+            "max",
+        ),
+        (
+            "ev_rank_deportivo",
+            "thesportsdb",
+            "eventos",
+            "yoy",
+            "Ranking deportivo",
+            "score 0-100",
+            "#e74c3c",
+            "fas fa-futbol",
+            "max",
+        ),
+        (
+            "ev_rank_festival",
+            "ticketmaster",
+            "eventos",
+            "yoy",
+            "Ranking festivales",
+            "score 0-100",
+            "#2980b9",
+            "fas fa-star",
+            "max",
+        ),
+        (
+            "ev_rank_municipal",
+            "agenda_es",
+            "eventos",
+            "yoy",
+            "Ranking municipal",
+            "score 0-100",
+            "#e67e22",
+            "fas fa-city",
+            "max",
+        ),
+        (
+            "ev_rank_total",
+            "agenda_es",
+            "eventos",
+            "yoy",
+            "Ranking total",
+            "score 0-100",
+            "#2c3e50",
+            "fas fa-chart-bar",
+            "max",
+        ),
+        (
+            "n_pasajeros_crucero_oficial",
+            "puertos_estado",
+            "turismo",
+            "cruceros",
+            "Pasajeros crucero",
+            "pax oficiales",
+            "#1abc9c",
+            "fas fa-ship",
+            "sum",
+        ),
+        (
+            "n_pasajeros_crucero_dia",
+            "cruceros",
+            "turismo",
+            "cruceros",
+            "Pasajeros crucero día",
+            "pax totales",
+            "#1abc9c",
+            "fas fa-ship",
+            "sum",
+        ),
+        (
+            "ine_viajeros_hoteleros",
+            "ine_eoh",
+            "turismo",
+            "yoy",
+            "Viajeros hoteleros",
+            "viajeros/mes",
+            "#16a085",
+            "fas fa-bed",
+            "sum",
+        ),
+    ]
+    for sid, fuente, cat, mode, lbl, sub, col, icon, agg in _KNOWN:
+        conn.execute(
+            """INSERT INTO señales (señal_id, fuente, categoria, status, display_mode,
+                                    label, sublabel, color, icon_cls, agg_fn)
+               VALUES (?,?,?,'con_cobertura',?,?,?,?,?,?)
+               ON CONFLICT (señal_id) DO UPDATE SET
+                   label        = EXCLUDED.label,
+                   sublabel     = EXCLUDED.sublabel,
+                   color        = EXCLUDED.color,
+                   icon_cls     = EXCLUDED.icon_cls,
+                   agg_fn       = EXCLUDED.agg_fn,
+                   display_mode = EXCLUDED.display_mode""",
+            [sid, fuente, cat, mode, lbl, sub, col, icon, agg],
+        )
 
 
 def _migrate_puntos_interes(conn: PgConn) -> None:

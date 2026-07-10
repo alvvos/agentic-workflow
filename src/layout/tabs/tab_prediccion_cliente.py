@@ -5,8 +5,10 @@ import pandas as pd
 import plotly.graph_objects as go
 from dash import Input, Output, State, callback, dcc, html, no_update
 
+from src.core.config import MODO_DESARROLLO
 from src.core.data_master import mapa_tiendas
 from src.db.queries import get_df_enriquecido, get_zones_for_loc
+from src.layout.components.loaders import loading_section
 from src.services.ml_predictivo import ejecutar_auditoria_predictiva
 
 _C_PRIMARY = "#0052CC"
@@ -67,6 +69,8 @@ def _zona_card(nombre: str, res: dict, color: str) -> dbc.Col:
     fechas = res["grafica"]["fechas"]
     predichos = [max(0, int(round(v))) for v in res["grafica"]["predichos"]]
     reales = res["grafica"]["reales"]
+    lowers = res["grafica"].get("lower")
+    uppers = res["grafica"].get("upper")
     m = res["metricas"]
 
     fiab_txt, fiab_color, fiab_icon = _fiabilidad(m.get("accuracy"))
@@ -106,7 +110,23 @@ def _zona_card(nombre: str, res: dict, color: str) -> dbc.Col:
         x_labels.append(f"{_DIAS_ES[dt.dayofweek]}<br>{dt.strftime('%d')}")
 
     max_v = max(predichos, default=1) or 1
-    fig = go.Figure(
+    y_ceil = max(max_v, max(uppers) if uppers else 0) * 1.50
+    fig = go.Figure()
+
+    if MODO_DESARROLLO and lowers and uppers:
+        fig.add_trace(
+            go.Scatter(
+                x=x_labels + x_labels[::-1],
+                y=uppers + lowers[::-1],
+                fill="toself",
+                fillcolor="rgba(0,82,204,0.10)",
+                line=dict(color="rgba(0,0,0,0)"),
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
+
+    fig.add_trace(
         go.Bar(
             x=x_labels,
             y=predichos,
@@ -123,7 +143,7 @@ def _zona_card(nombre: str, res: dict, color: str) -> dbc.Col:
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
         xaxis=dict(showgrid=False, tickfont=dict(size=9, color=_C_DARK), fixedrange=True),
-        yaxis=dict(visible=False, fixedrange=True, range=[0, max_v * 1.50]),
+        yaxis=dict(visible=False, fixedrange=True, range=[0, y_ceil]),
         showlegend=False,
         bargap=0.25,
     )
@@ -255,54 +275,15 @@ def build_tab_prediccion_cliente():
                         ],
                         className="mb-4",
                     ),
-                    html.Div(
-                        style={"position": "relative"},
-                        children=[
-                            dcc.Loading(
-                                html.Div(
-                                    id="pred-publica-content",
-                                    children=_empty_state(),
-                                    style={"minHeight": "60vh"},
-                                ),
-                                custom_spinner=html.Div(
-                                    [
-                                        dbc.Spinner(color="primary", size="lg"),
-                                        html.H5(
-                                            "Calculando previsión...",
-                                            className="ms-3 mb-0 text-primary fw-bold",
-                                        ),
-                                    ],
-                                    className="d-flex align-items-center justify-content-center",
-                                    style={"minHeight": "60vh"},
-                                ),
-                                delay_show=350,
-                                delay_hide=0,
-                            ),
-                            html.Div(
-                                id="pred-render-overlay",
-                                style={
-                                    "display": "none",
-                                    "position": "absolute",
-                                    "top": 0,
-                                    "left": 0,
-                                    "right": 0,
-                                    "bottom": 0,
-                                    "minHeight": "60vh",
-                                    "background": "rgba(255,255,255,0.92)",
-                                    "zIndex": 100,
-                                    "alignItems": "center",
-                                    "justifyContent": "center",
-                                    "flexDirection": "column",
-                                },
-                                children=[
-                                    dbc.Spinner(color="primary", size="lg"),
-                                    html.H5(
-                                        "Renderizando...",
-                                        className="ms-3 mb-0 text-primary fw-bold",
-                                    ),
-                                ],
-                            ),
-                        ],
+                    loading_section(
+                        html.Div(
+                            id="pred-publica-content",
+                            children=_empty_state(),
+                            style={"minHeight": "60vh"},
+                        ),
+                        label="Calculando previsión...",
+                        overlay_id="pred-render-overlay",
+                        min_height="60vh",
                     ),
                 ],
                 className="p-3",

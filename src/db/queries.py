@@ -588,6 +588,84 @@ def get_active_ext_features(
     return result
 
 
+def get_señal_diaria(
+    ubicacion_id: str,
+    señal_id: str,
+    fecha_min: pd.Timestamp,
+    fecha_max: pd.Timestamp,
+) -> pd.Series:
+    """
+    Devuelve una Series con índice DatetimeIndex diario y los valores de una
+    señal concreta en valores_señales. Forward-fill para señales mensuales.
+    No filtra por status en activacion_señales — sirve tanto para 'active'
+    como para 'contexto'.
+    """
+    from src.db.store import get_conn
+
+    full_idx = pd.date_range(fecha_min, fecha_max, freq="D")
+    df = (
+        get_conn()
+        .execute(
+            """SELECT fecha, valor::double precision AS valor
+           FROM   valores_señales
+           WHERE  ubicacion_id = ?
+             AND  señal_id     = ?
+             AND  fecha BETWEEN ? AND ?
+           ORDER  BY fecha""",
+            [ubicacion_id, señal_id, fecha_min.date(), fecha_max.date()],
+        )
+        .df()
+    )
+    if df.empty:
+        return pd.Series(0.0, index=full_idx, name=señal_id)
+    df["fecha"] = pd.to_datetime(df["fecha"])
+    serie = df.set_index("fecha")["valor"].reindex(full_idx)
+    # forward-fill para señales con granularidad mensual
+    serie = serie.ffill().fillna(0.0)
+    serie.name = señal_id
+    return serie
+
+
+def get_señales_propias_meta(ubicacion_id: str) -> dict[str, dict]:
+    """
+    Returns {señal_id: {label, color, sublabel, icon_cls, agg_fn}} for all
+    external signals active for this location in activacion_señales.
+    Uses LEFT JOIN so signals present in activacion_señales but missing from
+    the señales registry still appear with fallback metadata.
+    """
+    try:
+        rows = (
+            get_conn()
+            .execute(
+                """SELECT ff.señal_id,
+                      COALESCE(fr.label,    ff.señal_id)             AS label,
+                      COALESCE(fr.color,    '#0052CC')               AS color,
+                      COALESCE(fr.sublabel, '')                      AS sublabel,
+                      COALESCE(fr.icon_cls, 'fas fa-satellite-dish') AS icon_cls,
+                      COALESCE(fr.agg_fn,   'sum')                   AS agg_fn
+               FROM   activacion_señales ff
+               LEFT JOIN señales fr ON fr.señal_id = ff.señal_id
+               WHERE  ff.ubicacion_id = ?
+                 AND  ff.status IN ('active', 'contexto')
+               ORDER  BY ff.señal_id""",
+                [ubicacion_id],
+            )
+            .fetchall()
+        )
+    except Exception:
+        return {}
+    return {
+        r[0]: {
+            "label": r[1],
+            "color": r[2],
+            "sublabel": r[3],
+            "icon_cls": r[4],
+            "agg_fn": r[5],
+        }
+        for r in rows
+    }
+
+
 def get_pois_for_location(ubicacion_id: str) -> list[dict]:
     """Returns all active POIs for a location, ordered by category and relevance."""
     rows = (

@@ -1,25 +1,7 @@
 import dash_bootstrap_components as dbc
 from dash import dcc, html
 
-_SPINNER = [
-    dbc.Spinner(color="primary", size="lg"),
-    html.H5("Renderizando...", className="ms-3 mb-0 text-primary fw-bold"),
-]
-
-_OVERLAY_STYLE = {
-    "display": "none",
-    "position": "absolute",
-    "top": 0,
-    "left": 0,
-    "right": 0,
-    "bottom": 0,
-    "minHeight": "420px",
-    "background": "rgba(255,255,255,0.92)",
-    "zIndex": 100,
-    "alignItems": "center",
-    "justifyContent": "center",
-    "flexDirection": "column",
-}
+from src.layout.components.loaders import loading_section
 
 
 def build_tab_bi():
@@ -81,26 +63,11 @@ def build_tab_bi():
                     )
                 ]
             ),
-            html.Div(
-                style={"position": "relative"},
-                children=[
-                    dcc.Loading(
-                        html.Div(id="bi-dynamic-content", style={"minHeight": "420px"}),
-                        custom_spinner=html.Div(
-                            [
-                                dbc.Spinner(color="primary", size="lg"),
-                                html.H5(
-                                    "Cargando análisis...",
-                                    className="ms-3 mb-0 text-primary fw-bold",
-                                ),
-                            ],
-                            className="d-flex align-items-center justify-content-center loading-spinner-body",
-                        ),
-                        delay_show=350,
-                        delay_hide=0,
-                    ),
-                    html.Div(id="bi-render-overlay", style=_OVERLAY_STYLE, children=_SPINNER),
-                ],
+            loading_section(
+                html.Div(id="bi-dynamic-content", style={"minHeight": "420px"}),
+                label="Cargando análisis...",
+                overlay_id="bi-render-overlay",
+                min_height="420px",
             ),
             html.Hr(className="text-muted my-5"),
             dbc.Row(

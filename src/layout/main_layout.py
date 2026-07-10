@@ -9,10 +9,9 @@ from src.core import data_master
 from src.core.auth import get_current_org_access, get_current_role
 from src.core.config import MODO_DESARROLLO
 from src.layout.sidebar import build_sidebar
-from src.layout.tabs.tab_admin import build_tab_admin
+from src.layout.tabs.tab_admin import build_admin_content
 from src.layout.tabs.tab_bi import build_tab_bi
 from src.layout.tabs.tab_ml import build_tab_ml
-from src.layout.tabs.tab_pipeline import build_tab_pipeline
 from src.layout.tabs.tab_pm import build_tab_pm
 from src.layout.tabs.tab_prediccion_cliente import build_tab_prediccion_cliente
 
@@ -32,22 +31,35 @@ def serve_layout():
                     dbc.Col(
                         html.Div(
                             [
-                                html.H2(
-                                    "Operaciones",
-                                    className="fw-bold text-dark mb-0",
-                                    style={"fontSize": "1.5rem", "letterSpacing": "-0.3px"},
+                                dbc.Button(
+                                    html.I(className="fas fa-bars", id="sidebar-toggle-icon"),
+                                    id="btn-sidebar-toggle",
+                                    color="link",
+                                    size="sm",
+                                    className="text-secondary p-0 me-3 flex-shrink-0",
+                                    style={"fontSize": "1.05rem", "lineHeight": "1"},
                                 ),
-                                html.Span(
-                                    datetime.today().strftime("%-d de %B · %Y"),
-                                    style={
-                                        "fontSize": "0.75rem",
-                                        "color": "#8492a6",
-                                        "fontWeight": "500",
-                                        "marginTop": "2px",
-                                    },
+                                html.Div(
+                                    [
+                                        html.H2(
+                                            "Operaciones",
+                                            className="fw-bold text-dark mb-0",
+                                            style={"fontSize": "1.5rem", "letterSpacing": "-0.3px"},
+                                        ),
+                                        html.Span(
+                                            datetime.today().strftime("%-d de %B · %Y"),
+                                            style={
+                                                "fontSize": "0.75rem",
+                                                "color": "#8492a6",
+                                                "fontWeight": "500",
+                                                "marginTop": "2px",
+                                            },
+                                        ),
+                                    ],
+                                    className="d-flex flex-column justify-content-center",
                                 ),
                             ],
-                            className="d-flex flex-column justify-content-center",
+                            className="d-flex align-items-center",
                         ),
                         xs=12,
                         md=7,
@@ -62,7 +74,19 @@ def serve_layout():
                                     color="primary",
                                     outline=True,
                                     size="sm",
-                                    className="fw-bold rounded-3 shadow-sm me-2",
+                                    className="fw-bold rounded-3 shadow-sm me-2 d-none",
+                                ),
+                                (
+                                    dbc.Button(
+                                        [html.I(className="fas fa-shield-halved me-1"), "Admin"],
+                                        id="btn-admin-panel",
+                                        color="secondary",
+                                        outline=True,
+                                        size="sm",
+                                        className="fw-bold rounded-3 shadow-sm me-2",
+                                    )
+                                    if role == "admin"
+                                    else html.Span(id="btn-admin-panel")
                                 ),
                                 (
                                     html.A(
@@ -100,8 +124,6 @@ def serve_layout():
                                     build_tab_bi(),
                                     build_tab_prediccion_cliente(),
                                     *([] if role != "admin" else [build_tab_ml()]),
-                                    *([] if role != "admin" else [build_tab_pipeline()]),
-                                    *([] if role != "admin" else [build_tab_admin()]),
                                 ],
                             )
                         ]
@@ -117,6 +139,7 @@ def serve_layout():
             dcc.Store(id="session-id", data=session_id),
             dcc.Store(id="data-version", data=0),
             dcc.Store(id="sync-trigger", data=0),
+            dcc.Store(id="sidebar-open", data=True),
             dcc.Interval(id="interval-staleness", interval=5 * 60 * 1000, n_intervals=0),
             dcc.Interval(id="interval-sync-poll", interval=1500, n_intervals=0, disabled=True),
             dbc.Modal(
@@ -215,6 +238,28 @@ def serve_layout():
                 contentClassName="border-0 rounded-4",
                 style={"boxShadow": "0 20px 60px rgba(0,0,0,0.15)"},
             ),
+            dbc.Modal(
+                [
+                    dbc.ModalHeader(
+                        dbc.ModalTitle(
+                            [
+                                html.I(className="fas fa-shield-halved me-2 text-primary"),
+                                "Panel de administración",
+                            ],
+                            className="fw-bold",
+                        ),
+                        close_button=True,
+                    ),
+                    dbc.ModalBody(build_admin_content(), className="p-0"),
+                ],
+                id="modal-admin-panel",
+                size="xl",
+                is_open=False,
+                scrollable=True,
+                centered=False,
+                contentClassName="border-0 rounded-4",
+                style={"boxShadow": "0 20px 60px rgba(0,0,0,0.15)"},
+            ),
             dbc.Toast(
                 id="toast-notificacion",
                 header="Notificación",
@@ -235,8 +280,8 @@ def serve_layout():
             build_chat_fab(),
             dbc.Row(
                 [
-                    dbc.Col(sidebar, xs=12, lg=3, xl=2, className="mb-4 mb-lg-0"),
-                    dbc.Col(main_content, xs=12, lg=9, xl=10),
+                    dbc.Col(sidebar, id="sidebar-col", xs=12, lg=3, xl=2, className="mb-4 mb-lg-0"),
+                    dbc.Col(main_content, id="main-col", xs=12, lg=9, xl=10),
                 ]
             ),
         ],

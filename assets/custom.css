@@ -1,13 +1,36 @@
 
-/* ── Loading overlays — fade suave, sin layout shift ─────────────────────── */
-@keyframes loading-fade-in {
-    from { opacity: 0; transform: translateY(5px); }
-    to   { opacity: 1; transform: translateY(0);   }
+/* ── Loading modal — backdrop blur + card centrada ───────────────────────── */
+@keyframes loader-card-in {
+    from { opacity: 0; transform: translate(-50%, -54%); }
+    to   { opacity: 1; transform: translate(-50%, -50%); }
+}
+@keyframes loader-backdrop-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
 }
 
-.loading-spinner-body {
-    min-height: 320px;
-    animation: loading-fade-in 0.22s ease;
+.loader-backdrop {
+    position: fixed;
+    inset: 0;
+    backdrop-filter: blur(3px) brightness(0.97);
+    background: rgba(255, 255, 255, 0.45);
+    z-index: 9990;
+    animation: loader-backdrop-in 0.18s ease;
+}
+
+.loader-card {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 9991;
+    background: white;
+    padding: 1.1rem 1.8rem;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+    display: flex;
+    align-items: center;
+    animation: loader-card-in 0.18s ease;
 }
 
 /* Modal sync — entrada pop fluida (complementa la transición Bootstrap) */
@@ -200,6 +223,38 @@
     font-weight: 600;
     animation: blink 0.75s ease-in-out infinite;
     margin-left: 1px;
+}
+
+/* ── Plotly rangeselector — botones de navegación temporal ──────────────── */
+.rangeselector .button rect {
+    fill: rgba(248, 249, 250, 0.95) !important;
+    stroke: #dee2e6 !important;
+    stroke-width: 1 !important;
+    rx: 6 !important;
+    ry: 6 !important;
+}
+.rangeselector .button:hover rect {
+    fill: #e8effc !important;
+    stroke: #b3c8f5 !important;
+}
+.rangeselector .button.active rect,
+.rangeselector .button[data-active] rect {
+    fill: #0052CC !important;
+    stroke: #0052CC !important;
+}
+.rangeselector .button text {
+    fill: #495057 !important;
+    font-size: 11px !important;
+    font-family: inherit !important;
+    font-weight: 500 !important;
+}
+.rangeselector .button:hover text {
+    fill: #0052CC !important;
+}
+.rangeselector .button.active text,
+.rangeselector .button[data-active] text {
+    fill: #ffffff !important;
+    font-weight: 600 !important;
 }
 
 /* ── Chat markdown — tipografía limpia dentro de burbujas ────────────────── */

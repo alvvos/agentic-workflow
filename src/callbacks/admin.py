@@ -959,3 +959,13 @@ def save_zone_hierarchy(n_clicks, parent_values, zone_ids, visible_values, signa
         "success",
         (signal or 0) + 1,
     )
+
+
+@app.callback(
+    Output("modal-admin-panel", "is_open"),
+    Input("btn-admin-panel", "n_clicks"),
+    State("modal-admin-panel", "is_open"),
+    prevent_initial_call=True,
+)
+def toggle_admin_panel(n, is_open):
+    return not is_open
