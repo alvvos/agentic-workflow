@@ -142,7 +142,7 @@ def validar(location_uuid: str) -> QualityResult:
 
     row = conn.execute(
         "SELECT nombre, direccion, ciudad, provincia, pais_codigo, "
-        "codigo_postal, country_code, lat, lon "
+        "codigo_postal, lat, lon "
         "FROM ubicaciones WHERE ubicacion_id = ?",
         [location_uuid],
     ).fetchone()
@@ -155,13 +155,13 @@ def validar(location_uuid: str) -> QualityResult:
             issues=[f"ubicacion_id '{location_uuid}' no encontrado en ubicaciones"],
         )
 
-    nombre, direccion, ciudad, provincia, pais_codigo, cp, country_code, lat, lon = row
+    nombre, direccion, ciudad, provincia, pais_codigo, cp, lat, lon = row
     issues: list[str] = []
     warnings: list[str] = []
 
     # ── Checks de metadatos ────────────────────────────────────────────────────
 
-    pais_efectivo = pais_codigo or country_code or ""
+    pais_efectivo = pais_codigo or ""
     if not pais_efectivo or pais_efectivo == "XX":
         issues.append(
             f"pais_codigo inválido ('{pais_efectivo}') — "
