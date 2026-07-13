@@ -10,10 +10,9 @@ from src.core import data_master
 from src.core.config import app
 from src.core.data_master import mapa_tiendas, mapa_zonas
 from src.data_processing.data_radar import generar_tabla_auditoria
-from src.data_processing.geo_enrichment import get_geo_vals
 from src.db.queries import get_df_visitas
 from src.models.anomalys import generar_panel_bi_completo
-from src.reporting.geo_panel import generar_mapa_contexto
+from src.reporting.health_check import generar_panel_pm
 
 
 @app.callback(
@@ -52,12 +51,7 @@ def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, pm_ventana
         else "SinNombre"
     )
 
-    mapas = [
-        m
-        for loc in (locs or [])
-        if (m := generar_mapa_contexto(loc, get_geo_vals(loc))) is not None
-    ]
-    informe_ejecutivo = html.Div(mapas) if mapas else html.Div()
+    informe_ejecutivo = generar_panel_pm(df, locs, [], ventana=pm_ventana or "semana")
 
     hoy = datetime.today().date()
     start = end = pd.to_datetime(hoy - timedelta(days=1))

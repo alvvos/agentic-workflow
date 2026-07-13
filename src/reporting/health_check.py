@@ -4752,8 +4752,6 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
             )
         )
 
-    zonas_data_top = [z for z in zonas_data if z["zona"] not in child_zone_names] or zonas_data
-
     # ── Health status ────────────────────────────────────────────────────
     if puntos >= 1:
         health_label, badge_color = "Tendencia positiva", "success"
@@ -4777,22 +4775,6 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
 
     # ── Eventos de alto impacto (para narrativa) ─────────────────────────
     # Arranca 2×dias_v atrás para cubrir también el período de comparación
-    fmin_p_narr = fecha_max - timedelta(days=2 * dias_v - 1)
-    eventos_narr = (
-        _eventos_narrativa(location_uuid, fmin_p_narr, fecha_max) if location_uuid else None
-    )
-
-    # ── Narrativa ────────────────────────────────────────────────────────
-    items_narrativa = _narrativa(
-        zonas_data_top,
-        fecha_max,
-        clima,
-        ventana=ventana,
-        geo_vals=geo_vals_loc,
-        location_uuid=location_uuid,
-        eventos=eventos_narr,
-    )
-
     # ── Header ───────────────────────────────────────────────────────────
     header = dbc.Card(
         dbc.CardBody(
@@ -4887,29 +4869,6 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
         className="d-none d-print-block",
     )
 
-    # ── Narrativa (briefing siempre visible) ─────────────────────────────
-
-    narrativa = html.Div(
-        [
-            html.H5(
-                [html.I(className="fas fa-comment-dots me-2 text-primary"), "Resumen ejecutivo"],
-                className="fw-bold mb-1",
-                style={"fontSize": "1.05rem", "color": _C_DARK},
-            ),
-            html.P(
-                (
-                    "Análisis de los últimos 28 días vs los 28 días anteriores."
-                    if ventana == "mes"
-                    else "Análisis de los últimos 7 días vs los 7 días anteriores."
-                ),
-                className="text-muted mb-2",
-                style={"fontSize": "0.84rem"},
-            ),
-            _render_narrativa(items_narrativa),
-        ],
-        className="mb-3",
-    )
-
     # ── Contenidos de las secciones desplegables ──────────────────────────
 
     _ventana_zona_lbl = "últimos 28 días" if ventana == "mes" else "últimos 7 días"
@@ -5002,17 +4961,7 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
         className="pm-acordeon shadow-sm rounded-4",
     )
 
-    cuerpo_superior = (
-        dbc.Row(
-            [
-                dbc.Col(narrativa, xs=12, lg=6, className="mb-3 mb-lg-0"),
-                dbc.Col(mapa_contexto, xs=12, lg=6),
-            ],
-            className="mb-3 align-items-start",
-        )
-        if mapa_contexto
-        else html.Div([narrativa], className="mb-3")
-    )
+    cuerpo_superior = html.Div(mapa_contexto, className="mb-3") if mapa_contexto else html.Div()
 
     return html.Div(
         [
