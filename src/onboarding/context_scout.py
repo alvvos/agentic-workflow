@@ -658,7 +658,7 @@ def registrar_fuentes(result: ScoutResult) -> ScoutResult:
             conn.execute(
                 """
                 INSERT INTO señales
-                  (señal_id, source, categoria, org_applicability,
+                  (señal_id, fuente, categoria, org_applicability,
                    location_applicability, status, notas, registrado_en)
                 VALUES (?, ?, ?, ?, ?, 'incompleto', ?, ?)
                 """,
