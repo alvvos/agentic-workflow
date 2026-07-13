@@ -48,10 +48,14 @@ def _sync_arbol_aitanna() -> int:
             continue
 
         org_nombre = org.get("name", "")
+        # Infiere país del nombre de la org o usa 'ES' como default
+        org_pais = (
+            "MX" if "méxico" in org_nombre.lower() or "mexico" in org_nombre.lower() else "ES"
+        )
         conn.execute(
-            "INSERT INTO organizaciones (org_id, nombre) VALUES (%s, %s)"
+            "INSERT INTO organizaciones (org_id, nombre, pais_codigo) VALUES (%s, %s, %s)"
             " ON CONFLICT (org_id) DO UPDATE SET nombre = EXCLUDED.nombre",
-            [org_uuid, org_nombre],
+            [org_uuid, org_nombre, org_pais],
         )
 
         for loc in org.get("locations", []):
