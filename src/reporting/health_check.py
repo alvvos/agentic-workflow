@@ -708,7 +708,7 @@ def _veredictos_contexto(
     def _descartar(noun: str, icon: str, dato: str = "") -> None:
         nonlocal prev_neg
         if prev_neg:
-            t = f"{noun} tampoco"
+            t = f"{noun} tampoco explica {vd}"
         else:
             t = f"{noun} no explica {vd}"
         t += f" ({dato})." if dato else "."
@@ -747,67 +747,80 @@ def _veredictos_contexto(
                     f"{n_act} día{_pl(n_act)} vs. {n_ant} anterior",
                 )
 
-        # ── Calor ─────────────────────────────────────────────────────────────
-        n_act = sum(
+        # ── Temperatura (calor + frío combinados) ─────────────────────────────
+        def _avg(key, s, e):
+            vals = [v.get(key) for k, v in clima.items() if s <= k <= e and v.get(key) is not None]
+            return sum(vals) / len(vals) if vals else None
+
+        tmax_act = _avg("tmax", s_act, e_act)
+        tmax_ant = _avg("tmax", s_ant, e_ant)
+        tmin_act = _avg("tmin", s_act, e_act)
+        tmin_ant = _avg("tmin", s_ant, e_ant)
+
+        dias_calor_act = sum(
             1 for k, v in clima.items() if s_act <= k <= e_act and (v.get("tmax") or 0) >= 30
         )
-        n_ant = sum(
+        dias_calor_ant = sum(
             1 for k, v in clima.items() if s_ant <= k <= e_ant and (v.get("tmax") or 0) >= 30
         )
-        if n_act > 0 or n_ant > 0:
-            if (dg < 0 and n_act - n_ant >= 2) or (dg > 0 and n_ant - n_act >= 2):
-                if dg < 0:
-                    _confirmar(
-                        "warning",
-                        "fas fa-sun",
-                        f"El calor extremo frenó la afluencia: {n_act} día{_pl(n_act)} "
-                        f"con Tmax ≥30°C frente a {n_ant} en el período anterior.",
-                    )
-                else:
-                    _confirmar(
-                        "secondary",
-                        "fas fa-sun",
-                        f"La menor incidencia de calor extremo favoreció el crecimiento "
-                        f"({n_act} día{_pl(n_act)} vs. {n_ant} anterior).",
-                    )
-            else:
-                _descartar(
-                    "El calor", "fas fa-sun", f"{n_act} día{_pl(n_act)} ≥30°C vs. {n_ant} anterior"
-                )
-
-        # ── Frío ──────────────────────────────────────────────────────────────
-        n_act = sum(
+        dias_frio_act = sum(
             1
             for k, v in clima.items()
             if s_act <= k <= e_act and v.get("tmax") is not None and v["tmax"] < 12
         )
-        n_ant = sum(
+        dias_frio_ant = sum(
             1
             for k, v in clima.items()
             if s_ant <= k <= e_ant and v.get("tmax") is not None and v["tmax"] < 12
         )
-        if n_act > 0 or n_ant > 0:
-            if (dg < 0 and n_act - n_ant >= 2) or (dg > 0 and n_ant - n_act >= 2):
-                if dg < 0:
-                    _confirmar(
-                        "warning",
-                        "fas fa-snowflake",
-                        f"El frío frenó la afluencia: {n_act} día{_pl(n_act)} "
-                        f"con Tmax <12°C frente a {n_ant} en el período anterior.",
-                    )
-                else:
-                    _confirmar(
-                        "secondary",
-                        "fas fa-snowflake",
-                        f"La menor incidencia de frío favoreció el crecimiento "
-                        f"({n_act} día{_pl(n_act)} vs. {n_ant} anterior).",
-                    )
-            else:
-                _descartar(
-                    "El frío",
-                    "fas fa-snowflake",
-                    f"{n_act} día{_pl(n_act)} <12°C vs. {n_ant} anterior",
+
+        if tmax_act is not None or tmax_ant is not None:
+            tmx_a = tmax_act or 0
+            tmx_b = tmax_ant or 0
+            tmn_a = tmin_act or 0
+            tmn_b = tmin_ant or 0
+            icon_temp = "fas fa-temperature-half"
+
+            calor_diff = dias_calor_act - dias_calor_ant
+            frio_diff = dias_frio_act - dias_frio_ant
+
+            resumen_temp = (
+                f"temperatura media de {tmx_a:.0f}°C máx./{tmn_a:.0f}°C mín. "
+                f"frente a {tmx_b:.0f}°C máx./{tmn_b:.0f}°C mín. en el período anterior"
+            )
+
+            if dg < 0 and calor_diff >= 2:
+                _confirmar(
+                    "warning",
+                    "fas fa-sun",
+                    f"El calor extremo contribuyó al descenso: {dias_calor_act} día{_pl(dias_calor_act)} "
+                    f"con Tmax ≥30°C frente a {dias_calor_ant} en el período anterior "
+                    f"({tmx_a:.0f}°C máx. vs. {tmx_b:.0f}°C).",
                 )
+            elif dg > 0 and calor_diff <= -2:
+                _confirmar(
+                    "secondary",
+                    "fas fa-sun",
+                    f"Las temperaturas más suaves favorecieron el crecimiento: "
+                    f"{dias_calor_act} día{_pl(dias_calor_act)} ≥30°C frente a {dias_calor_ant} en el período anterior.",
+                )
+            elif dg < 0 and frio_diff >= 2:
+                _confirmar(
+                    "warning",
+                    "fas fa-snowflake",
+                    f"El frío contribuyó al descenso: {dias_frio_act} día{_pl(dias_frio_act)} "
+                    f"con Tmax <12°C frente a {dias_frio_ant} en el período anterior "
+                    f"({tmx_a:.0f}°C máx. vs. {tmx_b:.0f}°C).",
+                )
+            elif dg > 0 and frio_diff <= -2:
+                _confirmar(
+                    "secondary",
+                    "fas fa-snowflake",
+                    f"La mejoría del tiempo favoreció el crecimiento: "
+                    f"{dias_frio_act} día{_pl(dias_frio_act)} <12°C frente a {dias_frio_ant} en el período anterior.",
+                )
+            else:
+                _descartar("La temperatura", icon_temp, resumen_temp)
 
     # ── Festivos ──────────────────────────────────────────────────────────────
     n_act = sum(1 for f in festivos_espana if isinstance(f, date) and fmin_act <= f <= fmax_act)
@@ -896,52 +909,153 @@ def _veredictos_contexto(
                         f"{n_cr_act} escala{_pl(n_cr_act)} vs. {n_cr_ant} anterior",
                     )
 
-    # ── Señales propias de la ubicación ──────────────────────────────────────
+    # ── Señales propias de la ubicación — agrupadas por familia ─────────────
+    _FAMILIAS = [
+        {
+            "key": "metro",
+            "patterns": ["afluencia_metro"],
+            "label": "La afluencia al metro en la zona",
+            "icon": "fas fa-train-subway",
+            "agg": "sum",
+        },
+        {
+            "key": "conciertos",
+            "patterns": ["ev_rank_concierto", "concierto", "tm_concierto", "estreno", "wizink"],
+            "label": "La actividad de conciertos y espectáculos",
+            "icon": "fas fa-music",
+            "agg": "max",
+        },
+        {
+            "key": "deportivo",
+            "patterns": ["ev_rank_deportivo", "deportivo", "partido", "tm_deportivo"],
+            "label": "La actividad deportiva en el entorno",
+            "icon": "fas fa-futbol",
+            "agg": "max",
+        },
+        {
+            "key": "festival",
+            "patterns": ["ev_rank_festival", "festival", "tm_festival"],
+            "label": "La actividad festivalera",
+            "icon": "fas fa-star",
+            "agg": "max",
+        },
+        {
+            "key": "municipal",
+            "patterns": ["ev_rank_municipal", "municipal", "manifestacion"],
+            "label": "Los eventos municipales y movilizaciones",
+            "icon": "fas fa-city",
+            "agg": "max",
+        },
+        {
+            "key": "turismo",
+            "patterns": ["viajeros_hoteleros", "turistas_isocrona", "ine_viajeros", "n_turistas"],
+            "label": "Los indicadores de turismo",
+            "icon": "fas fa-passport",
+            "agg": "sum",
+        },
+        {
+            "key": "crucero",
+            "patterns": ["crucero", "n_pasajeros"],
+            "skip": True,
+        },
+    ]
+
+    def _qualitative(rel: float) -> str:
+        a = abs(rel)
+        if a < 0.05:
+            return "similar"
+        if a < 0.15:
+            return "algo superior" if rel > 0 else "algo inferior"
+        if a < 0.35:
+            return "sensiblemente superior" if rel > 0 else "sensiblemente inferior"
+        return "muy superior" if rel > 0 else "muy inferior"
+
     if location_uuid:
         try:
             from src.db.queries import get_señal_diaria, get_señales_propias_meta
 
             propias = get_señales_propias_meta(location_uuid)
-            for señal_id, meta in propias.items():
-                label = meta.get("label", señal_id)
-                icon = meta.get("icon_cls", "fas fa-satellite-dish")
-                agg_fn = meta.get("agg_fn", "sum")
-                serie = get_señal_diaria(
-                    location_uuid,
-                    señal_id,
-                    pd.Timestamp(fmin_ant),
-                    pd.Timestamp(fmax_act),
-                )
-                if serie.empty or (serie == 0).all():
+            matched: set[str] = set()
+
+            for familia in _FAMILIAS:
+                if familia.get("skip"):
                     continue
-                act_vals = serie[pd.Timestamp(fmin_act) : pd.Timestamp(fmax_act)]
-                ant_vals = serie[pd.Timestamp(fmin_ant) : pd.Timestamp(fmax_ant)]
-                if agg_fn == "mean":
-                    val_act = float(act_vals.mean()) if not act_vals.empty else 0.0
-                    val_ant = float(ant_vals.mean()) if not ant_vals.empty else 0.0
-                else:
-                    val_act = float(act_vals.sum()) if not act_vals.empty else 0.0
-                    val_ant = float(ant_vals.sum()) if not ant_vals.empty else 0.0
-                if val_act == 0 and val_ant == 0:
+                patterns = familia["patterns"]
+                señales_familia = [
+                    (sid, meta)
+                    for sid, meta in propias.items()
+                    if sid not in matched and any(p in sid for p in patterns)
+                ]
+                if not señales_familia:
                     continue
-                rel_diff = (val_act - val_ant) / max(abs(val_ant), 1)
-                if (dg > 0 and rel_diff >= 0.20) or (dg < 0 and rel_diff <= -0.20):
+
+                agg_fn = familia["agg"]
+                vals_act_familia: list[float] = []
+                vals_ant_familia: list[float] = []
+
+                for sid, meta in señales_familia:
+                    matched.add(sid)
+                    fn = meta.get("agg_fn", agg_fn)
+                    serie = get_señal_diaria(
+                        location_uuid,
+                        sid,
+                        pd.Timestamp(fmin_ant),
+                        pd.Timestamp(fmax_act),
+                    )
+                    if serie.empty or (serie == 0).all():
+                        continue
+                    act_s = serie[pd.Timestamp(fmin_act) : pd.Timestamp(fmax_act)]
+                    ant_s = serie[pd.Timestamp(fmin_ant) : pd.Timestamp(fmax_ant)]
+                    if fn == "mean":
+                        vals_act_familia.append(float(act_s.mean()) if not act_s.empty else 0.0)
+                        vals_ant_familia.append(float(ant_s.mean()) if not ant_s.empty else 0.0)
+                    elif fn == "max":
+                        vals_act_familia.append(float(act_s.max()) if not act_s.empty else 0.0)
+                        vals_ant_familia.append(float(ant_s.max()) if not ant_s.empty else 0.0)
+                    else:
+                        vals_act_familia.append(float(act_s.sum()) if not act_s.empty else 0.0)
+                        vals_ant_familia.append(float(ant_s.sum()) if not ant_s.empty else 0.0)
+
+                if not vals_act_familia:
+                    continue
+
+                v_act = sum(vals_act_familia)
+                v_ant = sum(vals_ant_familia)
+                if v_act == 0 and v_ant == 0:
+                    continue
+
+                rel = (v_act - v_ant) / max(abs(v_ant), 1)
+                label_f = familia["label"]
+                icon_f = familia["icon"]
+                qual = _qualitative(rel)
+
+                if (dg > 0 and rel >= 0.15) or (dg < 0 and rel <= -0.15):
                     if dg > 0:
                         _confirmar(
                             "success",
-                            icon,
-                            f"{label} impulsó el crecimiento "
-                            f"({val_act:.0f} vs. {val_ant:.0f} en el período anterior).",
+                            icon_f,
+                            f"{label_f} fue {qual} al período anterior, "
+                            f"lo que contribuyó a impulsar el crecimiento.",
                         )
                     else:
                         _confirmar(
                             "warning",
-                            icon,
-                            f"{label} contribuyó al descenso "
-                            f"({val_act:.0f} vs. {val_ant:.0f} en el período anterior).",
+                            icon_f,
+                            f"{label_f} fue {qual} al período anterior, "
+                            f"lo que presionó la afluencia a la baja.",
                         )
+                elif abs(rel) < 0.05:
+                    _descartar(
+                        label_f,
+                        icon_f,
+                        f"actividad {qual} al período anterior",
+                    )
                 else:
-                    _descartar(label, icon, f"{val_act:.0f} vs. {val_ant:.0f} anterior")
+                    _descartar(
+                        label_f,
+                        icon_f,
+                        f"actividad {qual} al período anterior",
+                    )
         except Exception:
             pass
 
