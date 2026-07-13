@@ -68,20 +68,58 @@ def _limpiar(s: str) -> str:
     return re.sub(r"\s+", " ", str(s or "").replace("\xa0", " ")).strip()
 
 
+_STREET_TYPES = re.compile(
+    r"\b(av\.|avda\.|avenida|c\.|calle|paseo|pso\.|gran\s+via|glorieta|ronda|plaza|plz\.|po\.)[\s,]",
+    re.IGNORECASE,
+)
+
+
+def _strip_commercial_prefix(address: str) -> str:
+    """Elimina el nombre del CC del inicio de la dirección si precede a una vía postal."""
+    m = _STREET_TYPES.search(address)
+    if m and m.start() > 0:
+        return address[m.start() :]
+    return address
+
+
 def _candidatos(nombre, address, city, post_code):
-    """Genera hasta 3 queries para Nominatim, de más a menos específica."""
+    """Genera hasta 4 queries para Nominatim, de más a menos específica."""
     parts = [_limpiar(x) for x in (address, city, post_code)]
     address, city, post_code = parts
 
+    address_clean = _strip_commercial_prefix(address)
+
     candidatos = []
-    q = ", ".join(p for p in (address, city, post_code) if p)
-    if q:
-        candidatos.append(q)
-    if address and address not in candidatos:
-        candidatos.append(address)
-    q3 = ", ".join(p for p in (_limpiar(nombre), city) if p)
-    if q3 and q3 not in candidatos:
-        candidatos.append(q3)
+
+    # Q1: dirección limpia + extras (evita duplicar ciudad/cp si ya están en la dirección)
+    cp_ya_presente = bool(post_code and post_code in address_clean)
+    city_ya_presente = bool(city and city.lower() in address_clean.lower())
+    extras = [
+        p
+        for p in (
+            city if not city_ya_presente else "",
+            post_code if not cp_ya_presente else "",
+        )
+        if p
+    ]
+    q1 = ", ".join(p for p in ([address_clean] + extras) if p)
+    if q1:
+        candidatos.append(q1)
+
+    # Q2: dirección original completa con ciudad y cp
+    q2 = ", ".join(p for p in (address, city, post_code) if p)
+    if q2 and q2 not in candidatos:
+        candidatos.append(q2)
+
+    # Q3: solo dirección limpia (sin duplicados)
+    if address_clean and address_clean not in candidatos:
+        candidatos.append(address_clean)
+
+    # Q4: nombre del local + ciudad (último recurso)
+    q4 = ", ".join(p for p in (_limpiar(nombre), city) if p)
+    if q4 and q4 not in candidatos:
+        candidatos.append(q4)
+
     return candidatos
 
 
