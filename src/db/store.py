@@ -34,21 +34,24 @@ _DDL_LOCK = threading.Lock()
 
 
 def _build_pool() -> ConnectionPool:
+    pool_timeout = float(os.getenv("DB_POOL_TIMEOUT", "30"))
     conninfo = (
         f"host={os.getenv('DB_HOST', 'localhost')} "
         f"port={os.getenv('DB_PORT', '5432')} "
         f"user={os.getenv('DB_USER', 'agentic')} "
         f"password={os.getenv('DB_PASSWORD', '')} "
         f"dbname={os.getenv('DB_NAME', 'agentic')} "
-        f"connect_timeout=10"
+        f"connect_timeout={min(int(pool_timeout), 10)}"
     )
     pool = ConnectionPool(
         conninfo,
         min_size=1,
         max_size=int(os.getenv("DB_POOL_MAX", "10")),
+        timeout=pool_timeout,
+        reconnect_timeout=pool_timeout,
         open=False,
     )
-    pool.open()
+    pool.open(wait=True, timeout=pool_timeout)
     atexit.register(pool.close)
     return pool
 

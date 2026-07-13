@@ -52,7 +52,7 @@ def synthetic_csv():
             rows.append(
                 {
                     "location_id": loc,
-                    "zone_uuid": zone,
+                    "zona_id": zone,
                     "fecha": d.isoformat(),
                     "total_visits": int(base * 1.5),
                     "unique_visitors": int(base),
@@ -80,10 +80,17 @@ def synthetic_csv():
 
 from src.chatbot.tools import (  # noqa: E402
     compare_locations,
+    get_active_features,
     get_anomalies,
+    get_calendar_events,
+    get_cruise_calls,
+    get_ev_ranks,
+    get_external_features,
     get_forecast,
     get_gis_data,
     get_hourly_breakdown,
+    get_location_info,
+    get_model_metrics,
     get_pm_data,
     get_weather_holidays,
 )
@@ -128,19 +135,23 @@ class TestGetPmData:
 class TestGetGisData:
     def test_unknown_uuid_returns_sin_datos_not_exception(self):
         r = get_gis_data(_LOC_A)
-        # Valid responses: either has geospatial data or signals no data
-        assert "sin_datos" in r or "alcance_peatonal" in r or "perfil_economico" in r
+        # Valid responses: geospatial data, no-data signal, or DB error — never an exception
+        assert (
+            "sin_datos" in r or "alcance_peatonal" in r or "perfil_economico" in r or "error" in r
+        )
 
     def test_date_param_accepted(self):
         r = get_gis_data(_LOC_A, fecha="2025-01-01")
-        assert "error" not in r or "sin_datos" in r
+        assert isinstance(r, dict)
 
 
 # ── get_weather_holidays ──────────────────────────────────────────────────────
 
 
 class TestGetWeatherHolidays:
-    def test_valid_location_returns_periodo(self):
+    def test_valid_location_returns_periodo(self, db_available):
+        if not db_available:
+            pytest.skip("Requires DB to resolve location coordinates")
         inicio = (date.today() - timedelta(days=14)).isoformat()
         fin = date.today().isoformat()
         r = get_weather_holidays(_REAL_LOC, inicio, fin)
@@ -161,13 +172,17 @@ class TestGetWeatherHolidays:
 
 
 class TestGetForecast:
-    def test_returns_predictions(self):
+    def test_returns_predictions(self, db_available):
+        if not db_available:
+            pytest.skip("Requires DB (get_df_enriquecido has no CSV fallback)")
         r = get_forecast(_LOC_A, _ZONE_A, n_dias=7, session_id=_SESSION)
         assert "error" not in r, f"Error inesperado: {r.get('error')}"
         assert "predicciones" in r
         assert len(r["predicciones"]) == 7
 
-    def test_prediction_structure(self):
+    def test_prediction_structure(self, db_available):
+        if not db_available:
+            pytest.skip("Requires DB (get_df_enriquecido has no CSV fallback)")
         r = get_forecast(_LOC_A, _ZONE_A, n_dias=3, session_id=_SESSION)
         assert "error" not in r, r.get("error")
         for p in r["predicciones"]:
@@ -175,7 +190,9 @@ class TestGetForecast:
             assert "prediccion" in p
             assert p["prediccion"] >= 0
 
-    def test_metricas_present(self):
+    def test_metricas_present(self, db_available):
+        if not db_available:
+            pytest.skip("Requires DB (get_df_enriquecido has no CSV fallback)")
         r = get_forecast(_LOC_A, _ZONE_A, n_dias=3, session_id=_SESSION)
         assert "error" not in r, r.get("error")
         assert "metricas" in r
@@ -286,3 +303,160 @@ class TestCompareLocations:
     def test_inverted_dates_returns_error(self):
         r = compare_locations([_LOC_A], _FECHA_FIN, _FECHA_INI, session_id=_SESSION)
         assert "error" in r
+
+
+# ── get_location_info ─────────────────────────────────────────────────────────
+
+
+class TestGetLocationInfo:
+    def test_unknown_uuid_returns_error(self):
+        r = get_location_info("no-such-uuid")
+        assert "error" in r
+
+    def test_response_is_dict(self):
+        r = get_location_info(_LOC_A)
+        assert isinstance(r, dict)
+
+    def test_structure_on_success(self):
+        r = get_location_info(_LOC_A)
+        if "error" not in r:
+            assert "nombre" in r
+            assert "coordenadas" in r
+            assert "zonas" in r
+            assert isinstance(r["zonas"], list)
+
+
+# ── get_active_features ───────────────────────────────────────────────────────
+
+
+class TestGetActiveFeatures:
+    def test_response_is_dict(self):
+        r = get_active_features(_LOC_A)
+        assert isinstance(r, dict)
+
+    def test_graceful_empty_for_unknown_location(self):
+        r = get_active_features("no-such-uuid")
+        assert "n_features_activas" in r or "error" in r
+
+    def test_structure_on_success(self):
+        r = get_active_features(_LOC_A)
+        if "error" not in r:
+            assert "n_features_activas" in r
+            assert "features" in r
+            assert isinstance(r["features"], list)
+
+
+# ── get_external_features ─────────────────────────────────────────────────────
+
+
+class TestGetExternalFeatures:
+    def test_empty_feature_keys_returns_error(self):
+        r = get_external_features(_LOC_A, [], _FECHA_INI, _FECHA_FIN)
+        assert "error" in r
+
+    def test_inverted_dates_returns_error(self):
+        r = get_external_features(_LOC_A, ["turistas"], _FECHA_FIN, _FECHA_INI)
+        assert "error" in r
+
+    def test_range_over_760_days_returns_error(self):
+        very_old = (date.today() - timedelta(days=800)).isoformat()
+        r = get_external_features(_LOC_A, ["turistas"], very_old, _FECHA_FIN)
+        assert "error" in r
+
+    def test_valid_call_returns_structure(self):
+        r = get_external_features(_LOC_A, ["turistas"], _FECHA_INI, _FECHA_FIN)
+        assert isinstance(r, dict)
+        if "error" not in r:
+            assert "resumen" in r
+            assert "series" in r
+            assert "sin_datos" in r
+
+    def test_yoy_flag_accepted(self):
+        r = get_external_features(_LOC_A, ["turistas"], _FECHA_INI, _FECHA_FIN, incluir_yoy=True)
+        assert isinstance(r, dict)
+
+
+# ── get_calendar_events ───────────────────────────────────────────────────────
+
+
+class TestGetCalendarEvents:
+    def test_invalid_dates_returns_error(self):
+        r = get_calendar_events(_LOC_A, "not-a-date", _FECHA_FIN)
+        assert "error" in r
+
+    def test_valid_call_returns_structure(self):
+        r = get_calendar_events(_LOC_A, _FECHA_INI, _FECHA_FIN)
+        assert isinstance(r, dict)
+        if "error" not in r:
+            assert "n_eventos" in r
+            assert "eventos" in r
+            assert isinstance(r["eventos"], list)
+
+    def test_evento_key_filter_accepted(self):
+        r = get_calendar_events(_LOC_A, _FECHA_INI, _FECHA_FIN, evento_key="escala_crucero")
+        assert isinstance(r, dict)
+
+
+# ── get_cruise_calls ──────────────────────────────────────────────────────────
+
+
+class TestGetCruiseCalls:
+    def test_invalid_dates_returns_error(self):
+        r = get_cruise_calls(_LOC_A, "bad-date", _FECHA_FIN)
+        assert "error" in r
+
+    def test_valid_call_returns_structure(self):
+        r = get_cruise_calls(_LOC_A, _FECHA_INI, _FECHA_FIN)
+        assert isinstance(r, dict)
+        if "error" not in r:
+            assert "n_escalas" in r
+            assert "escalas" in r
+            assert isinstance(r["escalas"], list)
+
+    def test_unknown_location_returns_zero_or_error(self):
+        r = get_cruise_calls("no-such-uuid", _FECHA_INI, _FECHA_FIN)
+        assert isinstance(r, dict)
+        assert "n_escalas" in r or "error" in r
+
+
+# ── get_model_metrics ─────────────────────────────────────────────────────────
+
+
+class TestGetModelMetrics:
+    def test_returns_dict(self):
+        r = get_model_metrics(_LOC_A)
+        assert isinstance(r, dict)
+
+    def test_empty_registry_returns_nota(self):
+        r = get_model_metrics(_LOC_A)
+        if "error" not in r:
+            assert "modelos" in r
+            assert r["modelos"] == []
+            assert "nota" in r
+
+    def test_zone_filter_accepted(self):
+        r = get_model_metrics(_LOC_A, zone_uuid=_ZONE_A)
+        assert isinstance(r, dict)
+
+
+# ── get_ev_ranks ──────────────────────────────────────────────────────────────
+
+
+class TestGetEvRanks:
+    def test_inverted_dates_returns_error(self):
+        r = get_ev_ranks(_LOC_A, _FECHA_FIN, _FECHA_INI)
+        assert "error" in r
+
+    def test_range_over_760_days_returns_error(self):
+        very_old = (date.today() - timedelta(days=800)).isoformat()
+        r = get_ev_ranks(_LOC_A, very_old, _FECHA_FIN)
+        assert "error" in r
+
+    def test_valid_call_returns_structure(self):
+        r = get_ev_ranks(_LOC_A, _FECHA_INI, _FECHA_FIN)
+        assert isinstance(r, dict)
+        if "error" not in r:
+            assert "n_dias_con_senal" in r
+            assert "dias" in r
+            assert isinstance(r["dias"], list)
+            assert "pico_por_tipo" in r

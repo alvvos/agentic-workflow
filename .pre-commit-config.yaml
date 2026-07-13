@@ -32,3 +32,14 @@ repos:
           - --ignore=E501   # longitud de línea la gestiona black
           - --line-length=100
         exclude: ^src/lab/
+
+  # ── Tests (pre-push: sólo antes de git push, no en cada commit) ──────────────
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        stages: [pre-push]
+        entry: pytest tests/ -x -q --tb=short
+        language: system
+        pass_filenames: false
+        always_run: true

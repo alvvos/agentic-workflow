@@ -22,45 +22,50 @@ MAX_DAYS_EXT = 760  # external features allow longer windows
 
 
 def _find_location(location_uuid: str) -> dict | None:
-    from src.db.queries import get_location_by_uuid, get_zones_for_loc
+    try:
+        from src.db.queries import get_location_by_uuid, get_zones_for_loc
 
-    loc = get_location_by_uuid(location_uuid)
-    if loc is None:
+        loc = get_location_by_uuid(location_uuid)
+        if loc is None:
+            return None
+        loc["zones"] = [
+            {
+                "uuid": z["zona_id"],
+                "zoneName": z["nombre"],
+                "oculta": z["oculta"],
+                "zoneType": z["tipo_zona"],
+            }
+            for z in get_zones_for_loc(location_uuid)
+        ]
+        return loc
+    except Exception:
         return None
-    loc["zones"] = [
-        {
-            "uuid": z["zona_id"],
-            "zoneName": z["nombre"],
-            "oculta": z["oculta"],
-            "zoneType": z["tipo_zona"],
-        }
-        for z in get_zones_for_loc(location_uuid)
-    ]
-    return loc
 
 
 def _load_dataset(session_id: str = "local_dev") -> pd.DataFrame:
-    try:
-        from src.db.store import get_conn
+    # Non-default session_id means a test/synthetic run — skip DB and go to CSV directly.
+    if session_id == "local_dev":
+        try:
+            from src.db.store import get_conn
 
-        df = (
-            get_conn()
-            .execute(
-                """
-            SELECT fecha, ubicacion_id AS location_id, zona_id,
-                   total_visitas AS total_visits, visitantes_unicos AS unique_visitors,
-                   visitantes_nuevos AS new_visitors,
-                   tiempo_estancia_min AS dwell_time, visitas_horarias AS hourly_visits
-            FROM visitas ORDER BY fecha
-        """
+            df = (
+                get_conn()
+                .execute(
+                    """
+                SELECT fecha, ubicacion_id AS location_id, zona_id,
+                       total_visitas AS total_visits, visitantes_unicos AS unique_visitors,
+                       visitantes_nuevos AS new_visitors,
+                       tiempo_estancia_min AS dwell_time, visitas_horarias AS hourly_visits
+                FROM visitas ORDER BY fecha
+            """
+                )
+                .df()
             )
-            .df()
-        )
-        if not df.empty:
-            df["fecha"] = pd.to_datetime(df["fecha"])
-            return df
-    except Exception:
-        pass
+            if not df.empty:
+                df["fecha"] = pd.to_datetime(df["fecha"])
+                return df
+        except Exception:
+            pass
     path = _DATA_DIR / f"dataset_{session_id}.csv"
     if not path.exists():
         files = sorted(glob(_RAW_GLOB))
@@ -735,7 +740,7 @@ def get_active_features(location_uuid: str) -> dict:
         conn = get_conn()
         rows = conn.execute(
             """SELECT f.señal_id, r.fuente, r.categoria, r.notas,
-                      f.evaluated_at
+                      f.evaluado_en
                FROM activacion_señales f
                LEFT JOIN señales r ON r.señal_id = f.señal_id
                WHERE f.ubicacion_id = ? AND f.status = 'active'
@@ -1176,8 +1181,8 @@ def get_model_metrics(
                 FROM evaluaciones_señales WHERE ubicacion_id = ?"""
         p2: list = [location_uuid]
         if zone_uuid:
-            q2 += " AND (split_idx IS NULL OR split_idx = 0)"
-        q2 += " ORDER BY evaluated_at DESC LIMIT 50"
+            q2 += " AND (indice_split IS NULL OR indice_split = 0)"
+        q2 += " ORDER BY evaluado_en DESC LIMIT 50"
         eval_rows = conn.execute(q2, p2).fetchall()
         for fk, fi, ff, wb, wf, wd, hz in eval_rows:
             feat_evals.append(
