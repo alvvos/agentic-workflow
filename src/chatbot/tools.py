@@ -1296,3 +1296,144 @@ def get_ev_ranks(
         "pico_por_tipo": picos,
         "dias": dias_con_senal,
     }
+
+
+# ── Herramienta 15: get_dwell_profile ────────────────────────────────────────
+
+
+def get_dwell_profile(
+    location_uuid: str,
+    fecha_inicio: str,
+    fecha_fin: str,
+    zone_uuid: str | None = None,
+) -> dict:
+    """
+    Devuelve el perfil completo de permanencia y fidelización de visitantes
+    para una ubicación en un rango de fechas.
+
+    Permanencia (dwellTime):
+      - media_estancia_seg: media del periodo (en segundos)
+      - boxplot: distribución {min, Q1, mediana, Q3, max} del último día
+        con datos — en minutos. Revela si la media está distorsionada por
+        outliers (ej. Q1=1min, Q3=5min, max=11min con media aparente de 5min).
+
+    Fidelización (frecuency histograms):
+      Cuántos visitantes únicos vinieron 1 vez, 2 veces o 3+ en cada ventana:
+      - frecuencia_7d, 28d, mes, anyo: {una_vez, dos_veces, tres_o_mas, pct_retorno}
+      El pct_retorno = visitantes que volvieron al menos una vez / total únicos.
+    """
+    try:
+        t0, t1 = pd.Timestamp(fecha_inicio), pd.Timestamp(fecha_fin)
+    except Exception:
+        return {"error": "Formato de fecha no válido. Usa YYYY-MM-DD."}
+    if t1 < t0:
+        return {"error": "fecha_inicio debe ser anterior a fecha_fin."}
+    if (t1 - t0).days > MAX_DAYS:
+        return {"error": f"Rango máximo: {MAX_DAYS} días."}
+
+    try:
+        from src.db.store import get_conn
+
+        conn = get_conn()
+        query = """
+            SELECT fecha::text,
+                   tiempo_estancia_min,
+                   boxplot_estancia,
+                   histograma_frecuencia_7d,
+                   histograma_frecuencia_28d,
+                   histograma_frecuencia_mes,
+                   histograma_frecuencia_anyo
+            FROM visitas
+            WHERE ubicacion_id = ?
+              AND fecha >= ? AND fecha <= ?
+        """
+        params: list = [location_uuid, str(t0.date()), str(t1.date())]
+        if zone_uuid:
+            query += " AND zona_id = ?"
+            params.append(zone_uuid)
+        query += " ORDER BY fecha DESC"
+        rows = conn.execute(query, params).fetchall()
+    except Exception as e:
+        return {"error": f"Error al consultar datos de permanencia: {e}"}
+
+    if not rows:
+        return {"error": f"Sin datos para el rango {fecha_inicio}→{fecha_fin}."}
+
+    # Media de estancia del periodo
+    dwell_vals = [r[1] for r in rows if r[1] is not None]
+    media_estancia = round(sum(dwell_vals) / len(dwell_vals), 1) if dwell_vals else None
+
+    # Boxplot del día más reciente con datos
+    boxplot_parsed = None
+    for row in rows:
+        raw = row[2]
+        if raw:
+            try:
+                bp = json.loads(raw) if isinstance(raw, str) else raw
+                if bp:
+                    boxplot_parsed = {
+                        "min_min": bp.get("min"),
+                        "Q1_min": bp.get("Q1"),
+                        "mediana_min": bp.get("median"),
+                        "Q3_min": bp.get("Q3"),
+                        "max_min": bp.get("max"),
+                    }
+                    break
+            except Exception:
+                pass
+
+    def _parse_freq(raw) -> dict | None:
+        if not raw:
+            return None
+        try:
+            h = json.loads(raw) if isinstance(raw, str) else raw
+            if not h:
+                return None
+            una = int(h.get("one", 0) or 0)
+            dos = int(h.get("two", 0) or 0)
+            tres = int(h.get("three_plus", 0) or 0)
+            total = una + dos + tres
+            return {
+                "una_vez": una,
+                "dos_veces": dos,
+                "tres_o_mas": tres,
+                "pct_retorno": round((dos + tres) / total * 100, 1) if total else None,
+            }
+        except Exception:
+            return None
+
+    # Toma el último día con histogramas de frecuencia
+    freq_7d = freq_28d = freq_mes = freq_anyo = None
+    for row in rows:
+        if freq_7d is None:
+            freq_7d = _parse_freq(row[3])
+        if freq_28d is None:
+            freq_28d = _parse_freq(row[4])
+        if freq_mes is None:
+            freq_mes = _parse_freq(row[5])
+        if freq_anyo is None:
+            freq_anyo = _parse_freq(row[6])
+        if all(x is not None for x in [freq_7d, freq_28d, freq_mes, freq_anyo]):
+            break
+
+    loc = _find_location(location_uuid)
+    nombre = loc.get("name", location_uuid) if loc else location_uuid
+
+    result: dict = {
+        "ubicacion": nombre,
+        "periodo": {"inicio": fecha_inicio, "fin": fecha_fin},
+        "dias_con_datos": len(rows),
+        "media_estancia_seg": int(media_estancia) if media_estancia else None,
+    }
+    if boxplot_parsed:
+        result["boxplot_estancia_min"] = boxplot_parsed
+    if freq_7d:
+        result["fidelizacion_7d"] = freq_7d
+    if freq_28d:
+        result["fidelizacion_28d"] = freq_28d
+    if freq_mes:
+        result["fidelizacion_mes"] = freq_mes
+    if freq_anyo:
+        result["fidelizacion_anyo"] = freq_anyo
+
+    return result

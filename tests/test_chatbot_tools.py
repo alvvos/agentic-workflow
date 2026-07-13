@@ -84,6 +84,7 @@ from src.chatbot.tools import (  # noqa: E402
     get_anomalies,
     get_calendar_events,
     get_cruise_calls,
+    get_dwell_profile,
     get_ev_ranks,
     get_external_features,
     get_forecast,
@@ -460,3 +461,37 @@ class TestGetEvRanks:
             assert "dias" in r
             assert isinstance(r["dias"], list)
             assert "pico_por_tipo" in r
+
+
+# ── get_dwell_profile ─────────────────────────────────────────────────────────
+
+
+class TestGetDwellProfile:
+    def test_inverted_dates_returns_error(self):
+        r = get_dwell_profile(_LOC_A, _FECHA_FIN, _FECHA_INI)
+        assert "error" in r
+
+    def test_range_over_90_days_returns_error(self):
+        very_old = (date.today() - timedelta(days=100)).isoformat()
+        r = get_dwell_profile(_LOC_A, very_old, _FECHA_FIN)
+        assert "error" in r
+
+    def test_valid_call_returns_dict(self):
+        r = get_dwell_profile(_LOC_A, _FECHA_INI, _FECHA_FIN)
+        assert isinstance(r, dict)
+
+    def test_structure_on_success(self):
+        r = get_dwell_profile(_LOC_A, _FECHA_INI, _FECHA_FIN)
+        if "error" not in r:
+            assert "dias_con_datos" in r
+            assert "media_estancia_seg" in r
+
+    def test_zone_filter_accepted(self):
+        r = get_dwell_profile(_LOC_A, _FECHA_INI, _FECHA_FIN, zone_uuid=_ZONE_A)
+        assert isinstance(r, dict)
+
+    def test_fidelizacion_pct_retorno_in_range(self):
+        r = get_dwell_profile(_LOC_A, _FECHA_INI, _FECHA_FIN)
+        for key in ("fidelizacion_7d", "fidelizacion_28d", "fidelizacion_mes", "fidelizacion_anyo"):
+            if key in r and r[key] and r[key].get("pct_retorno") is not None:
+                assert 0 <= r[key]["pct_retorno"] <= 100

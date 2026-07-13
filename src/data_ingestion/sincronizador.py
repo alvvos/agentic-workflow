@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -52,8 +53,11 @@ def _upsert_visitas(rows: list) -> None:
              total_visitas, visitantes_unicos, visitantes_nuevos,
              unicos_7d, unicos_28d, unicos_mes, unicos_anyo,
              frecuencia_7d, frecuencia_28d, frecuencia_mes, frecuencia_anyo,
-             tiempo_estancia_min, histograma_estancia, visitas_horarias)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+             tiempo_estancia_min, histograma_estancia, visitas_horarias,
+             boxplot_estancia,
+             histograma_frecuencia_7d, histograma_frecuencia_28d,
+             histograma_frecuencia_mes, histograma_frecuencia_anyo)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT (fecha, zona_id) DO UPDATE SET
             total_visitas       = excluded.total_visitas,
             visitantes_unicos   = excluded.visitantes_unicos,
@@ -62,9 +66,14 @@ def _upsert_visitas(rows: list) -> None:
             unicos_mes   = excluded.unicos_mes,   unicos_anyo  = excluded.unicos_anyo,
             frecuencia_7d   = excluded.frecuencia_7d,  frecuencia_28d = excluded.frecuencia_28d,
             frecuencia_mes  = excluded.frecuencia_mes, frecuencia_anyo= excluded.frecuencia_anyo,
-            tiempo_estancia_min  = excluded.tiempo_estancia_min,
-            histograma_estancia  = excluded.histograma_estancia,
-            visitas_horarias     = excluded.visitas_horarias
+            tiempo_estancia_min       = excluded.tiempo_estancia_min,
+            histograma_estancia       = excluded.histograma_estancia,
+            visitas_horarias          = excluded.visitas_horarias,
+            boxplot_estancia          = excluded.boxplot_estancia,
+            histograma_frecuencia_7d  = excluded.histograma_frecuencia_7d,
+            histograma_frecuencia_28d = excluded.histograma_frecuencia_28d,
+            histograma_frecuencia_mes = excluded.histograma_frecuencia_mes,
+            histograma_frecuencia_anyo = excluded.histograma_frecuencia_anyo
         """,
         rows,
     )
@@ -177,8 +186,13 @@ def actualizar_datos(
                             float(zona.get("frequencyCurrentMonth", 0.0) or 0),
                             float(zona.get("frequencyCurrentYear", 0.0) or 0),
                             float(zona.get("dwellTime", 0.0) or 0),
-                            str(zona.get("dwellTimeHistogram", [])),
-                            str(hourly_array),
+                            json.dumps(zona.get("dwellTimeHistogram") or []),
+                            json.dumps(hourly_array),
+                            json.dumps(zona.get("boxplot") or {}),
+                            json.dumps(zona.get("frequencyLast7daysHistogram") or {}),
+                            json.dumps(zona.get("frequencyLast28daysHistogram") or {}),
+                            json.dumps(zona.get("frequencyCurrentMonthHistogram") or {}),
+                            json.dumps(zona.get("frequencyCurrentYearHistogram") or {}),
                         )
                     )
 

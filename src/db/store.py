@@ -235,9 +235,14 @@ _DDL: list[str] = [
         frecuencia_28d       DOUBLE PRECISION,
         frecuencia_mes       DOUBLE PRECISION,
         frecuencia_anyo      DOUBLE PRECISION,
-        tiempo_estancia_min  DOUBLE PRECISION,
-        histograma_estancia  TEXT,
-        visitas_horarias     TEXT,
+        tiempo_estancia_min           DOUBLE PRECISION,
+        histograma_estancia           TEXT,
+        visitas_horarias              TEXT,
+        boxplot_estancia              TEXT,
+        histograma_frecuencia_7d      TEXT,
+        histograma_frecuencia_28d     TEXT,
+        histograma_frecuencia_mes     TEXT,
+        histograma_frecuencia_anyo    TEXT,
         PRIMARY KEY (fecha, zona_id)
     )
     """,
@@ -512,6 +517,11 @@ _VISITAS_COLS = [
     ("tiempo_estancia_min", "DOUBLE PRECISION"),
     ("histograma_estancia", "TEXT"),
     ("visitas_horarias", "TEXT"),
+    ("boxplot_estancia", "TEXT"),
+    ("histograma_frecuencia_7d", "TEXT"),
+    ("histograma_frecuencia_28d", "TEXT"),
+    ("histograma_frecuencia_mes", "TEXT"),
+    ("histograma_frecuencia_anyo", "TEXT"),
 ]
 
 
