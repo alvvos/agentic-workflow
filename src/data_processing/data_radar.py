@@ -62,7 +62,7 @@ def generar_tabla_auditoria(df_filt):
         _loc = get_location_by_name(ubi)
         lat = _loc.get("lat", 40.4168) if _loc else 40.4168
         lon = _loc.get("lon", -3.7038) if _loc else -3.7038
-        region_code = _loc.get("region_code", "MD") if _loc else "MD"
+        region_code = _loc.get("codigo_region", "MD") if _loc else "MD"
         años_presentes = list(df_ubi["fecha_dt"].apply(lambda x: x.year).unique())
 
         try:

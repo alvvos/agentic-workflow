@@ -75,16 +75,16 @@ def get_location_coords(ubicacion_id: str) -> Optional[tuple]:
 _HOL_CACHE: dict = {}
 
 
-def _es_festivo(fecha: date, pais_codigo: str, region_code: Optional[str] = None) -> int:
+def _es_festivo(fecha: date, pais_codigo: str, codigo_region: Optional[str] = None) -> int:
     year = fecha.year
-    key = (pais_codigo, region_code, year)
+    key = (pais_codigo, codigo_region, year)
     if key not in _HOL_CACHE:
         try:
             if pais_codigo == "MX":
                 _HOL_CACHE[key] = hol_lib.Mexico(years=year)
             elif pais_codigo == "ES":
-                if region_code:
-                    _HOL_CACHE[key] = hol_lib.Spain(subdiv=region_code, years=year)
+                if codigo_region:
+                    _HOL_CACHE[key] = hol_lib.Spain(subdiv=codigo_region, years=year)
                 else:
                     _HOL_CACHE[key] = hol_lib.Spain(years=year)
             else:
@@ -271,7 +271,8 @@ def get_df_enriquecido(ubicacion_id: str, session_id: Optional[str] = None) -> p
         df = conn.execute(
             """
             SELECT fecha, ubicacion_id AS location_id, zona_id,
-                   total_visits, unique_visitors, new_visitors
+                   total_visitas AS total_visits, visitantes_unicos AS unique_visitors,
+                   visitantes_nuevos AS new_visitors
             FROM visitas
             WHERE ubicacion_id = ?
             ORDER BY fecha
@@ -302,17 +303,17 @@ def get_df_enriquecido(ubicacion_id: str, session_id: Optional[str] = None) -> p
     df["llueve"] = df.get("llueve", pd.Series(0, index=df.index)).fillna(0).astype(int)
 
     # 3. Holidays (country-aware)
-    region_code = conn.execute(
-        "SELECT region_code FROM ubicaciones WHERE ubicacion_id = ?",
+    region_row = conn.execute(
+        "SELECT codigo_region FROM ubicaciones WHERE ubicacion_id = ?",
         [ubicacion_id],
     ).fetchone()
-    region = region_code[0] if region_code else None
+    region = region_row[0] if region_row else None
 
     df["es_festivo"] = df["fecha"].apply(
         lambda d: _es_festivo(d.date() if hasattr(d, "date") else d, pais, region)
     )
 
-    df["region_code"] = region or ""
+    df["codigo_region"] = region or ""
     return df
 
 
@@ -329,16 +330,22 @@ def get_df_visitas(ubicacion_ids) -> pd.DataFrame:
     df = conn.execute(
         f"""
         SELECT fecha,
-               ubicacion_id   AS location_id,
+               ubicacion_id          AS location_id,
                zona_id,
-               total_visits,
-               unique_visitors,
-               new_visitors,
-               uv_7d, uv_28d, uv_month, uv_year,
-               freq_7d, freq_28d, freq_month, freq_year,
-               dwell_time_min  AS dwell_time,
-               dwell_hist,
-               hourly_visits
+               total_visitas         AS total_visits,
+               visitantes_unicos     AS unique_visitors,
+               visitantes_nuevos     AS new_visitors,
+               unicos_7d             AS uv_7d,
+               unicos_28d            AS uv_28d,
+               unicos_mes            AS uv_month,
+               unicos_anyo           AS uv_year,
+               frecuencia_7d         AS freq_7d,
+               frecuencia_28d        AS freq_28d,
+               frecuencia_mes        AS freq_month,
+               frecuencia_anyo       AS freq_year,
+               tiempo_estancia_min   AS dwell_time,
+               histograma_estancia   AS dwell_hist,
+               visitas_horarias      AS hourly_visits
         FROM visitas
         WHERE ubicacion_id IN ({placeholders})
         ORDER BY fecha
@@ -435,18 +442,18 @@ def get_locs_for_org(org_id: str) -> list[dict]:
 
 
 def get_zones_for_loc(ubicacion_id: str) -> list[dict]:
-    """[{zona_id, nombre, zone_type, hidden, parent_zona_id}, ...] para una ubicación."""
+    """[{zona_id, nombre, tipo_zona, oculta, parent_zona_id}, ...] para una ubicación."""
     return [
         {
             "zona_id": r[0],
             "nombre": r[1],
-            "zone_type": r[2] or "",
-            "hidden": r[3],
+            "tipo_zona": r[2] or "",
+            "oculta": r[3],
             "parent_zona_id": r[4],
         }
         for r in get_conn()
         .execute(
-            "SELECT zona_id, nombre, zone_type, hidden, parent_zona_id"
+            "SELECT zona_id, nombre, tipo_zona, oculta, parent_zona_id"
             " FROM zonas WHERE ubicacion_id = ? ORDER BY nombre",
             [ubicacion_id],
         )
@@ -461,7 +468,7 @@ def get_location_by_uuid(ubicacion_id: str) -> Optional[dict]:
         .execute(
             """
         SELECT u.ubicacion_id, u.nombre, u.lat, u.lon, u.ciudad, u.provincia,
-               u.pais_codigo, u.region_code, u.codigo_postal, u.direccion,
+               u.pais_codigo, u.codigo_region, u.codigo_postal, u.direccion,
                o.nombre AS org_nombre, o.org_id
         FROM ubicaciones u
         JOIN organizaciones o ON o.org_id = u.org_id
@@ -481,7 +488,7 @@ def get_location_by_uuid(ubicacion_id: str) -> Optional[dict]:
         "city": row[4],
         "province": row[5],
         "pais_codigo": row[6],
-        "region_code": row[7],
+        "codigo_region": row[7],
         "codigo_postal": row[8],
         "direccion": row[9],
         "org": row[10],
@@ -494,14 +501,14 @@ def get_location_by_name(nombre: str) -> Optional[dict]:
     row = (
         get_conn()
         .execute(
-            "SELECT ubicacion_id, lat, lon, region_code FROM ubicaciones WHERE lower(nombre) = lower(?) LIMIT 1",
+            "SELECT ubicacion_id, lat, lon, codigo_region FROM ubicaciones WHERE lower(nombre) = lower(?) LIMIT 1",
             [nombre],
         )
         .fetchone()
     )
     if row is None:
         return None
-    return {"ubicacion_id": row[0], "lat": row[1], "lon": row[2], "region_code": row[3]}
+    return {"ubicacion_id": row[0], "lat": row[1], "lon": row[2], "codigo_region": row[3]}
 
 
 def get_locations_with_coords() -> list[str]:
@@ -517,17 +524,17 @@ def get_locations_with_coords() -> list[str]:
 
 
 def get_all_zones_flat() -> list[dict]:
-    """[{zona_id, ubicacion_id, nombre, zone_type}, ...] para todas las zonas visibles."""
+    """[{zona_id, ubicacion_id, nombre, tipo_zona}, ...] para todas las zonas visibles."""
     return [
         {
             "zona_id": r[0],
             "ubicacion_id": r[1],
             "nombre": r[2],
-            "zone_type": r[3] or "",
+            "tipo_zona": r[3] or "",
         }
         for r in get_conn()
         .execute(
-            "SELECT zona_id, ubicacion_id, nombre, zone_type FROM zonas WHERE hidden = FALSE ORDER BY nombre"
+            "SELECT zona_id, ubicacion_id, nombre, tipo_zona FROM zonas WHERE oculta = FALSE ORDER BY nombre"
         )
         .fetchall()
     ]
@@ -638,11 +645,11 @@ def get_señales_propias_meta(ubicacion_id: str) -> dict[str, dict]:
             get_conn()
             .execute(
                 """SELECT ff.señal_id,
-                      COALESCE(fr.label,    ff.señal_id)             AS label,
-                      COALESCE(fr.color,    '#0052CC')               AS color,
-                      COALESCE(fr.sublabel, '')                      AS sublabel,
-                      COALESCE(fr.icon_cls, 'fas fa-satellite-dish') AS icon_cls,
-                      COALESCE(fr.agg_fn,   'sum')                   AS agg_fn
+                      COALESCE(fr.label,               ff.señal_id)             AS label,
+                      COALESCE(fr.color,               '#0052CC')               AS color,
+                      COALESCE(fr.sublabel,            '')                      AS sublabel,
+                      COALESCE(fr.icono,               'fas fa-satellite-dish') AS icono,
+                      COALESCE(fr.funcion_agregacion,  'sum')                   AS funcion_agregacion
                FROM   activacion_señales ff
                LEFT JOIN señales fr ON fr.señal_id = ff.señal_id
                WHERE  ff.ubicacion_id = ?
@@ -659,8 +666,8 @@ def get_señales_propias_meta(ubicacion_id: str) -> dict[str, dict]:
             "label": r[1],
             "color": r[2],
             "sublabel": r[3],
-            "icon_cls": r[4],
-            "agg_fn": r[5],
+            "icono": r[4],
+            "funcion_agregacion": r[5],
         }
         for r in rows
     }

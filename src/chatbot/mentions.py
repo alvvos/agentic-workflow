@@ -73,7 +73,7 @@ def get_mention_map() -> dict:
                 }
 
                 for zone in get_zones_for_loc(loc_uuid):
-                    if zone["hidden"]:
+                    if zone["oculta"]:
                         continue
                     zone_uuid = zone["zona_id"]
                     zone_name = zone["nombre"]

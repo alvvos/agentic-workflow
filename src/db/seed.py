@@ -136,18 +136,18 @@ def seed_ubicaciones() -> dict:
         orgs,
     )
     conn.executemany(
-        "INSERT INTO ubicaciones (ubicacion_id, org_id, nombre, lat, lon, ciudad, provincia, pais_codigo, region_code, codigo_postal, direccion, activa) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING",
+        "INSERT INTO ubicaciones (ubicacion_id, org_id, nombre, lat, lon, ciudad, provincia, pais_codigo, codigo_region, codigo_postal, direccion, activa) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING",
         locs,
     )
     conn.executemany(
-        "INSERT INTO zonas (zona_id, ubicacion_id, nombre, hidden) VALUES (?,?,?,?) ON CONFLICT DO NOTHING",
+        "INSERT INTO zonas (zona_id, ubicacion_id, nombre, oculta) VALUES (?,?,?,?) ON CONFLICT DO NOTHING",
         zonas,
     )
     return {"orgs": len(orgs), "locs": len(locs), "zonas": len(zonas)}
 
 
 def migrate_zone_types() -> int:
-    """Populate zonas.zone_type from todas_las_ubicaciones.json."""
+    """Populate zonas.tipo_zona from todas_las_ubicaciones.json."""
     raw_path = _DATA / "todas_las_ubicaciones.json"
     if not raw_path.exists():
         return 0
@@ -160,7 +160,7 @@ def migrate_zone_types() -> int:
                 if z.get("uuid") and "zoneType" in z:
                     rows.append((z["zoneType"], z["uuid"]))
     if rows:
-        conn.executemany("UPDATE zonas SET zone_type = ? WHERE zona_id = ?", rows)
+        conn.executemany("UPDATE zonas SET tipo_zona = ? WHERE zona_id = ?", rows)
     return len(rows)
 
 
@@ -258,16 +258,16 @@ def seed_feature_registry() -> int:
     conn.executemany(
         """
         INSERT INTO señales
-            (señal_id, fuente, categoria, org_applicability, location_applicability,
+            (señal_id, fuente, categoria, aplicabilidad_org, aplicabilidad_ubicacion,
              status, notas)
         VALUES (?,?,?,?,?,?,?)
         ON CONFLICT (señal_id) DO UPDATE
-            SET fuente               = EXCLUDED.fuente,
-                categoria            = EXCLUDED.categoria,
-                org_applicability    = EXCLUDED.org_applicability,
-                location_applicability = EXCLUDED.location_applicability,
-                status               = EXCLUDED.status,
-                notas                = COALESCE(EXCLUDED.notas, señales.notas)
+            SET fuente                  = EXCLUDED.fuente,
+                categoria               = EXCLUDED.categoria,
+                aplicabilidad_org       = EXCLUDED.aplicabilidad_org,
+                aplicabilidad_ubicacion = EXCLUDED.aplicabilidad_ubicacion,
+                status                  = EXCLUDED.status,
+                notas                   = COALESCE(EXCLUDED.notas, señales.notas)
         """,
         [(e[0], e[1], e[2], e[3], e[4], e[5], e[7]) for e in entries],
     )
@@ -290,7 +290,7 @@ def seed_usuarios() -> int:
             entry = {"password": entry, "role": "user"}
         rows.append((username, entry.get("password", ""), entry.get("role", "user")))
     conn.executemany(
-        "INSERT INTO usuarios (usuario_id, password_hash, role) VALUES (?,?,?) ON CONFLICT DO NOTHING",
+        "INSERT INTO usuarios (usuario_id, password_hash, rol) VALUES (?,?,?) ON CONFLICT DO NOTHING",
         rows,
     )
     return len(rows)
@@ -318,7 +318,7 @@ def seed_conversaciones() -> int:
                 created = datetime.fromtimestamp(conv.get("created_at", time.time()))
                 updated = datetime.fromtimestamp(conv.get("updated_at", time.time()))
                 conn.execute(
-                    "INSERT INTO conversaciones (conversacion_id, usuario_id, title, ubicacion_id, created_at, updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT DO NOTHING",
+                    "INSERT INTO conversaciones (conversacion_id, usuario_id, titulo, ubicacion_id, creado_en, actualizado_en) VALUES (?,?,?,?,?,?) ON CONFLICT DO NOTHING",
                     [conversacion_id, usuario_id, title, ubicacion_id, created, updated],
                 )
                 existing = conn.execute(
@@ -342,7 +342,7 @@ def seed_conversaciones() -> int:
                             for i, m in enumerate(msgs)
                         ]
                         conn.executemany(
-                            "INSERT INTO mensajes (conversacion_id, seq, role, content) VALUES (?,?,?,?)",
+                            "INSERT INTO mensajes (conversacion_id, orden, rol, contenido) VALUES (?,?,?,?)",
                             rows,
                         )
                 total += 1
@@ -485,10 +485,10 @@ def ingest_visitas_csv(csv_path: str) -> int:
             """
             INSERT INTO visitas
                 (fecha, zona_id, ubicacion_id, org_id,
-                 total_visits, unique_visitors, new_visitors,
-                 uv_7d, uv_28d, uv_month, uv_year,
-                 freq_7d, freq_28d, freq_month, freq_year,
-                 dwell_time_min, dwell_hist, hourly_visits)
+                 total_visitas, visitantes_unicos, visitantes_nuevos,
+                 unicos_7d, unicos_28d, unicos_mes, unicos_anyo,
+                 frecuencia_7d, frecuencia_28d, frecuencia_mes, frecuencia_anyo,
+                 tiempo_estancia_min, histograma_estancia, visitas_horarias)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT DO NOTHING
             """,

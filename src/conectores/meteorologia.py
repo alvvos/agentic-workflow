@@ -19,7 +19,7 @@ def sync(ubicacion: dict, cfg: dict, verbose: bool = True) -> int:  # noqa: ARG0
     """
     Descarga y cachea datos meteorológicos para una ubicación.
 
-    ubicacion: {ubicacion_id, nombre, lat, lon, pais_codigo, region_code, city}
+    ubicacion: {ubicacion_id, nombre, lat, lon, pais_codigo, codigo_region, city}
     cfg: config efectiva de la fuente (resultado de get_source_config).
     No llama a is_fresh() ni write_sync_marker() — los gestiona el orquestador.
     Devuelve el número de filas escritas.

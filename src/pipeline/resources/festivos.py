@@ -124,7 +124,7 @@ def _collect(
     for ubi in ubicaciones:
         ubi_id = ubi["ubicacion_id"]
         pais = ubi.get("pais_codigo", "ES")
-        region = ubi.get("region_code")
+        region = ubi.get("codigo_region")
         subdiv_map = subdiv_es if pais == "ES" else subdiv_mx
 
         for year in years:

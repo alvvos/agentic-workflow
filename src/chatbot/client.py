@@ -374,7 +374,7 @@ def _system_prompt(
         loc = _find_location(loc_uuid)
         if not loc:
             return ""
-        zones = [z for z in loc.get("zones", []) if not z.get("hidden")]
+        zones = [z for z in loc.get("zones", []) if not z.get("oculta")]
         zones_txt = (
             ", ".join(f"{z['zoneName']} (uuid: {z['uuid']})" for z in zones) or "sin zonas visibles"
         )

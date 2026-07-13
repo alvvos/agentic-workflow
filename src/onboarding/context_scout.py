@@ -3,7 +3,7 @@ Agente 3 — Context Scout.
 
 Recibe un location_uuid que pasó Quality Gate + Feature Router.
 Evalúa un catálogo curado de fuentes de datos abiertas, decide cuáles aplican
-para la isócrona de esa ubicación y las registra en feature_registry + feature_flags
+para la isócrona de esa ubicación y las registra en señales + activacion_señales
 con status='contexto' y la periodicidad correspondiente.
 
 Los timers de ingesta (sync_mensual.py) recogen automáticamente las nuevas filas
@@ -642,9 +642,9 @@ def registrar_fuentes(result: ScoutResult) -> ScoutResult:
     n = 0
 
     for src in result.seleccionadas:
-        # feature_registry — upsert
+        # señales — upsert
         existing = conn.execute(
-            "SELECT feature_key FROM feature_registry WHERE feature_key = ?",
+            "SELECT señal_id FROM señales WHERE señal_id = ?",
             [src.feature_key],
         ).fetchone()
 
@@ -657,9 +657,9 @@ def registrar_fuentes(result: ScoutResult) -> ScoutResult:
 
             conn.execute(
                 """
-                INSERT INTO feature_registry
-                  (feature_key, source, categoria, org_applicability,
-                   location_applicability, status, notas, registrado_en)
+                INSERT INTO señales
+                  (señal_id, fuente, categoria, aplicabilidad_org,
+                   aplicabilidad_ubicacion, status, notas, registrado_en)
                 VALUES (?, ?, ?, ?, ?, 'incompleto', ?, ?)
                 """,
                 [
@@ -672,11 +672,11 @@ def registrar_fuentes(result: ScoutResult) -> ScoutResult:
                     ahora,
                 ],
             )
-            log.info("feature_registry INSERT: %s", src.feature_key)
+            log.info("señales INSERT: %s", src.feature_key)
         else:
-            # La feature ya existe — solo ampliar location_applicability si es necesario
+            # La señal ya existe — solo ampliar aplicabilidad_ubicacion si es necesario
             loc_row = conn.execute(
-                "SELECT location_applicability FROM feature_registry WHERE feature_key = ?",
+                "SELECT aplicabilidad_ubicacion FROM señales WHERE señal_id = ?",
                 [src.feature_key],
             ).fetchone()
             if loc_row and loc_row[0]:
@@ -688,7 +688,7 @@ def registrar_fuentes(result: ScoutResult) -> ScoutResult:
                     ):
                         existing_locs.append(result.location_uuid)
                         conn.execute(
-                            "UPDATE feature_registry SET location_applicability = ? WHERE feature_key = ?",
+                            "UPDATE señales SET aplicabilidad_ubicacion = ? WHERE señal_id = ?",
                             [json.dumps(existing_locs), src.feature_key],
                         )
                 except (json.JSONDecodeError, TypeError):

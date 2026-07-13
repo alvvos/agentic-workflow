@@ -63,7 +63,7 @@ def create_conversation(session_id: str, location_uuid: Optional[str] = None) ->
     conv_id = uuid.uuid4().hex[:8]
     try:
         get_conn().execute(
-            "INSERT INTO conversaciones (conversacion_id, usuario_id, title, ubicacion_id)"
+            "INSERT INTO conversaciones (conversacion_id, usuario_id, titulo, ubicacion_id)"
             " VALUES (?, ?, 'Nueva conversación', ?)",
             [conv_id, session_id or "anonymous", _safe_uuid(location_uuid)],
         )
@@ -82,7 +82,7 @@ def update_conversation(
     try:
         conn = get_conn()
         row = conn.execute(
-            "SELECT title FROM conversaciones WHERE conversacion_id = ?", [conv_id]
+            "SELECT titulo FROM conversaciones WHERE conversacion_id = ?", [conv_id]
         ).fetchone()
 
         new_title = row[0] if row else "Nueva conversación"
@@ -102,14 +102,14 @@ def update_conversation(
         if row:
             conn.execute(
                 "UPDATE conversaciones"
-                " SET title = ?, updated_at = ?, ubicacion_id = COALESCE(?, ubicacion_id)"
+                " SET titulo = ?, actualizado_en = ?, ubicacion_id = COALESCE(?, ubicacion_id)"
                 " WHERE conversacion_id = ?",
                 [new_title, now, safe_loc, conv_id],
             )
         else:
             conn.execute(
                 "INSERT INTO conversaciones"
-                " (conversacion_id, usuario_id, title, ubicacion_id, updated_at)"
+                " (conversacion_id, usuario_id, titulo, ubicacion_id, actualizado_en)"
                 " VALUES (?, ?, ?, ?, ?)",
                 [conv_id, session_id or "anonymous", new_title, safe_loc, now],
             )
@@ -117,7 +117,8 @@ def update_conversation(
         conn.execute("DELETE FROM mensajes WHERE conversacion_id = ?", [conv_id])
         if messages:
             conn.executemany(
-                "INSERT INTO mensajes (conversacion_id, seq, role, content)" " VALUES (?, ?, ?, ?)",
+                "INSERT INTO mensajes (conversacion_id, orden, rol, contenido)"
+                " VALUES (?, ?, ?, ?)",
                 [
                     (conv_id, i, m.get("role", "user"), _serialize(m.get("content", "")))
                     for i, m in enumerate(messages)
@@ -130,7 +131,7 @@ def update_conversation(
 def rename_conversation(session_id: str, conv_id: str, new_title: str) -> None:
     try:
         get_conn().execute(
-            "UPDATE conversaciones SET title = ? WHERE conversacion_id = ? AND usuario_id = ?",
+            "UPDATE conversaciones SET titulo = ? WHERE conversacion_id = ? AND usuario_id = ?",
             [new_title.strip() or "Conversación", conv_id, session_id],
         )
     except Exception as exc:
@@ -152,9 +153,9 @@ def list_conversations(session_id: str) -> list[dict]:
         rows = (
             get_conn()
             .execute(
-                "SELECT conversacion_id, title, updated_at, ubicacion_id"
+                "SELECT conversacion_id, titulo, actualizado_en, ubicacion_id"
                 " FROM conversaciones WHERE usuario_id = ?"
-                " ORDER BY updated_at DESC LIMIT ?",
+                " ORDER BY actualizado_en DESC LIMIT ?",
                 [session_id, MAX_CONVS],
             )
             .fetchall()
@@ -177,7 +178,7 @@ def load_conversation(session_id: str, conv_id: str) -> Optional[dict]:
     try:
         conn = get_conn()
         conv_row = conn.execute(
-            "SELECT conversacion_id, title, created_at, updated_at, ubicacion_id"
+            "SELECT conversacion_id, titulo, creado_en, actualizado_en, ubicacion_id"
             " FROM conversaciones WHERE conversacion_id = ? AND usuario_id = ?",
             [conv_id, session_id],
         ).fetchone()
@@ -185,7 +186,7 @@ def load_conversation(session_id: str, conv_id: str) -> Optional[dict]:
             return None
 
         msg_rows = conn.execute(
-            "SELECT role, content FROM mensajes WHERE conversacion_id = ? ORDER BY seq",
+            "SELECT rol, contenido FROM mensajes WHERE conversacion_id = ? ORDER BY orden",
             [conv_id],
         ).fetchall()
 

@@ -15,16 +15,16 @@ from src.db.store import get_conn
 
 def _load_poi_categories(conn=None) -> dict:
     """
-    Devuelve {category: {label, icon_cls, color, badge_color}} desde
+    Devuelve {categoria: {label, icono, color, color_badge}} desde
     categorias_poi. Fuente única para los displays de POI.
     """
     try:
         c = conn or get_conn()
         rows = c.execute(
-            "SELECT category, label, icon_cls, color, badge_color FROM categorias_poi"
+            "SELECT categoria, label, icono, color, color_badge FROM categorias_poi"
         ).fetchall()
         return {
-            cat: {"label": lbl, "icon_cls": icon, "color": col, "badge_color": bc}
+            cat: {"label": lbl, "icono": icon, "color": col, "color_badge": bc}
             for cat, lbl, icon, col, bc in rows
         }
     except Exception:
@@ -55,11 +55,10 @@ def _render_table(location_uuid: str) -> html.Div:
     for poi in pois:
         cat = poi["categoria"]
         cat_meta = poi_cats.get(cat, {})
-        icon_cls = cat_meta.get("icon_cls", "fas fa-map-pin")
-        badge_color = cat_meta.get("badge_color", "secondary")
+        icono = cat_meta.get("icono", "fas fa-map-pin")
+        color_badge = cat_meta.get("color_badge", "secondary")
         cat_label = cat_meta.get("label", cat)
-        # Combina icono con clase de color Bootstrap (text-<variant>)
-        icon_full = f"{icon_cls} text-{badge_color}"
+        icon_full = f"{icono} text-{color_badge}"
         rows.append(
             html.Tr(
                 [
@@ -75,7 +74,7 @@ def _render_table(location_uuid: str) -> html.Div:
                     html.Td(
                         dbc.Badge(
                             cat_label,
-                            color=badge_color,
+                            color=color_badge,
                             pill=True,
                             className="small",
                         ),

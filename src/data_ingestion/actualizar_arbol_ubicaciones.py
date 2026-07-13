@@ -95,19 +95,19 @@ def _sync_arbol_aitanna() -> int:
                 if not zone_uuid:
                     continue
                 zone_name = zone.get("zoneName", "")
-                hidden = zone.get("hidden", False)
+                oculta = zone.get("hidden", False)
                 fathers = zone.get("fathers", [])
                 parent_uuid = fathers[0] if fathers else None
                 zona_parents.append((zone_uuid, parent_uuid))
 
                 conn.execute(
-                    """INSERT INTO zonas (zona_id, ubicacion_id, nombre, hidden, parent_zona_id)
+                    """INSERT INTO zonas (zona_id, ubicacion_id, nombre, oculta, parent_zona_id)
                        VALUES (%s, %s, %s, %s, NULL)
                        ON CONFLICT (zona_id) DO UPDATE
                        SET nombre = EXCLUDED.nombre,
-                           hidden = EXCLUDED.hidden
+                           oculta = EXCLUDED.oculta
                     """,
-                    [zone_uuid, loc_uuid, zone_name, hidden],
+                    [zone_uuid, loc_uuid, zone_name, oculta],
                 )
 
             # Pasada 2: actualiza parent_zona_id una vez todas las zonas existen

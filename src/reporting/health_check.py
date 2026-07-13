@@ -104,7 +104,7 @@ def _load_zone_meta(conn) -> dict:
     """Devuelve {zone_type: {label, icon_cls, color, tooltip}} desde DB."""
     try:
         rows = conn.execute(
-            "SELECT zone_type, label, icon_cls, color, tooltip FROM tipos_zona"
+            "SELECT tipo_zona, label, icono, color, tooltip FROM tipos_zona"
         ).fetchall()
         return {
             zt: {"label": lbl, "icon_cls": icon, "color": col, "tooltip": tt or ""}
@@ -140,14 +140,12 @@ def _load_narrative_meta(conn) -> tuple[dict, dict, list]:
     cat_order: list = []
     try:
         for ck, lbl, icon, _ in conn.execute(
-            "SELECT category_key, label, icon_cls, sort_order "
-            "FROM categorias_narrativa ORDER BY sort_order"
+            "SELECT clave, label, icono, orden " "FROM categorias_narrativa ORDER BY orden"
         ).fetchall():
             cat_meta[ck] = (icon or "fas fa-circle", lbl or ck)
             cat_order.append(ck)
         for lk, tc, bc, _ in conn.execute(
-            "SELECT level_key, text_color, bg_color, sort_order "
-            "FROM niveles_alerta ORDER BY sort_order"
+            "SELECT clave, color_texto, color_fondo, orden " "FROM niveles_alerta ORDER BY orden"
         ).fetchall():
             level_meta[lk] = (tc, bc)
     except Exception:
@@ -170,7 +168,7 @@ def _load_norm_tipo(conn) -> dict:
     """Devuelve {raw_event_key: canonical_type} desde feature_registry."""
     try:
         rows = conn.execute(
-            "SELECT señal_id, canonical_type FROM señales " "WHERE canonical_type IS NOT NULL"
+            "SELECT señal_id, tipo_canonico FROM señales " "WHERE tipo_canonico IS NOT NULL"
         ).fetchall()
         return {fk: canon for fk, canon in rows}
     except Exception:
@@ -186,7 +184,7 @@ def obtener_zonas_validas(ruta=None):
 
         rows = (
             get_conn()
-            .execute("SELECT nombre FROM zonas WHERE zone_type = 'last_zone' AND hidden = FALSE")
+            .execute("SELECT nombre FROM zonas WHERE tipo_zona = 'last_zone' AND oculta = FALSE")
             .fetchall()
         )
         return {r[0] for r in rows}
@@ -2454,11 +2452,11 @@ def _load_feature_meta(conn, location_uuid: str) -> dict:
     """
     try:
         rows = conn.execute(
-            """SELECT fr.señal_id, fr.label, fr.sublabel, fr.color, fr.icon_cls,
-                      fr.agg_fn, COALESCE(fr.display_mode, 'yoy') AS display_mode, fr.notas,
+            """SELECT fr.señal_id, fr.label, fr.sublabel, fr.color, fr.icono,
+                      fr.funcion_agregacion, COALESCE(fr.modo_visualizacion, 'yoy') AS modo_visualizacion, fr.notas,
                       fr.fallback_señal_id
                FROM señales fr
-               WHERE fr.display_mode = 'events_count'
+               WHERE fr.modo_visualizacion = 'events_count'
                   OR EXISTS (
                        SELECT 1 FROM activacion_señales ff
                        WHERE ff.señal_id = fr.señal_id

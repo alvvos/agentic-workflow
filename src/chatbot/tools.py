@@ -29,10 +29,10 @@ def _find_location(location_uuid: str) -> dict | None:
         return None
     loc["zones"] = [
         {
-            "uuid": z["zone_uuid"],
+            "uuid": z["zona_id"],
             "zoneName": z["nombre"],
-            "hidden": z["hidden"],
-            "zoneType": z["zone_type"],
+            "oculta": z["oculta"],
+            "zoneType": z["tipo_zona"],
         }
         for z in get_zones_for_loc(location_uuid)
     ]
@@ -48,8 +48,9 @@ def _load_dataset(session_id: str = "local_dev") -> pd.DataFrame:
             .execute(
                 """
             SELECT fecha, ubicacion_id AS location_id, zona_id,
-                   total_visits, unique_visitors, new_visitors,
-                   dwell_time_min AS dwell_time, hourly_visits
+                   total_visitas AS total_visits, visitantes_unicos AS unique_visitors,
+                   visitantes_nuevos AS new_visitors,
+                   tiempo_estancia_min AS dwell_time, visitas_horarias AS hourly_visits
             FROM visitas ORDER BY fecha
         """
             )
@@ -588,7 +589,7 @@ def get_weather_holidays(
 
     lat = loc.get("lat") or 40.4168
     lon = loc.get("lon") or -3.7038
-    region_code = loc.get("region_code", "MD")
+    region_code = loc.get("codigo_region", "MD")
 
     # ── Festivos ─────────────────────────────────────────────────────────────
     years = list({t0.year, t1.year})
@@ -685,7 +686,7 @@ def get_location_info(location_uuid: str) -> dict:
 
         conn = get_conn()
         zonas = conn.execute(
-            """SELECT zona_id, nombre, zone_type, hidden
+            """SELECT zona_id, nombre, tipo_zona, oculta
                FROM zonas WHERE ubicacion_id = ?
                ORDER BY nombre""",
             [location_uuid],

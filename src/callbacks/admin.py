@@ -18,7 +18,7 @@ _ROLE_COLORS = {"admin": "danger", "user": "primary"}
 def _load_users() -> dict:
     rows = (
         get_conn()
-        .execute("SELECT usuario_id, password_hash, role FROM usuarios ORDER BY usuario_id")
+        .execute("SELECT usuario_id, password_hash, rol FROM usuarios ORDER BY usuario_id")
         .fetchall()
     )
     return {r[0]: {"password": r[1], "role": r[2] or "user"} for r in rows}
@@ -27,9 +27,9 @@ def _load_users() -> dict:
 def _upsert_user(username: str, password_hash: str, role: str) -> None:
     get_conn().execute(
         """
-        INSERT INTO usuarios (usuario_id, password_hash, role)
+        INSERT INTO usuarios (usuario_id, password_hash, rol)
         VALUES (?, ?, ?)
-        ON CONFLICT (usuario_id) DO UPDATE SET password_hash = excluded.password_hash, role = excluded.role
+        ON CONFLICT (usuario_id) DO UPDATE SET password_hash = excluded.password_hash, rol = excluded.rol
     """,
         [username, password_hash, role],
     )
@@ -40,7 +40,7 @@ def _delete_user(username: str) -> None:
 
 
 def _update_role(username: str, new_role: str) -> None:
-    get_conn().execute("UPDATE usuarios SET role = ? WHERE usuario_id = ?", [new_role, username])
+    get_conn().execute("UPDATE usuarios SET rol = ? WHERE usuario_id = ?", [new_role, username])
 
 
 def _get_user_org_access(user_id: str) -> list[str]:
@@ -114,7 +114,7 @@ def _load_orgs() -> list:
 def _zone_modal_body(loc_uuid: str):
     conn = get_conn()
     zones = conn.execute(
-        "SELECT zona_id, nombre, zone_type, parent_zona_id, hidden"
+        "SELECT zona_id, nombre, tipo_zona, parent_zona_id, oculta"
         " FROM zonas WHERE ubicacion_id = ? ORDER BY nombre",
         [loc_uuid],
     ).fetchall()
@@ -134,7 +134,7 @@ def _zone_modal_body(loc_uuid: str):
     children_of = {z[0]: [] for z in zones}
     roots = []
     for z in zones:
-        zone_uuid, _, _, parent_uuid, _ = z
+        zone_uuid, _, _, parent_uuid, _oculta = z
         if parent_uuid and parent_uuid in by_uuid:
             children_of[parent_uuid].append(zone_uuid)
         else:
@@ -143,16 +143,16 @@ def _zone_modal_body(loc_uuid: str):
     all_opts = [{"label": z[1], "value": z[0]} for z in zones]
 
     def _rows(uuid: str, depth: int = 0) -> list:
-        zone_uuid, nombre, zone_type, parent_uuid, hidden = by_uuid[uuid]
-        visible = not bool(hidden)
+        zone_uuid, nombre, tipo_zona, parent_uuid, oculta = by_uuid[uuid]
+        visible = not bool(oculta)
         is_leaf = not children_of[uuid]
 
         opts = [{"label": "Sin padre", "value": ""}] + [
             o for o in all_opts if o["value"] != zone_uuid
         ]
         type_badge = (
-            dbc.Badge(zone_type, color="info", pill=True, className="fw-normal")
-            if zone_type
+            dbc.Badge(tipo_zona, color="info", pill=True, className="fw-normal")
+            if tipo_zona
             else html.Span("—", className="text-muted small")
         )
         icon = "fa-circle fa-xs text-muted" if is_leaf else "fa-layer-group text-primary"
@@ -944,11 +944,11 @@ def save_zone_hierarchy(n_clicks, parent_values, zone_ids, visible_values, signa
     for id_dict, parent_val, visible in zip(zone_ids, parent_values, visible_values):
         zone_uuid = id_dict["index"]
         parent_uuid = parent_val if parent_val else None
-        hidden = not bool(visible)
+        oculta = not bool(visible)
         uuid_to_parent[zone_uuid] = parent_uuid
         conn.execute(
-            "UPDATE zonas SET parent_zona_id = ?, hidden = ? WHERE zona_id = ?",
-            [parent_uuid, hidden, zone_uuid],
+            "UPDATE zonas SET parent_zona_id = ?, oculta = ? WHERE zona_id = ?",
+            [parent_uuid, oculta, zone_uuid],
         )
 
     n = len(zone_ids)

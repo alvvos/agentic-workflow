@@ -49,22 +49,22 @@ def _upsert_visitas(rows: list) -> None:
         """
         INSERT INTO visitas
             (fecha, zona_id, ubicacion_id, org_id,
-             total_visits, unique_visitors, new_visitors,
-             uv_7d, uv_28d, uv_month, uv_year,
-             freq_7d, freq_28d, freq_month, freq_year,
-             dwell_time_min, dwell_hist, hourly_visits)
+             total_visitas, visitantes_unicos, visitantes_nuevos,
+             unicos_7d, unicos_28d, unicos_mes, unicos_anyo,
+             frecuencia_7d, frecuencia_28d, frecuencia_mes, frecuencia_anyo,
+             tiempo_estancia_min, histograma_estancia, visitas_horarias)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT (fecha, zona_id) DO UPDATE SET
-            total_visits    = excluded.total_visits,
-            unique_visitors = excluded.unique_visitors,
-            new_visitors    = excluded.new_visitors,
-            uv_7d = excluded.uv_7d, uv_28d = excluded.uv_28d,
-            uv_month = excluded.uv_month, uv_year = excluded.uv_year,
-            freq_7d = excluded.freq_7d, freq_28d = excluded.freq_28d,
-            freq_month = excluded.freq_month, freq_year = excluded.freq_year,
-            dwell_time_min = excluded.dwell_time_min,
-            dwell_hist = excluded.dwell_hist,
-            hourly_visits = excluded.hourly_visits
+            total_visitas       = excluded.total_visitas,
+            visitantes_unicos   = excluded.visitantes_unicos,
+            visitantes_nuevos   = excluded.visitantes_nuevos,
+            unicos_7d    = excluded.unicos_7d,    unicos_28d   = excluded.unicos_28d,
+            unicos_mes   = excluded.unicos_mes,   unicos_anyo  = excluded.unicos_anyo,
+            frecuencia_7d   = excluded.frecuencia_7d,  frecuencia_28d = excluded.frecuencia_28d,
+            frecuencia_mes  = excluded.frecuencia_mes, frecuencia_anyo= excluded.frecuencia_anyo,
+            tiempo_estancia_min  = excluded.tiempo_estancia_min,
+            histograma_estancia  = excluded.histograma_estancia,
+            visitas_horarias     = excluded.visitas_horarias
         """,
         rows,
     )

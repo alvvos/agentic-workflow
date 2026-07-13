@@ -24,7 +24,7 @@ def sync(ubicacion: dict, cfg: dict, verbose: bool = True) -> int:  # noqa: ARG0
     """
     Descarga festivos regionales y vacaciones escolares para una ubicación.
 
-    ubicacion: {ubicacion_id, nombre, lat, lon, pais_codigo, region_code, city}
+    ubicacion: {ubicacion_id, nombre, lat, lon, pais_codigo, codigo_region, city}
     cfg: config efectiva de la fuente.
     No llama a is_fresh() ni write_sync_marker() — los gestiona el orquestador.
     Devuelve el número de días con datos escritos.
@@ -38,7 +38,7 @@ def sync(ubicacion: dict, cfg: dict, verbose: bool = True) -> int:  # noqa: ARG0
     ubicacion_id = ubicacion["ubicacion_id"]
     nombre = ubicacion.get("nombre", ubicacion_id)
     pais_codigo = ubicacion["pais_codigo"]
-    region_code = ubicacion["region_code"]
+    region_code = ubicacion["codigo_region"]
     date_from = EVENTS_DATE_FROM
     date_to = date.today() + timedelta(days=EVENTS_HORIZON)
     years = list(range(date_from.year, date_to.year + 1))

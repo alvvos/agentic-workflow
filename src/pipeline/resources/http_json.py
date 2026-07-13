@@ -38,7 +38,7 @@ def _build_ctx(ubicacion: dict, date_from: date, date_to: date) -> dict:
         "lon": ubicacion.get("lon", ""),
         "ciudad": ubicacion.get("city", ""),
         "pais": ubicacion.get("pais_codigo", ""),
-        "region": ubicacion.get("region_code", ""),
+        "region": ubicacion.get("codigo_region", ""),
         "date_from": date_from.isoformat(),
         "date_to": date_to.isoformat(),
         "year": date_from.year,

@@ -142,7 +142,7 @@ def _load_geo_meta(conn) -> tuple[dict, dict, dict]:
     norm_tipo: dict = {}
     try:
         rows = conn.execute(
-            "SELECT señal_id, label, icon_cls, color, agg_fn, canonical_type "
+            "SELECT señal_id, label, icono, color, funcion_agregacion, tipo_canonico "
             "FROM señales WHERE label IS NOT NULL"
         ).fetchall()
         for fk, lbl, icon, col, agg, canon in rows:
@@ -155,7 +155,7 @@ def _load_geo_meta(conn) -> tuple[dict, dict, dict]:
             if canon:
                 norm_tipo[fk] = canon
         cat_rows = conn.execute(
-            "SELECT category, label, icon_cls, color, badge_color FROM categorias_poi"
+            "SELECT categoria, label, icono, color, color_badge FROM categorias_poi"
         ).fetchall()
         poi_cat_meta = {
             cat: {
@@ -246,7 +246,7 @@ def _render_area_signals(location_uuid: str):
         _raw_keys = {
             r[0]
             for r in conn.execute(
-                "SELECT señal_id FROM señales WHERE display_mode = 'raw'"
+                "SELECT señal_id FROM señales WHERE modo_visualizacion = 'raw'"
             ).fetchall()
         }
     except Exception:

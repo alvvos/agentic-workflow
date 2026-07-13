@@ -124,7 +124,7 @@ def _check_cobertura_features(conn, location_uuid: str) -> CheckResult:
 
 def _check_zonas(conn, location_uuid: str) -> CheckResult:
     n = conn.execute(
-        "SELECT COUNT(*) FROM zonas WHERE ubicacion_id = ? AND hidden = FALSE",
+        "SELECT COUNT(*) FROM zonas WHERE ubicacion_id = ? AND oculta = FALSE",
         [location_uuid],
     ).fetchone()[0]
 

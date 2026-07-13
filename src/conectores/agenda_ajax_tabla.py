@@ -111,9 +111,9 @@ def _ingestar_escalas(
     conn.executemany(
         """INSERT INTO eventos
                (org_id, ubicacion_id, pais_codigo, evento_key,
-                fecha_inicio, fecha_fin, metadata, fuente, source_key)
+                fecha_inicio, fecha_fin, metadata, fuente, clave_fuente)
            VALUES (?,?,?,?,?,?,?,?,?)
-           ON CONFLICT (source_key) DO UPDATE SET metadata = excluded.metadata""",
+           ON CONFLICT (clave_fuente) DO UPDATE SET metadata = excluded.metadata""",
         cal_rows,
     )
     daily: dict[str, float] = {}
@@ -127,7 +127,7 @@ def _ingestar_escalas(
             "INSERT INTO valores_señales (fecha, ubicacion_id, señal_id, valor) "
             "VALUES (?,?,?,?) "
             "ON CONFLICT (fecha, ubicacion_id, señal_id) "
-            "DO UPDATE SET valor = excluded.valor, ingested_at = NOW()",
+            "DO UPDATE SET valor = excluded.valor, ingerido_en = NOW()",
             [(f, ubicacion_id, feature_key, v) for f, v in daily.items()],
         )
     return len(cal_rows)
@@ -140,7 +140,7 @@ def sync(ubicacion: dict, cfg: dict, verbose: bool = True) -> int:
     """
     Descarga escalas para los meses anterior, actual y siguiente.
 
-    ubicacion: {ubicacion_id, nombre, lat, lon, pais_codigo, region_code, city}
+    ubicacion: {ubicacion_id, nombre, lat, lon, pais_codigo, codigo_region, city}
     cfg: config efectiva — debe contener ajax_url, feature_key, categoria_evento, action.
     No llama a is_fresh() ni write_sync_marker() — los gestiona el orquestador.
     Devuelve el número de escalas procesadas.

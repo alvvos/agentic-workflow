@@ -316,7 +316,7 @@ def actualizar_prediccion_publica(tab, locs, session_id):
         if df_e.empty:
             continue
         loc_nombre = mapa_tiendas.get(loc_uuid, loc_uuid)
-        zonas = [z for z in get_zones_for_loc(loc_uuid) if not z.get("hidden")]
+        zonas = [z for z in get_zones_for_loc(loc_uuid) if not z.get("oculta")]
 
         zonas_ordenadas = _ordenar_zonas_fuera_dentro(zonas)
         zona_cols = []

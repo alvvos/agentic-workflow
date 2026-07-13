@@ -79,7 +79,7 @@ class SeñalesDestino:
             ON CONFLICT (fecha, ubicacion_id, señal_id)
             DO UPDATE SET
                 valor      = GREATEST(valores_señales.valor, excluded.valor),
-                ingested_at = NOW()
+                ingerido_en = NOW()
             """,
             datos,
         )
@@ -105,9 +105,9 @@ class SeñalesDestino:
             """
             INSERT INTO eventos
                 (ubicacion_id, pais_codigo, evento_key,
-                 fecha_inicio, fecha_fin, metadata, fuente, source_key)
+                 fecha_inicio, fecha_fin, metadata, fuente, clave_fuente)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (source_key) DO NOTHING
+            ON CONFLICT (clave_fuente) DO NOTHING
             """,
             datos,
         )

@@ -73,7 +73,7 @@ def _auto_write_flags(conn, results: list[dict], threshold: float) -> tuple[list
       mean_delta ≤ threshold → 'active'
       mean_delta >  threshold → 'inactive'
 
-    ON CONFLICT: actualiza wmape_delta + evaluated_at pero NO cambia status
+    ON CONFLICT: actualiza wmape_delta + evaluado_en pero NO cambia status
     si ya fue decidido externamente (ej. notebook o una ejecución previa).
     Devuelve (activadas, inactivas).
     """
@@ -91,10 +91,10 @@ def _auto_write_flags(conn, results: list[dict], threshold: float) -> tuple[list
         conn.execute(
             """
             INSERT INTO activacion_señales
-              (señal_id, ubicacion_id, status, evaluated_at)
+              (señal_id, ubicacion_id, status, evaluado_en)
             VALUES (?, ?, ?, NOW())
             ON CONFLICT (señal_id, ubicacion_id) DO UPDATE
-                SET evaluated_at = NOW()
+                SET evaluado_en = NOW()
             """,
             [feat_key, loc_uuid, status],
         )

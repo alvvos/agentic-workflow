@@ -319,7 +319,7 @@ def get_catchment_rings(location_uuid: str):
     row = (
         get_conn()
         .execute(
-            "SELECT catchment_rings_json FROM ubicaciones WHERE ubicacion_id = ?",
+            "SELECT anillos_captacion FROM ubicaciones WHERE ubicacion_id = ?",
             [location_uuid],
         )
         .fetchone()

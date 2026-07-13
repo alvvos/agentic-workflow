@@ -190,19 +190,19 @@ _DDL: list[str] = [
     """,
     """
     CREATE TABLE IF NOT EXISTS ubicaciones (
-        ubicacion_id  TEXT             PRIMARY KEY,
-        org_id        TEXT             NOT NULL,
-        nombre        TEXT             NOT NULL,
-        lat           DOUBLE PRECISION,
-        lon           DOUBLE PRECISION,
-        ciudad        TEXT,
-        provincia     TEXT,
-        pais_codigo   TEXT             NOT NULL,
-        region_code   TEXT,
-        codigo_postal TEXT,
-        direccion     TEXT,
-        activa        BOOLEAN          DEFAULT TRUE,
-        catchment_rings_json TEXT
+        ubicacion_id      TEXT             PRIMARY KEY,
+        org_id            TEXT             NOT NULL,
+        nombre            TEXT             NOT NULL,
+        lat               DOUBLE PRECISION,
+        lon               DOUBLE PRECISION,
+        ciudad            TEXT,
+        provincia         TEXT,
+        pais_codigo       TEXT             NOT NULL,
+        codigo_region     TEXT,
+        codigo_postal     TEXT,
+        direccion         TEXT,
+        activa            BOOLEAN          DEFAULT TRUE,
+        anillos_captacion TEXT
     )
     """,
     """
@@ -210,31 +210,31 @@ _DDL: list[str] = [
         zona_id          TEXT    PRIMARY KEY,
         ubicacion_id     TEXT    NOT NULL,
         nombre           TEXT    NOT NULL,
-        hidden           BOOLEAN DEFAULT FALSE,
-        zone_type        TEXT    DEFAULT '',
+        oculta           BOOLEAN DEFAULT FALSE,
+        tipo_zona        TEXT    DEFAULT '',
         parent_zona_id   TEXT    DEFAULT NULL
     )
     """,
     """
     CREATE TABLE IF NOT EXISTS visitas (
-        fecha             DATE             NOT NULL,
-        zona_id           TEXT             NOT NULL,
-        ubicacion_id      TEXT             NOT NULL,
-        org_id            TEXT             NOT NULL,
-        total_visits      INTEGER,
-        unique_visitors   INTEGER,
-        new_visitors      INTEGER,
-        uv_7d             DOUBLE PRECISION,
-        uv_28d            DOUBLE PRECISION,
-        uv_month          DOUBLE PRECISION,
-        uv_year           DOUBLE PRECISION,
-        freq_7d           DOUBLE PRECISION,
-        freq_28d          DOUBLE PRECISION,
-        freq_month        DOUBLE PRECISION,
-        freq_year         DOUBLE PRECISION,
-        dwell_time_min    DOUBLE PRECISION,
-        dwell_hist        TEXT,
-        hourly_visits     TEXT,
+        fecha                DATE             NOT NULL,
+        zona_id              TEXT             NOT NULL,
+        ubicacion_id         TEXT             NOT NULL,
+        org_id               TEXT             NOT NULL,
+        total_visitas        INTEGER,
+        visitantes_unicos    INTEGER,
+        visitantes_nuevos    INTEGER,
+        unicos_7d            DOUBLE PRECISION,
+        unicos_28d           DOUBLE PRECISION,
+        unicos_mes           DOUBLE PRECISION,
+        unicos_anyo          DOUBLE PRECISION,
+        frecuencia_7d        DOUBLE PRECISION,
+        frecuencia_28d       DOUBLE PRECISION,
+        frecuencia_mes       DOUBLE PRECISION,
+        frecuencia_anyo      DOUBLE PRECISION,
+        tiempo_estancia_min  DOUBLE PRECISION,
+        histograma_estancia  TEXT,
+        visitas_horarias     TEXT,
         PRIMARY KEY (fecha, zona_id)
     )
     """,
@@ -244,12 +244,12 @@ _DDL: list[str] = [
     """,
     """
     CREATE TABLE IF NOT EXISTS snapshots_geo (
-        ubicacion_id TEXT             NOT NULL,
+        ubicacion_id  TEXT             NOT NULL,
         señal_id      TEXT             NOT NULL,
         vigente_desde DATE             NOT NULL,
         valor         DOUBLE PRECISION,
         vigente_hasta DATE,
-        ingested_at   TIMESTAMP        DEFAULT CURRENT_TIMESTAMP,
+        ingerido_en   TIMESTAMP        DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (ubicacion_id, señal_id, vigente_desde)
     )
     """,
@@ -263,7 +263,7 @@ _DDL: list[str] = [
         ubicacion_id  TEXT             NOT NULL,
         señal_id      TEXT             NOT NULL,
         valor         DOUBLE PRECISION,
-        ingested_at   TIMESTAMP        DEFAULT CURRENT_TIMESTAMP,
+        ingerido_en   TIMESTAMP        DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (fecha, ubicacion_id, señal_id)
     )
     """,
@@ -273,15 +273,15 @@ _DDL: list[str] = [
     """,
     """
     CREATE TABLE IF NOT EXISTS señales (
-        señal_id               TEXT PRIMARY KEY,
-        fuente                 TEXT NOT NULL,
-        categoria              TEXT,
-        org_applicability      JSONB DEFAULT '"all"'::jsonb,
-        location_applicability JSONB,
-        status                 TEXT  DEFAULT 'incompleto'
-                                   CHECK (status IN ('incompleto', 'con_cobertura')),
-        notas                  TEXT,
-        registrado_en          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        señal_id                  TEXT PRIMARY KEY,
+        fuente                    TEXT NOT NULL,
+        categoria                 TEXT,
+        aplicabilidad_org         JSONB DEFAULT '"all"'::jsonb,
+        aplicabilidad_ubicacion   JSONB,
+        status                    TEXT  DEFAULT 'incompleto'
+                                      CHECK (status IN ('incompleto', 'con_cobertura')),
+        notas                     TEXT,
+        registrado_en             TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """,
     """
@@ -295,7 +295,7 @@ _DDL: list[str] = [
         fecha_fin     DATE    NOT NULL,
         metadata      JSONB   DEFAULT '{}'::jsonb,
         fuente        TEXT    DEFAULT 'manual',
-        source_key    TEXT    UNIQUE
+        clave_fuente  TEXT    UNIQUE
     )
     """,
     """
@@ -310,9 +310,9 @@ _DDL: list[str] = [
     CREATE TABLE IF NOT EXISTS usuarios (
         usuario_id    TEXT      PRIMARY KEY,
         password_hash TEXT      NOT NULL,
-        role          TEXT      DEFAULT 'user',
-        created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        last_login    TIMESTAMP
+        rol           TEXT      DEFAULT 'user',
+        creado_en     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        ultimo_acceso TIMESTAMP
     )
     """,
     """
@@ -326,10 +326,10 @@ _DDL: list[str] = [
     CREATE TABLE IF NOT EXISTS conversaciones (
         conversacion_id TEXT      PRIMARY KEY,
         usuario_id      TEXT      NOT NULL,
-        title           TEXT      DEFAULT 'Nueva conversación',
+        titulo          TEXT      DEFAULT 'Nueva conversación',
         ubicacion_id    TEXT,
-        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        creado_en       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        actualizado_en  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """,
     """
@@ -340,52 +340,52 @@ _DDL: list[str] = [
     CREATE TABLE IF NOT EXISTS mensajes (
         msg_id          UUID      DEFAULT gen_random_uuid() PRIMARY KEY,
         conversacion_id TEXT      NOT NULL,
-        seq             INTEGER   NOT NULL,
-        role            TEXT      NOT NULL,
-        content         TEXT,
-        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        orden           INTEGER   NOT NULL,
+        rol             TEXT      NOT NULL,
+        contenido       TEXT,
+        creado_en       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """,
     """
     CREATE INDEX IF NOT EXISTS idx_mensajes_conversacion
-        ON mensajes (conversacion_id, seq)
+        ON mensajes (conversacion_id, orden)
     """,
     # Chatbot response cache with native TTL
     """
     CREATE TABLE IF NOT EXISTS cache_chatbot (
-        cache_key    TEXT      PRIMARY KEY,
-        question     TEXT      NOT NULL,
+        clave_cache  TEXT      PRIMARY KEY,
+        pregunta     TEXT      NOT NULL,
         ubicacion_id TEXT,
-        answer       TEXT      NOT NULL,
-        created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        hits         INTEGER   DEFAULT 0,
-        expires_at   TIMESTAMP NOT NULL
+        respuesta    TEXT      NOT NULL,
+        creado_en    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        aciertos     INTEGER   DEFAULT 0,
+        expira_en    TIMESTAMP NOT NULL
     )
     """,
     """
     CREATE INDEX IF NOT EXISTS idx_cache_expires
-        ON cache_chatbot (expires_at)
+        ON cache_chatbot (expira_en)
     """,
     """
     CREATE TABLE IF NOT EXISTS evaluaciones_señales (
-        id             SERIAL           PRIMARY KEY,
-        evaluated_at   TIMESTAMPTZ      DEFAULT NOW(),
-        señal_id       TEXT             NOT NULL,
-        ubicacion_id   TEXT             NOT NULL,
-        split_idx      INT              NOT NULL,
-        fecha_eval_ini DATE             NOT NULL,
-        fecha_eval_fin DATE             NOT NULL,
-        n_train        INT              NOT NULL,
-        n_eval         INT              NOT NULL,
-        wmape_baseline DOUBLE PRECISION NOT NULL,
-        wmape_con_feat DOUBLE PRECISION NOT NULL,
-        wmape_delta    DOUBLE PRECISION NOT NULL,
-        horizonte      INT              NOT NULL
+        id               SERIAL           PRIMARY KEY,
+        evaluado_en      TIMESTAMPTZ      DEFAULT NOW(),
+        señal_id         TEXT             NOT NULL,
+        ubicacion_id     TEXT             NOT NULL,
+        indice_split     INT              NOT NULL,
+        fecha_eval_ini   DATE             NOT NULL,
+        fecha_eval_fin   DATE             NOT NULL,
+        n_entrenamiento  INT              NOT NULL,
+        n_evaluacion     INT              NOT NULL,
+        wmape_baseline   DOUBLE PRECISION NOT NULL,
+        wmape_con_feat   DOUBLE PRECISION NOT NULL,
+        wmape_delta      DOUBLE PRECISION NOT NULL,
+        horizonte        INT              NOT NULL
     )
     """,
     """
     CREATE INDEX IF NOT EXISTS idx_evaluaciones_señal
-        ON evaluaciones_señales (señal_id, evaluated_at)
+        ON evaluaciones_señales (señal_id, evaluado_en)
     """,
     """
     CREATE TABLE IF NOT EXISTS activacion_señales (
@@ -394,7 +394,7 @@ _DDL: list[str] = [
         status        TEXT             NOT NULL DEFAULT 'inactive'
                           CHECK (status IN ('active', 'inactive')),
         wmape_delta   DOUBLE PRECISION,
-        evaluated_at  TIMESTAMPTZ      DEFAULT NOW(),
+        evaluado_en   TIMESTAMPTZ      DEFAULT NOW(),
         PRIMARY KEY (señal_id, ubicacion_id)
     )
     """,
@@ -418,7 +418,7 @@ _DDL: list[str] = [
         isocrona_geojson JSONB,
         fuente           TEXT             DEFAULT 'manual',
         activo           BOOLEAN          DEFAULT TRUE,
-        created_at       TIMESTAMP        DEFAULT CURRENT_TIMESTAMP,
+        creado_en        TIMESTAMP        DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (ubicacion_id, nombre, categoria)
     )
     """,
@@ -434,7 +434,7 @@ _DDL: list[str] = [
         fuente       TEXT      NOT NULL,
         params       JSONB     NOT NULL DEFAULT '{}',
         activo       BOOLEAN   NOT NULL DEFAULT TRUE,
-        created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        creado_en    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (ubicacion_id, fuente)
     )
     """,
@@ -443,36 +443,36 @@ _DDL: list[str] = [
     """,
     """
     CREATE TABLE IF NOT EXISTS categorias_poi (
-        category    TEXT PRIMARY KEY,
+        categoria   TEXT PRIMARY KEY,
         label       TEXT NOT NULL,
-        icon_cls    VARCHAR(64),
+        icono       VARCHAR(64),
         color       VARCHAR(16),
-        badge_color VARCHAR(16)
+        color_badge VARCHAR(16)
     )
     """,
     """
     CREATE TABLE IF NOT EXISTS tipos_zona (
-        zone_type   TEXT PRIMARY KEY,
+        tipo_zona   TEXT PRIMARY KEY,
         label       TEXT NOT NULL,
-        icon_cls    VARCHAR(64),
+        icono       VARCHAR(64),
         color       VARCHAR(16),
         tooltip     TEXT
     )
     """,
     """
     CREATE TABLE IF NOT EXISTS categorias_narrativa (
-        category_key TEXT PRIMARY KEY,
-        label        TEXT NOT NULL,
-        icon_cls     VARCHAR(64),
-        sort_order   INT  DEFAULT 99
+        clave      TEXT PRIMARY KEY,
+        label      TEXT NOT NULL,
+        icono      VARCHAR(64),
+        orden      INT  DEFAULT 99
     )
     """,
     """
     CREATE TABLE IF NOT EXISTS niveles_alerta (
-        level_key  TEXT PRIMARY KEY,
-        text_color VARCHAR(16),
-        bg_color   VARCHAR(16),
-        sort_order INT DEFAULT 99
+        clave       TEXT PRIMARY KEY,
+        color_texto VARCHAR(16),
+        color_fondo VARCHAR(16),
+        orden       INT DEFAULT 99
     )
     """,
     """
@@ -485,30 +485,30 @@ _DDL: list[str] = [
         cobertura_desde TEXT,
         latencia_dias   INTEGER,
         paises          JSONB    DEFAULT '[]'::jsonb,
-        params_schema   TEXT,
-        params_ejemplo  JSONB    DEFAULT '{}'::jsonb,
+        esquema_params  TEXT,
+        ejemplo_params  JSONB    DEFAULT '{}'::jsonb,
         config          JSONB    NOT NULL DEFAULT '{}'::jsonb,
         activo          BOOLEAN  NOT NULL DEFAULT TRUE,
-        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        creado_en       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """,
 ]
 
 _VISITAS_COLS = [
-    ("total_visits", "INTEGER"),
-    ("unique_visitors", "INTEGER"),
-    ("new_visitors", "INTEGER"),
-    ("uv_7d", "DOUBLE PRECISION"),
-    ("uv_28d", "DOUBLE PRECISION"),
-    ("uv_month", "DOUBLE PRECISION"),
-    ("uv_year", "DOUBLE PRECISION"),
-    ("freq_7d", "DOUBLE PRECISION"),
-    ("freq_28d", "DOUBLE PRECISION"),
-    ("freq_month", "DOUBLE PRECISION"),
-    ("freq_year", "DOUBLE PRECISION"),
-    ("dwell_time_min", "DOUBLE PRECISION"),
-    ("dwell_hist", "TEXT"),
-    ("hourly_visits", "TEXT"),
+    ("total_visitas", "INTEGER"),
+    ("visitantes_unicos", "INTEGER"),
+    ("visitantes_nuevos", "INTEGER"),
+    ("unicos_7d", "DOUBLE PRECISION"),
+    ("unicos_28d", "DOUBLE PRECISION"),
+    ("unicos_mes", "DOUBLE PRECISION"),
+    ("unicos_anyo", "DOUBLE PRECISION"),
+    ("frecuencia_7d", "DOUBLE PRECISION"),
+    ("frecuencia_28d", "DOUBLE PRECISION"),
+    ("frecuencia_mes", "DOUBLE PRECISION"),
+    ("frecuencia_anyo", "DOUBLE PRECISION"),
+    ("tiempo_estancia_min", "DOUBLE PRECISION"),
+    ("histograma_estancia", "TEXT"),
+    ("visitas_horarias", "TEXT"),
 ]
 
 
@@ -536,6 +536,7 @@ def _apply_ddl(conn: PgConn) -> None:
     _migrate_fuentes(conn)
     _migrar_tipo_conector(conn)
     _migrar_config_thesportsdb(conn)
+    _migrar_columnas_espanol(conn)
     _sync_users_from_json(conn)
 
 
@@ -671,6 +672,107 @@ def _migrar_limpiar_columnas(conn: PgConn) -> None:
     conn.execute("ALTER TABLE activacion_señales DROP COLUMN IF EXISTS wmape_delta")
 
 
+def _migrar_columnas_espanol(conn: PgConn) -> None:
+    """Normaliza todos los nombres de columna al convenio español. Idempotente."""
+
+    def _r(table: str, old: str, new: str) -> None:
+        conn.execute(
+            f"""
+            DO $$ BEGIN
+              IF EXISTS (SELECT FROM information_schema.columns
+                         WHERE table_name='{table}' AND column_name='{old}')
+              THEN ALTER TABLE {table} RENAME COLUMN {old} TO {new};
+              END IF;
+            END $$
+            """
+        )
+
+    # visitas
+    _r("visitas", "total_visits", "total_visitas")
+    _r("visitas", "unique_visitors", "visitantes_unicos")
+    _r("visitas", "new_visitors", "visitantes_nuevos")
+    _r("visitas", "uv_7d", "unicos_7d")
+    _r("visitas", "uv_28d", "unicos_28d")
+    _r("visitas", "uv_month", "unicos_mes")
+    _r("visitas", "uv_year", "unicos_anyo")
+    _r("visitas", "freq_7d", "frecuencia_7d")
+    _r("visitas", "freq_28d", "frecuencia_28d")
+    _r("visitas", "freq_month", "frecuencia_mes")
+    _r("visitas", "freq_year", "frecuencia_anyo")
+    _r("visitas", "dwell_time_min", "tiempo_estancia_min")
+    _r("visitas", "dwell_hist", "histograma_estancia")
+    _r("visitas", "hourly_visits", "visitas_horarias")
+    # zonas
+    _r("zonas", "hidden", "oculta")
+    _r("zonas", "zone_type", "tipo_zona")
+    # tipos_zona
+    _r("tipos_zona", "zone_type", "tipo_zona")
+    # eventos
+    _r("eventos", "source_key", "clave_fuente")
+    # señales
+    _r("señales", "icon_cls", "icono")
+    _r("señales", "agg_fn", "funcion_agregacion")
+    _r("señales", "display_mode", "modo_visualizacion")
+    _r("señales", "canonical_type", "tipo_canonico")
+    _r("señales", "location_applicability", "aplicabilidad_ubicacion")
+    _r("señales", "org_applicability", "aplicabilidad_org")
+    # snapshots_geo
+    _r("snapshots_geo", "ingested_at", "ingerido_en")
+    # valores_señales
+    _r("valores_señales", "ingested_at", "ingerido_en")
+    # evaluaciones_señales
+    _r("evaluaciones_señales", "evaluated_at", "evaluado_en")
+    _r("evaluaciones_señales", "split_idx", "indice_split")
+    _r("evaluaciones_señales", "n_train", "n_entrenamiento")
+    _r("evaluaciones_señales", "n_eval", "n_evaluacion")
+    # activacion_señales
+    _r("activacion_señales", "evaluated_at", "evaluado_en")
+    # usuarios
+    _r("usuarios", "created_at", "creado_en")
+    _r("usuarios", "last_login", "ultimo_acceso")
+    _r("usuarios", "role", "rol")
+    # conversaciones
+    _r("conversaciones", "title", "titulo")
+    _r("conversaciones", "created_at", "creado_en")
+    _r("conversaciones", "updated_at", "actualizado_en")
+    # mensajes
+    _r("mensajes", "role", "rol")
+    _r("mensajes", "content", "contenido")
+    _r("mensajes", "created_at", "creado_en")
+    _r("mensajes", "seq", "orden")
+    # cache_chatbot
+    _r("cache_chatbot", "cache_key", "clave_cache")
+    _r("cache_chatbot", "question", "pregunta")
+    _r("cache_chatbot", "answer", "respuesta")
+    _r("cache_chatbot", "created_at", "creado_en")
+    _r("cache_chatbot", "hits", "aciertos")
+    _r("cache_chatbot", "expires_at", "expira_en")
+    # puntos_interes
+    _r("puntos_interes", "created_at", "creado_en")
+    # config_fuentes
+    _r("config_fuentes", "created_at", "creado_en")
+    # categorias_poi
+    _r("categorias_poi", "category", "categoria")
+    _r("categorias_poi", "icon_cls", "icono")
+    _r("categorias_poi", "badge_color", "color_badge")
+    # categorias_narrativa
+    _r("categorias_narrativa", "category_key", "clave")
+    _r("categorias_narrativa", "icon_cls", "icono")
+    _r("categorias_narrativa", "sort_order", "orden")
+    # niveles_alerta
+    _r("niveles_alerta", "level_key", "clave")
+    _r("niveles_alerta", "text_color", "color_texto")
+    _r("niveles_alerta", "bg_color", "color_fondo")
+    _r("niveles_alerta", "sort_order", "orden")
+    # fuentes
+    _r("fuentes", "created_at", "creado_en")
+    _r("fuentes", "params_schema", "esquema_params")
+    _r("fuentes", "params_ejemplo", "ejemplo_params")
+    # ubicaciones
+    _r("ubicaciones", "region_code", "codigo_region")
+    _r("ubicaciones", "catchment_rings_json", "anillos_captacion")
+
+
 def _sync_users_from_json(conn: PgConn) -> None:
     """Upsert users from users.json into usuarios on every startup."""
     import json as _json
@@ -686,8 +788,8 @@ def _sync_users_from_json(conn: PgConn) -> None:
             entry = {"password": entry, "role": "user"}
         rows.append((username, entry.get("password", ""), entry.get("role", "user")))
     conn.executemany(
-        "INSERT INTO usuarios (usuario_id, password_hash, role) VALUES (?,?,?)"
-        " ON CONFLICT (usuario_id) DO UPDATE SET password_hash = excluded.password_hash, role = excluded.role",
+        "INSERT INTO usuarios (usuario_id, password_hash, rol) VALUES (?,?,?)"
+        " ON CONFLICT (usuario_id) DO UPDATE SET password_hash = excluded.password_hash, rol = excluded.rol",
         rows,
     )
 
@@ -732,13 +834,15 @@ def _migrate_activacion_señales_periodicidad(conn: PgConn) -> None:
 
 def _migrate_señales_display(conn: PgConn) -> None:
     """Añade columnas de display a señales y siembra metadatos de señales conocidas."""
-    conn.execute("ALTER TABLE señales ADD COLUMN IF NOT EXISTS label        TEXT")
-    conn.execute("ALTER TABLE señales ADD COLUMN IF NOT EXISTS sublabel     TEXT")
-    conn.execute("ALTER TABLE señales ADD COLUMN IF NOT EXISTS color        VARCHAR(16)")
-    conn.execute("ALTER TABLE señales ADD COLUMN IF NOT EXISTS icon_cls     VARCHAR(64)")
-    conn.execute("ALTER TABLE señales ADD COLUMN IF NOT EXISTS agg_fn " "VARCHAR(8) DEFAULT 'sum'")
+    conn.execute("ALTER TABLE señales ADD COLUMN IF NOT EXISTS label               TEXT")
+    conn.execute("ALTER TABLE señales ADD COLUMN IF NOT EXISTS sublabel            TEXT")
+    conn.execute("ALTER TABLE señales ADD COLUMN IF NOT EXISTS color               VARCHAR(16)")
+    conn.execute("ALTER TABLE señales ADD COLUMN IF NOT EXISTS icono               VARCHAR(64)")
     conn.execute(
-        "ALTER TABLE señales ADD COLUMN IF NOT EXISTS display_mode " "VARCHAR(20) DEFAULT 'yoy'"
+        "ALTER TABLE señales ADD COLUMN IF NOT EXISTS funcion_agregacion  VARCHAR(8) DEFAULT 'sum'"
+    )
+    conn.execute(
+        "ALTER TABLE señales ADD COLUMN IF NOT EXISTS modo_visualizacion  VARCHAR(20) DEFAULT 'yoy'"
     )
 
     # ── señales display_mode='yoy' ──────────────────────────────────────
@@ -828,8 +932,8 @@ def _migrate_señales_display(conn: PgConn) -> None:
     ]
     for fk, lbl, sub, col, icon, agg, notas in _YOY_UPDATES:
         conn.execute(
-            "UPDATE señales SET label=?, sublabel=?, color=?, icon_cls=?, "
-            "agg_fn=?, display_mode='yoy', notas=? WHERE señal_id=?",
+            "UPDATE señales SET label=?, sublabel=?, color=?, icono=?, "
+            "funcion_agregacion=?, modo_visualizacion='yoy', notas=? WHERE señal_id=?",
             [lbl, sub, col, icon, agg, notas, fk],
         )
 
@@ -857,8 +961,8 @@ def _migrate_señales_display(conn: PgConn) -> None:
     ]
     for fk, lbl, sub, col, icon, agg, notas in _CRUCEROS_UPDATES:
         conn.execute(
-            "UPDATE señales SET label=?, sublabel=?, color=?, icon_cls=?, "
-            "agg_fn=?, display_mode='cruceros', notas=? WHERE señal_id=?",
+            "UPDATE señales SET label=?, sublabel=?, color=?, icono=?, "
+            "funcion_agregacion=?, modo_visualizacion='cruceros', notas=? WHERE señal_id=?",
             [lbl, sub, col, icon, agg, notas, fk],
         )
 
@@ -931,8 +1035,8 @@ def _migrate_señales_display(conn: PgConn) -> None:
     ]
     for fk, lbl, sub, col, icon, agg, notas in _CAL_UPDATES:
         conn.execute(
-            "UPDATE señales SET label=?, sublabel=?, color=?, icon_cls=?, "
-            "agg_fn=?, display_mode='calendario', notas=? WHERE señal_id=?",
+            "UPDATE señales SET label=?, sublabel=?, color=?, icono=?, "
+            "funcion_agregacion=?, modo_visualizacion='calendario', notas=? WHERE señal_id=?",
             [lbl, sub, col, icon, agg, notas, fk],
         )
 
@@ -991,11 +1095,11 @@ def _migrate_señales_display(conn: PgConn) -> None:
     for fk, src, cat, stat, lbl, sub, col, icon, agg, notas in _EVENTS_COUNT_ROWS:
         conn.execute(
             "INSERT INTO señales "
-            "(señal_id, fuente, categoria, status, label, sublabel, color, icon_cls, agg_fn, display_mode, notas) "
+            "(señal_id, fuente, categoria, status, label, sublabel, color, icono, funcion_agregacion, modo_visualizacion, notas) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?) "
             "ON CONFLICT (señal_id) DO UPDATE SET "
             "label=EXCLUDED.label, sublabel=EXCLUDED.sublabel, color=EXCLUDED.color, "
-            "icon_cls=EXCLUDED.icon_cls, agg_fn=EXCLUDED.agg_fn, display_mode=EXCLUDED.display_mode, "
+            "icono=EXCLUDED.icono, funcion_agregacion=EXCLUDED.funcion_agregacion, modo_visualizacion=EXCLUDED.modo_visualizacion, "
             "notas=EXCLUDED.notas",
             [fk, src, cat, stat, lbl, sub, col, icon, agg, "events_count", notas],
         )
@@ -1020,10 +1124,10 @@ def _migrate_registries(conn: PgConn) -> None:
         ("otro", "Otro", "fas fa-map-pin", "#78909C", "secondary"),
     ]
     conn.executemany(
-        "INSERT INTO categorias_poi (category, label, icon_cls, color, badge_color) "
-        "VALUES (?,?,?,?,?) ON CONFLICT (category) DO UPDATE SET "
-        "label = EXCLUDED.label, icon_cls = EXCLUDED.icon_cls, "
-        "color = EXCLUDED.color, badge_color = EXCLUDED.badge_color",
+        "INSERT INTO categorias_poi (categoria, label, icono, color, color_badge) "
+        "VALUES (?,?,?,?,?) ON CONFLICT (categoria) DO UPDATE SET "
+        "label = EXCLUDED.label, icono = EXCLUDED.icono, "
+        "color = EXCLUDED.color, color_badge = EXCLUDED.color_badge",
         _POI_CATS,
     )
 
@@ -1053,8 +1157,8 @@ def _migrate_registries(conn: PgConn) -> None:
         ("default", "Analítica", "fas fa-layer-group", "#0052CC", None),
     ]
     conn.executemany(
-        "INSERT INTO tipos_zona (zone_type, label, icon_cls, color, tooltip) "
-        "VALUES (?,?,?,?,?) ON CONFLICT (zone_type) DO NOTHING",
+        "INSERT INTO tipos_zona (tipo_zona, label, icono, color, tooltip) "
+        "VALUES (?,?,?,?,?) ON CONFLICT (tipo_zona) DO NOTHING",
         _ZONE_TYPES,
     )
 
@@ -1067,8 +1171,8 @@ def _migrate_registries(conn: PgConn) -> None:
         ("integridad", "Integridad", "fas fa-shield-check", 5),
     ]
     conn.executemany(
-        "INSERT INTO categorias_narrativa (category_key, label, icon_cls, sort_order) "
-        "VALUES (?,?,?,?) ON CONFLICT (category_key) DO NOTHING",
+        "INSERT INTO categorias_narrativa (clave, label, icono, orden) "
+        "VALUES (?,?,?,?) ON CONFLICT (clave) DO NOTHING",
         _NARRATIVE_CATS,
     )
 
@@ -1082,13 +1186,13 @@ def _migrate_registries(conn: PgConn) -> None:
         ("info", "#0c5460", "#d1ecf1", 6),
     ]
     conn.executemany(
-        "INSERT INTO niveles_alerta (level_key, text_color, bg_color, sort_order) "
-        "VALUES (?,?,?,?) ON CONFLICT (level_key) DO NOTHING",
+        "INSERT INTO niveles_alerta (clave, color_texto, color_fondo, orden) "
+        "VALUES (?,?,?,?) ON CONFLICT (clave) DO NOTHING",
         _ALERT_LEVELS,
     )
 
-    # ── señales.canonical_type + fallback_señal_id columns ────────────────────
-    conn.execute("ALTER TABLE señales ADD COLUMN IF NOT EXISTS canonical_type TEXT")
+    # ── señales.tipo_canonico + fallback_señal_id columns ────────────────────
+    conn.execute("ALTER TABLE señales ADD COLUMN IF NOT EXISTS tipo_canonico TEXT")
     conn.execute("ALTER TABLE señales ADD COLUMN IF NOT EXISTS fallback_señal_id TEXT")
 
     _RAW_EVENTS = [
@@ -1213,13 +1317,13 @@ def _migrate_registries(conn: PgConn) -> None:
     for row in _RAW_EVENTS:
         conn.execute(
             "INSERT INTO señales "
-            "(señal_id, fuente, categoria, status, label, sublabel, color, icon_cls, "
-            " agg_fn, display_mode, canonical_type) "
+            "(señal_id, fuente, categoria, status, label, sublabel, color, icono, "
+            " funcion_agregacion, modo_visualizacion, tipo_canonico) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?) "
             "ON CONFLICT (señal_id) DO UPDATE SET "
-            "canonical_type=EXCLUDED.canonical_type, label=EXCLUDED.label, "
-            "sublabel=EXCLUDED.sublabel, color=EXCLUDED.color, icon_cls=EXCLUDED.icon_cls, "
-            "agg_fn=EXCLUDED.agg_fn, display_mode=EXCLUDED.display_mode",
+            "tipo_canonico=EXCLUDED.tipo_canonico, label=EXCLUDED.label, "
+            "sublabel=EXCLUDED.sublabel, color=EXCLUDED.color, icono=EXCLUDED.icono, "
+            "funcion_agregacion=EXCLUDED.funcion_agregacion, modo_visualizacion=EXCLUDED.modo_visualizacion",
             list(row),
         )
 
@@ -1264,7 +1368,7 @@ def _migrate_activacion_señales(conn: PgConn) -> None:
 
 
 def _migrate_ubicaciones(conn: PgConn) -> None:
-    conn.execute("ALTER TABLE ubicaciones ADD COLUMN IF NOT EXISTS catchment_rings_json TEXT")
+    conn.execute("ALTER TABLE ubicaciones ADD COLUMN IF NOT EXISTS anillos_captacion TEXT")
 
 
 def _migrate_fk_constraints(conn: PgConn) -> None:
@@ -1420,7 +1524,7 @@ def _migrate_señales_fks(conn: PgConn) -> None:
 
 
 def _migrate_zonas(conn: PgConn) -> None:
-    conn.execute("ALTER TABLE zonas ADD COLUMN IF NOT EXISTS zone_type TEXT DEFAULT ''")
+    conn.execute("ALTER TABLE zonas ADD COLUMN IF NOT EXISTS tipo_zona TEXT DEFAULT ''")
     conn.execute("ALTER TABLE zonas ADD COLUMN IF NOT EXISTS parent_zona_id TEXT DEFAULT NULL")
     conn.execute("ALTER TABLE zonas ADD COLUMN IF NOT EXISTS funnel_step INT DEFAULT NULL")
 
@@ -1442,7 +1546,7 @@ def _migrate_zone_types_miniso(conn: PgConn) -> None:
     for nombre, tipo, step in _FUNNEL_ZONES:
         conn.execute(
             """
-            UPDATE zonas SET zone_type = ?, funnel_step = ?
+            UPDATE zonas SET tipo_zona = ?, funnel_step = ?
             WHERE nombre = ?
               AND funnel_step IS NULL
               AND ubicacion_id IN (
@@ -1657,16 +1761,16 @@ def _migrate_señales_display_upsert(conn: PgConn) -> None:
     ]
     for sid, fuente, cat, mode, lbl, sub, col, icon, agg in _KNOWN:
         conn.execute(
-            """INSERT INTO señales (señal_id, fuente, categoria, status, display_mode,
-                                    label, sublabel, color, icon_cls, agg_fn)
+            """INSERT INTO señales (señal_id, fuente, categoria, status, modo_visualizacion,
+                                    label, sublabel, color, icono, funcion_agregacion)
                VALUES (?,?,?,'con_cobertura',?,?,?,?,?,?)
                ON CONFLICT (señal_id) DO UPDATE SET
-                   label        = EXCLUDED.label,
-                   sublabel     = EXCLUDED.sublabel,
-                   color        = EXCLUDED.color,
-                   icon_cls     = EXCLUDED.icon_cls,
-                   agg_fn       = EXCLUDED.agg_fn,
-                   display_mode = EXCLUDED.display_mode""",
+                   label               = EXCLUDED.label,
+                   sublabel            = EXCLUDED.sublabel,
+                   color               = EXCLUDED.color,
+                   icono               = EXCLUDED.icono,
+                   funcion_agregacion  = EXCLUDED.funcion_agregacion,
+                   modo_visualizacion  = EXCLUDED.modo_visualizacion""",
             [sid, fuente, cat, mode, lbl, sub, col, icon, agg],
         )
 
@@ -1816,8 +1920,8 @@ _SOURCE_REGISTRY_SEED = [
         "cobertura_desde": "2024-01-01",
         "latencia_dias": 1,
         "paises": [],
-        "params_schema": None,
-        "params_ejemplo": {},
+        "esquema_params": None,
+        "ejemplo_params": {},
         "config": {},
     },
     {
@@ -1829,8 +1933,8 @@ _SOURCE_REGISTRY_SEED = [
         "cobertura_desde": "2024-01-01",
         "latencia_dias": 0,
         "paises": [],
-        "params_schema": None,
-        "params_ejemplo": {},
+        "esquema_params": None,
+        "ejemplo_params": {},
         "config": {},
     },
     {
@@ -1842,8 +1946,8 @@ _SOURCE_REGISTRY_SEED = [
         "cobertura_desde": "2024-01-01",
         "latencia_dias": 0,
         "paises": [],
-        "params_schema": None,
-        "params_ejemplo": {},
+        "esquema_params": None,
+        "ejemplo_params": {},
         "config": {},
     },
     {
@@ -1855,8 +1959,8 @@ _SOURCE_REGISTRY_SEED = [
         "cobertura_desde": "2024-01-01",
         "latencia_dias": 0,
         "paises": [],
-        "params_schema": None,
-        "params_ejemplo": {
+        "esquema_params": None,
+        "ejemplo_params": {
             "equipos": ["real madrid", "atlético", "getafe"],
             "sedes": ["santiago bernabéu", "estadio metropolitano"],
         },
@@ -1898,8 +2002,8 @@ _SOURCE_REGISTRY_SEED = [
         "cobertura_desde": "2024-01-01",
         "latencia_dias": 0,
         "paises": ["ES"],
-        "params_schema": None,
-        "params_ejemplo": {},
+        "esquema_params": None,
+        "ejemplo_params": {},
         "config": {},
     },
     # ── Diarias configuradas ──────────────────────────────────────────────────
@@ -1912,8 +2016,8 @@ _SOURCE_REGISTRY_SEED = [
         "cobertura_desde": "2024-01-01",
         "latencia_dias": 1,
         "paises": ["ES"],
-        "params_schema": "{'ajax_url': '<URL del endpoint WordPress AJAX>', 'pais_codigo': 'ES', 'señal_id': 'n_pasajeros_crucero_dia'}",
-        "params_ejemplo": {
+        "esquema_params": "{'ajax_url': '<URL del endpoint WordPress AJAX>', 'pais_codigo': 'ES', 'señal_id': 'n_pasajeros_crucero_dia'}",
+        "ejemplo_params": {
             "ajax_url": "https://www.puertomalaga.com/wp-admin/admin-ajax.php",
             "pais_codigo": "ES",
             "señal_id": "n_pasajeros_crucero_dia",
@@ -1934,8 +2038,8 @@ _SOURCE_REGISTRY_SEED = [
         "cobertura_desde": "2016-01",
         "latencia_dias": 45,
         "paises": ["ES"],
-        "params_schema": "{'estaciones': [{'nombre': '<nombre exacto en el Excel de Metro Madrid>', 'slug': '<snake_case>'}], 'anyo_url': '<URL pattern con {year}>', 'feature_key_prefix': 'afluencia_metro_'}",
-        "params_ejemplo": {
+        "esquema_params": "{'estaciones': [{'nombre': '<nombre exacto en el Excel de Metro Madrid>', 'slug': '<snake_case>'}], 'anyo_url': '<URL pattern con {year}>', 'feature_key_prefix': 'afluencia_metro_'}",
+        "ejemplo_params": {
             "estaciones": [
                 {"nombre": "Gran Via", "slug": "gran_via"},
                 {"nombre": "Callao", "slug": "callao"},
@@ -1955,8 +2059,8 @@ _SOURCE_REGISTRY_SEED = [
         "cobertura_desde": "2012-01",
         "latencia_dias": 25,
         "paises": ["ES"],
-        "params_schema": "{'port_authority': '<nombre exacto de la Autoridad Portuaria en el XLSX>'}",
-        "params_ejemplo": {"port_authority": "Malaga"},
+        "esquema_params": "{'port_authority': '<nombre exacto de la Autoridad Portuaria en el XLSX>'}",
+        "ejemplo_params": {"port_authority": "Malaga"},
         "config": {
             "feature_key": "n_pasajeros_crucero_oficial",
             "listing_url": "https://www.puertos.es/en/data/statistics/monthly",
@@ -1972,8 +2076,8 @@ _SOURCE_REGISTRY_SEED = [
         "cobertura_desde": "1999-01",
         "latencia_dias": 45,
         "paises": ["ES"],
-        "params_schema": "{'provincia_nombre': '<fragmento del nombre de provincia en series INE>'}",
-        "params_ejemplo": {"provincia_nombre": "Malaga"},
+        "esquema_params": "{'provincia_nombre': '<fragmento del nombre de provincia en series INE>'}",
+        "ejemplo_params": {"provincia_nombre": "Malaga"},
         "config": {
             "base_url": "https://servicios.ine.es/wstempus/js/ES",
             "tabla_viajeros": 2078,
@@ -1990,8 +2094,8 @@ _SOURCE_REGISTRY_SEED = [
         "cobertura_desde": None,
         "latencia_dias": 0,
         "paises": ["ES", "MX", "PT"],
-        "params_schema": "{'radio_m': 1200, 'max_resultados': 200, 'categorias': {'<esri_category_id>': ['<tipo_interno>', '<label>']}}",
-        "params_ejemplo": {"radio_m": 1200},
+        "esquema_params": "{'radio_m': 1200, 'max_resultados': 200, 'categorias': {'<esri_category_id>': ['<tipo_interno>', '<label>']}}",
+        "ejemplo_params": {"radio_m": 1200},
         "config": {
             "base_url": "https://places-api.arcgis.com/arcgis/rest/services/places-service/v1",
             "radio_m": 1200,
@@ -2046,8 +2150,8 @@ def _migrate_fuentes(conn: PgConn) -> None:
             """
             INSERT INTO fuentes
                 (fuente, periodicidad, categoria, descripcion, url_referencia,
-                 cobertura_desde, latencia_dias, paises, params_schema,
-                 params_ejemplo, config, activo)
+                 cobertura_desde, latencia_dias, paises, esquema_params,
+                 ejemplo_params, config, activo)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s::jsonb, %s::jsonb, TRUE)
             ON CONFLICT (fuente) DO UPDATE SET
                 periodicidad    = EXCLUDED.periodicidad,
@@ -2057,8 +2161,8 @@ def _migrate_fuentes(conn: PgConn) -> None:
                 cobertura_desde = EXCLUDED.cobertura_desde,
                 latencia_dias   = EXCLUDED.latencia_dias,
                 paises          = EXCLUDED.paises,
-                params_schema   = EXCLUDED.params_schema,
-                params_ejemplo  = EXCLUDED.params_ejemplo,
+                esquema_params  = EXCLUDED.esquema_params,
+                ejemplo_params  = EXCLUDED.ejemplo_params,
                 config          = EXCLUDED.config
             """,
             [
@@ -2070,8 +2174,8 @@ def _migrate_fuentes(conn: PgConn) -> None:
                 entry["cobertura_desde"],
                 entry["latencia_dias"],
                 _json.dumps(entry["paises"], ensure_ascii=False),
-                entry["params_schema"],
-                _json.dumps(entry["params_ejemplo"], ensure_ascii=False),
+                entry["esquema_params"],
+                _json.dumps(entry["ejemplo_params"], ensure_ascii=False),
                 _json.dumps(entry["config"], ensure_ascii=False),
             ],
         )

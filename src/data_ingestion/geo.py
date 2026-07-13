@@ -141,7 +141,7 @@ def ingestar_snapshot_esri(
         ON CONFLICT (ubicacion_id, señal_id, vigente_desde) DO UPDATE SET
             valor = excluded.valor,
             vigente_hasta = NULL,
-            ingested_at = CURRENT_TIMESTAMP
+            ingerido_en = CURRENT_TIMESTAMP
         """,
         filas,
     )

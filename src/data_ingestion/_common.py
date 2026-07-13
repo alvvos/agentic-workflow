@@ -51,7 +51,7 @@ EVENTOS_FEATURE_COLS: list[str] = [
 
 
 def get_active_locations(location_uuid: str | None = None) -> list[dict]:
-    """Devuelve lista de dicts con {uuid, nombre, lat, lon, pais_codigo, region_code, city}."""
+    """Devuelve lista de dicts con {uuid, nombre, lat, lon, pais_codigo, codigo_region, city}."""
     _org_placeholders = ",".join(["%s"] * len(ALLOWED_ORG_IDS))
     _org_args = list(ALLOWED_ORG_IDS)
 
@@ -59,7 +59,7 @@ def get_active_locations(location_uuid: str | None = None) -> list[dict]:
         row = (
             get_conn()
             .execute(
-                f"""SELECT ubicacion_id, nombre, lat, lon, pais_codigo, region_code, ciudad
+                f"""SELECT ubicacion_id, nombre, lat, lon, pais_codigo, codigo_region, ciudad
                FROM   ubicaciones
                WHERE  ubicacion_id = %s AND activa = TRUE
                  AND  org_id IN ({_org_placeholders})""",
@@ -72,7 +72,7 @@ def get_active_locations(location_uuid: str | None = None) -> list[dict]:
     rows = (
         get_conn()
         .execute(
-            f"""SELECT ubicacion_id, nombre, lat, lon, pais_codigo, region_code, ciudad
+            f"""SELECT ubicacion_id, nombre, lat, lon, pais_codigo, codigo_region, ciudad
            FROM   ubicaciones
            WHERE  activa = TRUE AND lat IS NOT NULL AND lon IS NOT NULL
              AND  org_id IN ({_org_placeholders})""",
@@ -91,7 +91,7 @@ def _to_loc(r) -> dict:
         "lat": float(r[2]),
         "lon": float(r[3]),
         "pais_codigo": r[4] or "ES",
-        "region_code": r[5],
+        "codigo_region": r[5],
         "city": r[6] or "",
     }
 
@@ -110,7 +110,7 @@ def is_fresh(location_uuid: str, source_name: str, max_age_hours: float) -> bool
         row = (
             get_conn()
             .execute(
-                "SELECT MAX(ingested_at) FROM valores_señales "
+                "SELECT MAX(ingerido_en) FROM valores_señales "
                 "WHERE  ubicacion_id = ? AND señal_id = ?",
                 [location_uuid, f"_sync_{source_name}"],
             )
@@ -131,7 +131,7 @@ def write_sync_marker(location_uuid: str, source_name: str) -> None:
             "INSERT INTO valores_señales (fecha, ubicacion_id, señal_id, valor) "
             "VALUES (CURRENT_DATE, ?, ?, 1.0) "
             "ON CONFLICT (fecha, ubicacion_id, señal_id) "
-            "DO UPDATE SET valor = 1.0, ingested_at = NOW()",
+            "DO UPDATE SET valor = 1.0, ingerido_en = NOW()",
             [location_uuid, f"_sync_{source_name}"],
         )
     except Exception:
@@ -154,7 +154,7 @@ def write_ev_features(location_uuid: str, daily: dict[date, dict]) -> None:
         get_conn().executemany(
             "INSERT INTO valores_señales (fecha, ubicacion_id, señal_id, valor) "
             "VALUES (?,?,?,?) ON CONFLICT (fecha, ubicacion_id, señal_id) "
-            "DO UPDATE SET valor = GREATEST(valores_señales.valor, excluded.valor), ingested_at = NOW()",
+            "DO UPDATE SET valor = GREATEST(valores_señales.valor, excluded.valor), ingerido_en = NOW()",
             rows,
         )
     except Exception:
@@ -184,9 +184,9 @@ def write_calendario_org(location_uuid: str, events: list[dict], pais_codigo: st
         get_conn().executemany(
             """INSERT INTO eventos
                (org_id, ubicacion_id, pais_codigo, evento_key,
-                fecha_inicio, fecha_fin, metadata, fuente, source_key)
+                fecha_inicio, fecha_fin, metadata, fuente, clave_fuente)
                VALUES (?,?,?,?,?,?,?,?,?)
-               ON CONFLICT (source_key) DO NOTHING""",
+               ON CONFLICT (clave_fuente) DO NOTHING""",
             rows,
         )
     except Exception:
@@ -218,7 +218,7 @@ def update_ev_rank_total(location_uuid: str, date_from: date, date_to: date) -> 
               AND  fecha BETWEEN ? AND ?
             GROUP  BY fecha
             ON CONFLICT (fecha, ubicacion_id, señal_id)
-            DO UPDATE SET valor = excluded.valor, ingested_at = NOW()
+            DO UPDATE SET valor = excluded.valor, ingerido_en = NOW()
             """,
             [location_uuid, location_uuid, str(date_from), str(date_to)],
         )
@@ -282,7 +282,7 @@ def write_month_uniform(
         "INSERT INTO valores_señales (fecha, ubicacion_id, señal_id, valor) "
         "VALUES (?,?,?,?) "
         "ON CONFLICT (fecha, ubicacion_id, señal_id) "
-        "DO UPDATE SET valor = excluded.valor, ingested_at = NOW()",
+        "DO UPDATE SET valor = excluded.valor, ingerido_en = NOW()",
         rows,
     )
     if verbose:

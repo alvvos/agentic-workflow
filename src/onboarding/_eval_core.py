@@ -53,7 +53,7 @@ _XGB_PARAMS: dict = dict(
 def _load_visitas(conn, location_uuid: str) -> pd.DataFrame:
     df = conn.execute(
         """
-        SELECT fecha, SUM(total_visits)::int AS total_visits
+        SELECT fecha, SUM(total_visitas)::int AS total_visits
         FROM   visitas
         WHERE  ubicacion_id = ?
         GROUP  BY fecha
@@ -245,11 +245,11 @@ def _evaluate_feature(
             {
                 "señal_id": feature_key,
                 "ubicacion_id": location_uuid,
-                "split_idx": k,
+                "indice_split": k,
                 "fecha_eval_ini": eval_start.date(),
                 "fecha_eval_fin": eval_end.date(),
-                "n_train": len(df_train),
-                "n_eval": len(df_eval),
+                "n_entrenamiento": len(df_train),
+                "n_evaluacion": len(df_eval),
                 "wmape_baseline": w_base,
                 "wmape_con_feat": w_feat,
                 "wmape_delta": delta,
@@ -267,9 +267,9 @@ def _write_results(conn, results: list[dict]) -> None:
     conn.executemany(
         """
         INSERT INTO evaluaciones_señales
-            (señal_id, ubicacion_id, split_idx,
+            (señal_id, ubicacion_id, indice_split,
              fecha_eval_ini, fecha_eval_fin,
-             n_train, n_eval,
+             n_entrenamiento, n_evaluacion,
              wmape_baseline, wmape_con_feat, wmape_delta, horizonte)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
@@ -277,11 +277,11 @@ def _write_results(conn, results: list[dict]) -> None:
             (
                 r["señal_id"],
                 r["ubicacion_id"],
-                r["split_idx"],
+                r["indice_split"],
                 r["fecha_eval_ini"],
                 r["fecha_eval_fin"],
-                r["n_train"],
-                r["n_eval"],
+                r["n_entrenamiento"],
+                r["n_evaluacion"],
                 r["wmape_baseline"],
                 r["wmape_con_feat"],
                 r["wmape_delta"],
@@ -300,10 +300,10 @@ def _write_flags(conn, results: list[dict]) -> None:
     for (feat_key, loc_uuid), deltas in by_loc.items():
         conn.execute(
             """
-            INSERT INTO activacion_señales (señal_id, ubicacion_id, status, evaluated_at)
+            INSERT INTO activacion_señales (señal_id, ubicacion_id, status, evaluado_en)
             VALUES (?, ?, 'inactive', NOW())
             ON CONFLICT (señal_id, ubicacion_id) DO UPDATE
-                SET evaluated_at = NOW()
+                SET evaluado_en = NOW()
             """,
             [feat_key, loc_uuid],
         )

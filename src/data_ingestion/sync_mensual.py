@@ -107,7 +107,7 @@ def cargar_catalog(pais: str = "") -> list[dict]:
             get_conn()
             .execute(
                 "SELECT fuente, categoria, periodicidad, descripcion, url_referencia, "
-                "cobertura_desde, latencia_dias, paises, params_schema, params_ejemplo, config "
+                "cobertura_desde, latencia_dias, paises, esquema_params AS params_schema, ejemplo_params AS params_ejemplo, config "
                 "FROM fuentes WHERE activo = TRUE "
                 "AND (paises = '[]'::jsonb OR paises @> %s::jsonb)",
                 [f'["{pais}"]'],
@@ -119,7 +119,7 @@ def cargar_catalog(pais: str = "") -> list[dict]:
             get_conn()
             .execute(
                 "SELECT fuente, categoria, periodicidad, descripcion, url_referencia, "
-                "cobertura_desde, latencia_dias, paises, params_schema, params_ejemplo, config "
+                "cobertura_desde, latencia_dias, paises, esquema_params AS params_schema, ejemplo_params AS params_ejemplo, config "
                 "FROM fuentes WHERE activo = TRUE",
             )
             .fetchall()
