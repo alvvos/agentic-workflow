@@ -88,6 +88,8 @@ def _sync_arbol_aitanna() -> int:
                 ],
             )
 
+            # Pasada 1: upsert zonas sin parent para evitar FK violations por orden
+            zona_parents: list[tuple[str, str | None]] = []
             for zone in loc.get("zones", []):
                 zone_uuid = zone.get("uuid")
                 if not zone_uuid:
@@ -96,17 +98,25 @@ def _sync_arbol_aitanna() -> int:
                 hidden = zone.get("hidden", False)
                 fathers = zone.get("fathers", [])
                 parent_uuid = fathers[0] if fathers else None
+                zona_parents.append((zone_uuid, parent_uuid))
 
                 conn.execute(
                     """INSERT INTO zonas (zona_id, ubicacion_id, nombre, hidden, parent_zona_id)
-                       VALUES (%s, %s, %s, %s, %s)
+                       VALUES (%s, %s, %s, %s, NULL)
                        ON CONFLICT (zona_id) DO UPDATE
-                       SET nombre        = EXCLUDED.nombre,
-                           hidden        = EXCLUDED.hidden,
-                           parent_zona_id = EXCLUDED.parent_zona_id
+                       SET nombre = EXCLUDED.nombre,
+                           hidden = EXCLUDED.hidden
                     """,
-                    [zone_uuid, loc_uuid, zone_name, hidden, parent_uuid],
+                    [zone_uuid, loc_uuid, zone_name, hidden],
                 )
+
+            # Pasada 2: actualiza parent_zona_id una vez todas las zonas existen
+            for zone_uuid, parent_uuid in zona_parents:
+                if parent_uuid:
+                    conn.execute(
+                        "UPDATE zonas SET parent_zona_id = %s WHERE zona_id = %s",
+                        [parent_uuid, zone_uuid],
+                    )
 
             n_locs += 1
 
