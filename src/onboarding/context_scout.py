@@ -511,16 +511,18 @@ def _build_catalog_block(pais: str) -> str:
         return f"  (No hay fuentes curadas para pais_codigo='{pais}'. Responde con listas vacías.)"
     lines = []
     for i, e in enumerate(entries, 1):
-        lines.append(f"\n  [{i}] {e['feature_key_template']}")
-        lines.append(f"      source:       {e['source']}")
-        lines.append(f"      categoria:    {e['categoria']}")
-        lines.append(f"      periodicidad: {e['periodicidad']}")
-        lines.append(f"      granularidad: {e['granularidad']}")
+        key = e.get("feature_key_template") or e.get("fuente", "")
+        source = e.get("source") or e.get("fuente", "")
+        lines.append(f"\n  [{i}] {key}")
+        lines.append(f"      source:       {source}")
+        lines.append(f"      categoria:    {e.get('categoria', '')}")
+        lines.append(f"      periodicidad: {e.get('periodicidad', '')}")
+        lines.append(f"      granularidad: {e.get('granularidad', '')}")
         lines.append(
-            f"      cobertura:    desde {e['cobertura_desde']}, latencia ~{e['latencia_dias']}d"
+            f"      cobertura:    desde {e.get('cobertura_desde', '')}, latencia ~{e.get('latencia_dias', '?')}d"
         )
-        lines.append(f"      descripcion:  {e['descripcion']}")
-        lines.append(f"      notas_tecn.:  {e['notas_tecnicas']}")
+        lines.append(f"      descripcion:  {e.get('descripcion', '')}")
+        lines.append(f"      notas_tecn.:  {e.get('notas_tecnicas', '')}")
         if e.get("url_descarga"):
             lines.append(f"      url_descarga: {e['url_descarga']}")
         if e.get("params_schema"):
