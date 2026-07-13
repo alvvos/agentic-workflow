@@ -642,9 +642,9 @@ def registrar_fuentes(result: ScoutResult) -> ScoutResult:
     n = 0
 
     for src in result.seleccionadas:
-        # señales — upsert
+        # feature_registry — upsert
         existing = conn.execute(
-            "SELECT señal_id FROM señales WHERE señal_id = ?",
+            "SELECT feature_key FROM feature_registry WHERE feature_key = ?",
             [src.feature_key],
         ).fetchone()
 
@@ -657,8 +657,8 @@ def registrar_fuentes(result: ScoutResult) -> ScoutResult:
 
             conn.execute(
                 """
-                INSERT INTO señales
-                  (señal_id, fuente, categoria, org_applicability,
+                INSERT INTO feature_registry
+                  (feature_key, source, categoria, org_applicability,
                    location_applicability, status, notas, registrado_en)
                 VALUES (?, ?, ?, ?, ?, 'incompleto', ?, ?)
                 """,
@@ -672,11 +672,11 @@ def registrar_fuentes(result: ScoutResult) -> ScoutResult:
                     ahora,
                 ],
             )
-            log.info("señales INSERT: %s", src.feature_key)
+            log.info("feature_registry INSERT: %s", src.feature_key)
         else:
-            # La señal ya existe — solo ampliar location_applicability si es necesario
+            # La feature ya existe — solo ampliar location_applicability si es necesario
             loc_row = conn.execute(
-                "SELECT location_applicability FROM señales WHERE señal_id = ?",
+                "SELECT location_applicability FROM feature_registry WHERE feature_key = ?",
                 [src.feature_key],
             ).fetchone()
             if loc_row and loc_row[0]:
@@ -688,7 +688,7 @@ def registrar_fuentes(result: ScoutResult) -> ScoutResult:
                     ):
                         existing_locs.append(result.location_uuid)
                         conn.execute(
-                            "UPDATE señales SET location_applicability = ? WHERE señal_id = ?",
+                            "UPDATE feature_registry SET location_applicability = ? WHERE feature_key = ?",
                             [json.dumps(existing_locs), src.feature_key],
                         )
                 except (json.JSONDecodeError, TypeError):
