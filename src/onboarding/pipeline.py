@@ -77,7 +77,7 @@ def activar_clima_task(location_uuid: str, routing: RoutingResult) -> int:
 
     climate_keys = [
         r[0]
-        for r in conn.execute("SELECT señal_id FROM señales WHERE source = 'open_meteo'").fetchall()
+        for r in conn.execute("SELECT señal_id FROM señales WHERE fuente = 'open_meteo'").fetchall()
     ]
     if not climate_keys:
         return 0
