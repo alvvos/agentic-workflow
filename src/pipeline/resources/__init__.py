@@ -16,6 +16,7 @@ _REGISTRO: dict[str, str] = {
     "eventos": "eventos",  # dispatcher genérico — lee cfg["modulo"]
     "eventos_api": "eventos",  # alias (valor legacy en DB)
     "agenda_opendata": "http_json",
+    "noticias": "noticias",
 }
 
 

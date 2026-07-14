@@ -342,7 +342,7 @@ _DDL: list[str] = [
     """,
     """
     CREATE INDEX IF NOT EXISTS idx_chat_usuario_updated
-        ON conversaciones (usuario_id, updated_at)
+        ON conversaciones (usuario_id, actualizado_en)
     """,
     """
     CREATE TABLE IF NOT EXISTS mensajes (
@@ -484,6 +484,27 @@ _DDL: list[str] = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS noticias (
+        article_id    TEXT      NOT NULL,
+        ubicacion_id  TEXT      NOT NULL,
+        titulo        TEXT,
+        descripcion   TEXT,
+        url           TEXT,
+        publicada_en  TIMESTAMP,
+        fuente_id     TEXT,
+        fuente_nombre TEXT,
+        categorias    TEXT,
+        idioma        TEXT,
+        contenido     TEXT,
+        ingerida_en   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (article_id, ubicacion_id)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_noticias_ubicacion_fecha
+        ON noticias (ubicacion_id, publicada_en DESC)
+    """,
+    """
     CREATE TABLE IF NOT EXISTS fuentes (
         fuente          TEXT PRIMARY KEY,
         periodicidad    TEXT CHECK (periodicidad IN ('diaria', 'mensual', 'semanal')),
@@ -526,10 +547,13 @@ _VISITAS_COLS = [
 
 
 def _apply_ddl(conn: PgConn) -> None:
-    for stmt in _DDL:
-        conn.execute(stmt.strip())
+    # Renames must run before the DDL loop: indexes reference the new Spanish
+    # column names and would fail on existing DBs that still have old English names.
     _migrar_renombrar_tablas(conn)
     _migrar_renombrar_columnas(conn)
+    _migrar_columnas_espanol(conn)
+    for stmt in _DDL:
+        conn.execute(stmt.strip())
     _migrar_limpiar_columnas(conn)
     _migrate_zonas(conn)
     _migrate_zone_types_miniso(conn)
@@ -549,7 +573,6 @@ def _apply_ddl(conn: PgConn) -> None:
     _migrate_fuentes(conn)
     _migrar_tipo_conector(conn)
     _migrar_config_thesportsdb(conn)
-    _migrar_columnas_espanol(conn)
     _sync_users_from_json(conn)
 
 
@@ -1125,6 +1148,22 @@ def _migrate_registries(conn: PgConn) -> None:
     ON CONFLICT DO NOTHING salvo los eventos raw, que upsertean el canonical_type
     y campos visuales para mantenerse alineados con cambios futuros.
     """
+    # Ensure all columns exist in registry tables (may be absent in older DBs)
+    for tbl, col, typ in [
+        ("categorias_poi", "icono", "VARCHAR(64)"),
+        ("categorias_poi", "color", "VARCHAR(16)"),
+        ("categorias_poi", "color_badge", "VARCHAR(16)"),
+        ("tipos_zona", "icono", "VARCHAR(64)"),
+        ("tipos_zona", "color", "VARCHAR(16)"),
+        ("tipos_zona", "tooltip", "TEXT"),
+        ("categorias_narrativa", "icono", "VARCHAR(64)"),
+        ("categorias_narrativa", "orden", "INT DEFAULT 99"),
+        ("niveles_alerta", "color_texto", "VARCHAR(16)"),
+        ("niveles_alerta", "color_fondo", "VARCHAR(16)"),
+        ("niveles_alerta", "orden", "INT DEFAULT 99"),
+    ]:
+        conn.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {typ}")
+
     # ── categorias_poi ────────────────────────────────────────────────────────
     _POI_CATS = [
         ("metro", "Metro / Transporte", "fas fa-subway", "#5E35B1", "primary"),
@@ -2019,6 +2058,23 @@ _SOURCE_REGISTRY_SEED = [
         "ejemplo_params": {},
         "config": {},
     },
+    {
+        "fuente": "newsdata",
+        "periodicidad": "diaria",
+        "categoria": "noticias",
+        "descripcion": "Noticias locales por ciudad/país (Newsdata.io API). Requiere NEWSDATA_API_KEY.",
+        "url_referencia": "https://newsdata.io/",
+        "cobertura_desde": "2024-01-01",
+        "latencia_dias": 0,
+        "paises": [],
+        "esquema_params": None,
+        "ejemplo_params": {},
+        "config": {
+            "tipo_conector": "noticias",
+            "max_paginas": 3,
+            "categorias": ["business", "entertainment", "politics", "sports", "tourism"],
+        },
+    },
     # ── Diarias configuradas ──────────────────────────────────────────────────
     {
         "fuente": "cruceros",
@@ -2212,6 +2268,7 @@ def _migrar_tipo_conector(conn: PgConn) -> None:
         "puertos_estado": {"tipo_conector": "excel_mensual", "modo": "listado"},
         "ine_eoh": {"tipo_conector": "series_estadisticas"},
         "esri_places": {"tipo_conector": "pois_radio"},
+        "newsdata": {"tipo_conector": "noticias"},
     }
     for fuente, extra_config in mapeo.items():
         conn.execute(

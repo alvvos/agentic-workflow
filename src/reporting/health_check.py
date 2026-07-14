@@ -4959,7 +4959,41 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
         className="pm-acordeon shadow-sm rounded-4",
     )
 
-    cuerpo_superior = html.Div(mapa_contexto, className="mb-3") if mapa_contexto else html.Div()
+    narrativa_placeholder = dbc.Card(
+        dbc.CardBody(
+            [
+                html.H5(
+                    [
+                        html.I(className="fas fa-comment-dots me-2 text-primary"),
+                        "Resumen ejecutivo",
+                    ],
+                    className="fw-bold mb-2",
+                    style={"fontSize": "1.05rem", "color": _C_DARK},
+                ),
+                dbc.Alert(
+                    [
+                        html.I(className="fas fa-hard-hat me-2"),
+                        "En desarrollo. Próximamente disponible.",
+                    ],
+                    color="warning",
+                    className="rounded-3 mb-0",
+                ),
+            ]
+        ),
+        className="border-0 shadow-sm rounded-4 mb-3",
+    )
+
+    cuerpo_superior = (
+        dbc.Row(
+            [
+                dbc.Col(narrativa_placeholder, xs=12, lg=6, className="mb-3 mb-lg-0"),
+                dbc.Col(mapa_contexto, xs=12, lg=6),
+            ],
+            className="mb-3 align-items-start",
+        )
+        if mapa_contexto
+        else html.Div(narrativa_placeholder, className="mb-3")
+    )
 
     return html.Div(
         [
