@@ -151,14 +151,14 @@ def login():
 
             conn = get_conn()
             row = conn.execute(
-                "SELECT password_hash, role FROM usuarios WHERE usuario_id = ?",
+                "SELECT password_hash, rol FROM usuarios WHERE usuario_id = ?",
                 [username],
             ).fetchone()
             if row and check_password_hash(row[0], password):
                 authenticated = True
                 role = row[1] or "user"
                 conn.execute(
-                    "UPDATE usuarios SET last_login = current_timestamp WHERE usuario_id = ?",
+                    "UPDATE usuarios SET ultimo_acceso = current_timestamp WHERE usuario_id = ?",
                     [username],
                 )
         except Exception:
