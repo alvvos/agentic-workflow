@@ -592,6 +592,7 @@ def _interpret_concrete(
     label: str,
     ventana: str,
     lag_dias: int = 0,
+    periodo_label: str | None = None,
 ) -> tuple[str, str]:
     """
     Divide los días en dos grupos y genera una frase con números reales.
@@ -631,7 +632,10 @@ def _interpret_concrete(
     else:
         confirma = True
 
-    periodo = "esta semana" if ventana == "semana" else "en el período analizado"
+    if periodo_label is not None:
+        periodo = periodo_label
+    else:
+        periodo = "esta semana" if ventana == "semana" else "en el período analizado"
     dias_on = f"{n_on} día{'s' if n_on != 1 else ''}"
     dias_off = f"{n_off} día{'s' if n_off != 1 else ''}"
     movimiento = "mayor" if sube else "menor"
@@ -684,6 +688,101 @@ def _interpret_concrete(
         )
 
     return texto, color
+
+
+def _compute_group_diff(merged: pd.DataFrame, señal_id: str) -> float:
+    """Retorna pct_diff (grupo activo vs referencia) para comparar entre períodos."""
+    if merged.empty or len(merged) < 3:
+        return 0.0
+    if señal_id in _BINARY_SIGNALS:
+        mask_on = merged["señal"] > 0
+    elif señal_id in _ON_IS_LOW:
+        mask_on = merged["señal"] < merged["señal"].median()
+    else:
+        mask_on = merged["señal"] >= merged["señal"].median()
+    visits_on = merged.loc[mask_on, "visitas"].values
+    visits_off = merged.loc[~mask_on, "visitas"].values
+    if len(visits_on) == 0 or len(visits_off) == 0:
+        return 0.0
+    pct_diff, _ = _median_diff_test(visits_on, visits_off)
+    return pct_diff
+
+
+def _compare_periods(
+    pct_actual: float,
+    pct_prev: float,
+    confirma_actual: bool,
+    confirma_prev: bool,
+    ventana: str,
+) -> str:
+    """Genera una conclusión comparando el efecto de la señal en el período actual vs el anterior."""
+    periodo_actual = "esta semana" if ventana == "semana" else "este mes"
+    periodo_prev = "la semana pasada" if ventana == "semana" else "el mes pasado"
+    abs_actual = abs(pct_actual)
+    abs_prev = abs(pct_prev)
+    same_direction = (pct_actual >= 0) == (pct_prev >= 0)
+
+    if abs_actual < 3 and abs_prev < 3:
+        return (
+            "En ambos períodos el efecto fue mínimo. "
+            "Esta señal no parece tener un impacto relevante en el tráfico de esta ubicación, "
+            "al menos durante estos dos períodos."
+        )
+
+    if same_direction and confirma_actual and confirma_prev:
+        if abs_prev < 3:
+            return (
+                f"El período anterior no mostró un efecto claro, pero {periodo_actual} "
+                f"sí se aprecia un impacto del {abs_actual:.0f}%. "
+                "Habrá que ver si se consolida en los próximos períodos."
+            )
+        ratio = abs_actual / abs_prev if abs_prev > 0 else 1.0
+        if 0.7 <= ratio <= 1.4:
+            return (
+                "El efecto fue consistente en ambos períodos y en la dirección esperada. "
+                "Esto refuerza que esta señal tiene un impacto real y estable sobre el tráfico."
+            )
+        elif ratio > 1.4:
+            return (
+                f"El impacto {periodo_actual} ({abs_actual:.0f}%) fue más intenso que "
+                f"{periodo_prev} ({abs_prev:.0f}%). La señal sigue actuando en la "
+                "dirección esperada, pero con mayor fuerza."
+            )
+        else:
+            return (
+                f"El impacto {periodo_actual} ({abs_actual:.0f}%) fue más moderado que "
+                f"{periodo_prev} ({abs_prev:.0f}%). La señal sigue actuando en la "
+                "dirección esperada, aunque con menor intensidad."
+            )
+    elif not confirma_actual and not confirma_prev:
+        return (
+            "En ambos períodos el resultado fue contrario al patrón habitual. "
+            "Este comportamiento repetido sugiere que esta ubicación puede reaccionar "
+            "de forma atípica frente a esta señal."
+        )
+    elif same_direction:
+        return (
+            "Los dos períodos mostraron el mismo sentido de variación, "
+            "aunque la relación con el patrón esperado no fue igual en ambos casos."
+        )
+    else:
+        if confirma_actual and not confirma_prev:
+            return (
+                f"Los resultados fueron opuestos entre períodos: {periodo_prev} el efecto "
+                f"fue contrario al esperado, pero {periodo_actual} sí siguió el patrón habitual. "
+                "Con dos períodos es difícil determinar cuál representa mejor el comportamiento real."
+            )
+        elif not confirma_actual and confirma_prev:
+            return (
+                f"Los resultados fueron opuestos entre períodos: {periodo_prev} el efecto "
+                f"fue el esperado, pero {periodo_actual} fue en sentido contrario. "
+                "Es posible que factores puntuales hayan alterado el patrón habitual."
+            )
+        else:
+            return (
+                "Los dos períodos muestran resultados opuestos, y en ambos casos distintos de lo esperado. "
+                "La señal no parece tener un efecto estable en esta ubicación."
+            )
 
 
 # ── Renderer ──────────────────────────────────────────────────────────────────
@@ -750,12 +849,13 @@ def _render_correlacion_signals(
     total_actual = visitas_dia.sum()
     fmin_ant = fecha_min - timedelta(days=dias_v)
     fmax_ant = fecha_min - timedelta(days=1)
-    visitas_ant = (
+    _ant_grouped = (
         df_ext[df_ext["fecha_dt"].between(fmin_ant, fmax_ant)]
         .groupby("fecha_dt")["unique_visitors"]
         .sum()
-        .sum()
     )
+    visitas_ant = _ant_grouped.sum()
+    visitas_dia_ant = _ant_grouped.sort_index()
     delta_pct = ((total_actual - visitas_ant) / visitas_ant * 100) if visitas_ant > 0 else None
 
     # Señales con datos en el período — cualquier señal con dato es válida para el análisis
@@ -811,6 +911,7 @@ def _render_correlacion_signals(
             continue
 
         usar_semana = ventana == "semana"
+        pct_diff_actual: float = 0.0
 
         if usar_semana and señal_id in _BINARY_SIGNALS:
             # ── Bar: diferencia de medianas. Texto: _interpret_concrete ───────
@@ -821,27 +922,26 @@ def _render_correlacion_signals(
                 sin_datos.append(label)
                 continue
             pct_diff, _ = _median_diff_test(visits_on, visits_off)
+            pct_diff_actual = pct_diff
             r_strength = min(abs(pct_diff) / 50.0, 1.0) * (1 if pct_diff >= 0 else -1)
             texto, badge_color = _interpret_concrete(merged, señal_id, label, ventana)
-            resultados.append(
-                {
-                    "señal_id": señal_id,
-                    "label": label,
-                    "r": r_strength,
-                    "medida": "pct",
-                    "pct_diff": pct_diff,
-                    "n": n,
-                    "color": color,
-                    "icono": icono,
-                    "texto": texto,
-                    "badge_color": badge_color,
-                    "top_dias": [],
-                }
-            )
+            res_dict: dict = {
+                "señal_id": señal_id,
+                "label": label,
+                "r": r_strength,
+                "medida": "pct",
+                "pct_diff": pct_diff,
+                "n": n,
+                "color": color,
+                "icono": icono,
+                "texto": texto,
+                "badge_color": badge_color,
+                "top_dias": [],
+            }
 
         elif usar_semana:
             # ── Bar: Kendall's tau. Texto: _interpret_concrete ────────────────
-            best_tau, best_p = _kendall_tau(merged["visitas"].values, merged["señal"].values)
+            best_tau, _ = _kendall_tau(merged["visitas"].values, merged["señal"].values)
             best_lag, best_merged = 0, merged
             for lag in [1, 7]:
                 señal_shifted = serie.shift(lag)
@@ -849,26 +949,25 @@ def _render_correlacion_signals(
                 m_lag = m_lag[~((m_lag["visitas"] == 0) & (m_lag["señal"] == 0))]
                 if len(m_lag) < 4 or m_lag["señal"].std() == 0:
                     continue
-                t_lag, p_lag = _kendall_tau(m_lag["visitas"].values, m_lag["señal"].values)
+                t_lag, _ = _kendall_tau(m_lag["visitas"].values, m_lag["señal"].values)
                 if abs(t_lag) > abs(best_tau):
                     best_tau, best_lag, best_merged = t_lag, lag, m_lag
             texto, badge_color = _interpret_concrete(
                 best_merged, señal_id, label, ventana, best_lag
             )
-            resultados.append(
-                {
-                    "señal_id": señal_id,
-                    "label": label,
-                    "r": best_tau,
-                    "medida": "tau",
-                    "n": n,
-                    "color": color,
-                    "icono": icono,
-                    "texto": texto,
-                    "badge_color": badge_color,
-                    "top_dias": [],
-                }
-            )
+            pct_diff_actual = _compute_group_diff(best_merged, señal_id)
+            res_dict = {
+                "señal_id": señal_id,
+                "label": label,
+                "r": best_tau,
+                "medida": "tau",
+                "n": n,
+                "color": color,
+                "icono": icono,
+                "texto": texto,
+                "badge_color": badge_color,
+                "top_dias": [],
+            }
 
         else:
             # ── Bar: Pearson r. Texto: _interpret_concrete ────────────────────
@@ -891,20 +990,58 @@ def _render_correlacion_signals(
             texto, badge_color = _interpret_concrete(
                 best_merged, señal_id, label, ventana, best_lag
             )
-            resultados.append(
-                {
-                    "señal_id": señal_id,
-                    "label": label,
-                    "r": best_r,
-                    "medida": "pearson",
-                    "n": n,
-                    "color": color,
-                    "icono": icono,
-                    "texto": texto,
-                    "badge_color": badge_color,
-                    "top_dias": [],
-                }
+            pct_diff_actual = _compute_group_diff(best_merged, señal_id)
+            res_dict = {
+                "señal_id": señal_id,
+                "label": label,
+                "r": best_r,
+                "medida": "pearson",
+                "n": n,
+                "color": color,
+                "icono": icono,
+                "texto": texto,
+                "badge_color": badge_color,
+                "top_dias": [],
+            }
+
+        # ── Análisis del período anterior ──────────────────────────────────────
+        try:
+            serie_prev = get_señal_diaria(
+                location_uuid,
+                señal_id,
+                pd.Timestamp(fmin_ant),
+                pd.Timestamp(fmax_ant),
             )
+            merged_prev = pd.DataFrame({"visitas": visitas_dia_ant, "señal": serie_prev}).dropna()
+            merged_prev = merged_prev[
+                ~((merged_prev["visitas"] == 0) & (merged_prev["señal"] == 0))
+            ]
+            if len(merged_prev) >= 3 and merged_prev["señal"].std() > 0:
+                periodo_label_prev = (
+                    "la semana anterior" if ventana == "semana" else "en el período anterior"
+                )
+                texto_prev, _ = _interpret_concrete(
+                    merged_prev, señal_id, label, ventana, 0, periodo_label_prev
+                )
+                pct_diff_prev = _compute_group_diff(merged_prev, señal_id)
+                sent_sig = _SIGNAL_SENTIMENT.get(señal_id, {})
+                dir_sig = sent_sig.get("direccion", "positivo")
+                if dir_sig == "negativo":
+                    confirma_act = pct_diff_actual < 0
+                    confirma_prv = pct_diff_prev < 0
+                elif dir_sig == "positivo":
+                    confirma_act = pct_diff_actual > 0
+                    confirma_prv = pct_diff_prev > 0
+                else:
+                    confirma_act = confirma_prv = True
+                res_dict["texto_prev"] = texto_prev
+                res_dict["texto_conclusion"] = _compare_periods(
+                    pct_diff_actual, pct_diff_prev, confirma_act, confirma_prv, ventana
+                )
+        except Exception:
+            pass
+
+        resultados.append(res_dict)
 
     if not resultados and not sin_datos:
         return html.Div(
@@ -1013,6 +1150,53 @@ def _render_correlacion_signals(
                         res["texto"],
                         className="text-muted mb-0 mt-1",
                         style={"fontSize": "0.83rem", "lineHeight": "1.5"},
+                    ),
+                    *(
+                        [
+                            html.P(
+                                [
+                                    html.Span(
+                                        (
+                                            "Semana anterior — "
+                                            if ventana == "semana"
+                                            else "Período anterior — "
+                                        ),
+                                        style={"fontWeight": "600", "color": "#6c757d"},
+                                    ),
+                                    res["texto_prev"],
+                                ],
+                                className="mb-0 mt-2",
+                                style={
+                                    "fontSize": "0.80rem",
+                                    "lineHeight": "1.5",
+                                    "color": "#6c757d",
+                                },
+                            )
+                        ]
+                        if res.get("texto_prev")
+                        else []
+                    ),
+                    *(
+                        [
+                            html.P(
+                                res["texto_conclusion"],
+                                className="mb-0 mt-2",
+                                style={
+                                    "fontSize": "0.82rem",
+                                    "lineHeight": "1.5",
+                                    "color": "#3d2b6b",
+                                    "fontStyle": "italic",
+                                    "borderLeft": "3px solid #6f42c1",
+                                    "paddingLeft": "8px",
+                                    "backgroundColor": "#f5f0ff",
+                                    "borderRadius": "0 4px 4px 0",
+                                    "padding": "6px 10px",
+                                    "marginTop": "6px",
+                                },
+                            )
+                        ]
+                        if res.get("texto_conclusion")
+                        else []
                     ),
                     *(
                         [
