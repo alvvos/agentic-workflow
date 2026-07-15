@@ -567,6 +567,125 @@ def _interpret_kendall(
     return texto, color
 
 
+# ── Concrete phrase engine ────────────────────────────────────────────────────
+
+# Labels de grupo para cada señal: (grupo_activo, grupo_referencia)
+_SIGNAL_ETIQUETAS: dict[str, tuple[str, str]] = {
+    "llueve": ("en que llovió", "sin lluvia"),
+    "escala_crucero": ("con barco en puerto", "sin crucero en puerto"),
+    "temp_max": ("más calurosos", "más frescos"),
+    "temp_min": ("con noches más frías", "con noches más templadas"),
+    "n_pasajeros_crucero_dia": ("con más pasajeros en el puerto", "con menos actividad portuaria"),
+    "n_pasajeros_crucero_oficial": (
+        "de mayor actividad portuaria oficial",
+        "de menor actividad portuaria",
+    ),
+}
+
+# Señales donde el grupo "activo" es el de señal BAJA (frío = mínima baja)
+_ON_IS_LOW = {"temp_min"}
+
+
+def _interpret_concrete(
+    merged: pd.DataFrame,
+    señal_id: str,
+    label: str,
+    ventana: str,
+    lag_dias: int = 0,
+) -> tuple[str, str]:
+    """
+    Divide los días en dos grupos y genera una frase con números reales.
+    Binarias: días con señal > 0 vs días sin señal.
+    Continuas: días de señal alta (>= mediana) vs baja, o inverso para temp_min.
+    """
+    sent = _SIGNAL_SENTIMENT.get(señal_id, {})
+    direccion = sent.get("direccion", "positivo")
+    etq_on, etq_off = _SIGNAL_ETIQUETAS.get(señal_id, ("con señal alta", "con señal baja"))
+
+    if señal_id in _BINARY_SIGNALS:
+        mask_on = merged["señal"] > 0
+    elif señal_id in _ON_IS_LOW:
+        mask_on = merged["señal"] < merged["señal"].median()
+    else:
+        mask_on = merged["señal"] >= merged["señal"].median()
+
+    visits_on = merged.loc[mask_on, "visitas"].values
+    visits_off = merged.loc[~mask_on, "visitas"].values
+    n_on, n_off = len(visits_on), len(visits_off)
+
+    if n_on == 0 or n_off == 0:
+        return (
+            f"No hay suficientes días en ambos grupos para comparar el tráfico "
+            f"en relación con {label}.",
+            "light",
+        )
+
+    pct_diff, _ = _median_diff_test(visits_on, visits_off)
+    abs_pct = abs(pct_diff)
+    sube = pct_diff > 0
+
+    if direccion == "negativo":
+        confirma = not sube
+    elif direccion == "positivo":
+        confirma = sube
+    else:
+        confirma = True
+
+    periodo = "esta semana" if ventana == "semana" else "en el período analizado"
+    dias_on = f"{n_on} día{'s' if n_on != 1 else ''}"
+    dias_off = f"{n_off} día{'s' if n_off != 1 else ''}"
+    movimiento = "mayor" if sube else "menor"
+    pct_str = f"{abs_pct:.0f}%"
+
+    if abs_pct >= 15:
+        color = "success" if confirma else "warning"
+        texto = (
+            f"En los {dias_on} {etq_on} {periodo}, el tráfico fue un {pct_str} {movimiento} "
+            f"que en los {dias_off} {etq_off}."
+        )
+        texto += (
+            " El efecto es notable y va en la dirección esperada."
+            if confirma
+            else (
+                " Llama la atención porque va en sentido contrario a lo habitual. "
+                "Otros factores pueden haberlo compensado."
+            )
+        )
+    elif abs_pct >= 5:
+        color = "warning"
+        texto = (
+            f"En los {dias_on} {etq_on} {periodo}, el tráfico fue un {pct_str} {movimiento} "
+            f"que en los {dias_off} {etq_off}. La diferencia es pequeña"
+        )
+        texto += (
+            " y va en la dirección esperada, aunque con esta muestra puede deberse al azar."
+            if confirma
+            else " y además va en sentido contrario al esperado."
+        )
+    else:
+        color = "secondary"
+        texto = (
+            f"No se aprecia diferencia entre los {dias_on} {etq_on} "
+            f"y los {dias_off} {etq_off} {periodo}. "
+            f"{label.capitalize()} no parece haber influido en el tráfico."
+        )
+
+    if señal_id == "n_pasajeros_crucero_oficial":
+        texto += " Ten en cuenta que estos datos tienen una latencia de unos 25 días."
+
+    if n_on < 3 or n_off < 2:
+        texto += f" Muestra muy reducida ({n_on} frente a {n_off} días): interpreta con cautela."
+
+    if lag_dias > 0:
+        texto += (
+            f" El mejor ajuste se obtiene mirando lo que pasó "
+            f"{lag_dias} día{'s' if lag_dias != 1 else ''} antes, "
+            "lo que sugiere que esta señal anticipa el tráfico con algo de adelanto."
+        )
+
+    return texto, color
+
+
 # ── Renderer ──────────────────────────────────────────────────────────────────
 
 
@@ -694,18 +813,16 @@ def _render_correlacion_signals(
         usar_semana = ventana == "semana"
 
         if usar_semana and señal_id in _BINARY_SIGNALS:
-            # ── Diferencia de medianas (señal binaria en ventana corta) ──────
+            # ── Bar: diferencia de medianas. Texto: _interpret_concrete ───────
             mask_on = merged["señal"] > 0
             visits_on = merged.loc[mask_on, "visitas"].values
             visits_off = merged.loc[~mask_on, "visitas"].values
-            n_on, n_off = len(visits_on), len(visits_off)
-            if n_on == 0 or n_off == 0:
+            if len(visits_on) == 0 or len(visits_off) == 0:
                 sin_datos.append(label)
                 continue
-            pct_diff, p = _median_diff_test(visits_on, visits_off)
-            texto, badge_color = _interpret_binary(pct_diff, p, n_on, n_off, señal_id)
-            # Normalizar fuerza para barra y orden: 50 % diff = barra llena
+            pct_diff, _ = _median_diff_test(visits_on, visits_off)
             r_strength = min(abs(pct_diff) / 50.0, 1.0) * (1 if pct_diff >= 0 else -1)
+            texto, badge_color = _interpret_concrete(merged, señal_id, label, ventana)
             resultados.append(
                 {
                     "señal_id": señal_id,
@@ -723,9 +840,9 @@ def _render_correlacion_signals(
             )
 
         elif usar_semana:
-            # ── Kendall's tau (señal continua en ventana corta) ──────────────
+            # ── Bar: Kendall's tau. Texto: _interpret_concrete ────────────────
             best_tau, best_p = _kendall_tau(merged["visitas"].values, merged["señal"].values)
-            best_lag = 0
+            best_lag, best_merged = 0, merged
             for lag in [1, 7]:
                 señal_shifted = serie.shift(lag)
                 m_lag = pd.DataFrame({"visitas": visitas_dia, "señal": señal_shifted}).dropna()
@@ -734,9 +851,9 @@ def _render_correlacion_signals(
                     continue
                 t_lag, p_lag = _kendall_tau(m_lag["visitas"].values, m_lag["señal"].values)
                 if abs(t_lag) > abs(best_tau):
-                    best_tau, best_p, best_lag = t_lag, p_lag, lag
-            texto, badge_color = _interpret_kendall(
-                best_tau, best_p, n, label, señal_id=señal_id, lag_dias=best_lag
+                    best_tau, best_lag, best_merged = t_lag, lag, m_lag
+            texto, badge_color = _interpret_concrete(
+                best_merged, señal_id, label, ventana, best_lag
             )
             resultados.append(
                 {
@@ -754,31 +871,26 @@ def _render_correlacion_signals(
             )
 
         else:
-            # ── Pearson r (ventana mensual — muestra suficiente) ─────────────
-            best_r, best_p, best_lag = 0.0, 1.0, 0
+            # ── Bar: Pearson r. Texto: _interpret_concrete ────────────────────
+            best_r, best_lag, best_merged = 0.0, 0, merged
             for lag in [0, 1, 7]:
-                if lag == 0:
-                    m_lag = merged
-                else:
-                    señal_shifted = serie.shift(lag)
-                    m_lag = pd.DataFrame({"visitas": visitas_dia, "señal": señal_shifted}).dropna()
-                    m_lag = m_lag[~((m_lag["visitas"] == 0) & (m_lag["señal"] == 0))]
+                m_lag = (
+                    merged
+                    if lag == 0
+                    else (
+                        lambda s: (lambda m: m[~((m["visitas"] == 0) & (m["señal"] == 0))])(
+                            pd.DataFrame({"visitas": visitas_dia, "señal": s}).dropna()
+                        )
+                    )(serie.shift(lag))
+                )
                 if len(m_lag) < 5 or m_lag["señal"].std() == 0:
                     continue
-                r_lag, p_lag = _pearson_r(m_lag["visitas"].values, m_lag["señal"].values)
+                r_lag, _ = _pearson_r(m_lag["visitas"].values, m_lag["señal"].values)
                 if abs(r_lag) > abs(best_r):
-                    best_r, best_p, best_lag = r_lag, p_lag, lag
-            texto, badge_color = _interpret_correlacion(
-                best_r, best_p, n, label, señal_id=señal_id, lag_dias=best_lag
+                    best_r, best_lag, best_merged = r_lag, lag, m_lag
+            texto, badge_color = _interpret_concrete(
+                best_merged, señal_id, label, ventana, best_lag
             )
-            top_dias: list[str] = []
-            señal_mean = merged["señal"].mean()
-            cv_señal = merged["señal"].std() / señal_mean if señal_mean != 0 else 0
-            if abs(best_r) >= 0.70 and cv_señal > 0.15:
-                top = merged.nlargest(3, "señal") if best_r >= 0 else merged.nsmallest(3, "visitas")
-                top_dias = [
-                    str(idx)[:10] if hasattr(idx, "__str__") else str(idx) for idx in top.index[:3]
-                ]
             resultados.append(
                 {
                     "señal_id": señal_id,
@@ -790,7 +902,7 @@ def _render_correlacion_signals(
                     "icono": icono,
                     "texto": texto,
                     "badge_color": badge_color,
-                    "top_dias": top_dias,
+                    "top_dias": [],
                 }
             )
 
