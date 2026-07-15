@@ -724,9 +724,7 @@ def _render_correlacion_signals(
 
         elif usar_semana:
             # ── Kendall's tau (señal continua en ventana corta) ──────────────
-            best_tau, best_p, best_lag = _kendall_tau(
-                merged["visitas"].values, merged["señal"].values
-            )
+            best_tau, best_p = _kendall_tau(merged["visitas"].values, merged["señal"].values)
             best_lag = 0
             for lag in [1, 7]:
                 señal_shifted = serie.shift(lag)
