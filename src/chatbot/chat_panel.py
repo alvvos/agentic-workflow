@@ -113,6 +113,7 @@ def build_chat_modal() -> dbc.Modal:
                                 "height": "65vh",
                                 "overflowY": "auto",
                                 "padding": "12px 12px 8px 14px",
+                                "background": "#f0f4fb",
                             },
                             children=initial_history_content(),
                         ),
