@@ -20,20 +20,28 @@ _SIGNAL_SENTIMENT: dict[str, dict] = {
         "direccion": "negativo",
         "frases": {
             "fuerte_confirma": (
-                "Los días de precipitación coinciden con las caídas de afluencia más marcadas del período. "
-                "El efecto inhibidor de la lluvia sobre el tráfico exterior es claro y consistente."
+                "La lluvia tiene un efecto muy claro sobre el tráfico en esta ubicación: "
+                "los días de precipitación son consistentemente los de menor afluencia. "
+                "Esto es habitual en zonas exteriores o de paso, donde los transeúntes "
+                "evitan salir o acortan su recorrido cuando llueve."
             ),
             "moderado_confirma": (
-                "Se aprecia una tendencia a menor afluencia en días lluviosos, "
-                "aunque la relación no es concluyente en todo el período."
+                "En los días de lluvia se aprecia una tendencia a menor afluencia, "
+                "aunque el efecto no es igual de intenso en todo el período. "
+                "Es probable que otros factores como eventos puntuales o temporadas "
+                "hayan amortiguado el impacto en algunos momentos."
             ),
             "debil": (
-                "La lluvia no muestra asociación estadística clara con el tráfico exterior en este período."
+                "La lluvia no parece haber afectado significativamente al tráfico "
+                "en este período. Puede deberse a que la zona tiene zonas cubiertas, "
+                "a que el volumen de visitantes habituales es constante independientemente "
+                "del tiempo, o simplemente a que no llovió lo suficiente para marcar diferencia."
             ),
             "contradice": (
-                "A pesar de lo habitual, la lluvia no se asoció a menor afluencia en este período. "
-                "Es posible que otros factores —eventos puntuales, temporada alta— "
-                "compensaran su efecto negativo habitual."
+                "Aunque lo habitual es que la lluvia reduzca la afluencia, "
+                "en este período no se ha observado esa relación. "
+                "Es posible que eventos especiales, campañas comerciales u otros "
+                "factores atrajeron visitantes incluso en los días de peor tiempo."
             ),
         },
     },
@@ -41,20 +49,28 @@ _SIGNAL_SENTIMENT: dict[str, dict] = {
         "direccion": "complejo",
         "frases": {
             "fuerte_confirma": (
-                "Las temperaturas extremas muestran un impacto directo en la afluencia: "
-                "los días más alejados del rango de confort (18-26 °C) registran las caídas más pronunciadas."
+                "Las temperaturas extremas muestran un impacto directo sobre la afluencia. "
+                "Tanto el calor intenso como el frío pronunciado tienden a alejar a las "
+                "personas de la calle. Los días más alejados del rango confortable (entre "
+                "18 y 26 grados) coinciden con las caídas de tráfico más marcadas del período."
             ),
             "moderado_confirma": (
-                "Las temperaturas extremas se asocian a cierta reducción de afluencia, "
-                "aunque el efecto es irregular a lo largo del período."
+                "Hay una tendencia visible a menor afluencia en los días de temperatura "
+                "extrema, aunque el efecto no es uniforme a lo largo del período. "
+                "Otros factores como el día de la semana o eventos locales pueden "
+                "haber compensado el impacto del calor o el frío en algunos momentos."
             ),
             "debil": (
-                "La temperatura máxima no muestra una asociación estadística relevante "
-                "con el tráfico exterior en este período."
+                "La temperatura máxima no parece haber influido de forma relevante "
+                "en el tráfico exterior durante este período. "
+                "La afluencia se mantuvo relativamente estable al margen de las "
+                "variaciones térmicas registradas."
             ),
             "contradice": (
                 "La temperatura no siguió el patrón esperado en este período. "
-                "El tráfico se mantuvo sin relación clara con las variaciones térmicas."
+                "El tráfico no mostró una relación clara con las subidas o "
+                "bajadas de temperatura, lo que sugiere que otros factores "
+                "tuvieron más peso en el comportamiento de la afluencia."
             ),
         },
     },
@@ -62,19 +78,27 @@ _SIGNAL_SENTIMENT: dict[str, dict] = {
         "direccion": "negativo",
         "frases": {
             "fuerte_confirma": (
-                "Las temperaturas nocturnas bajas muestran un efecto claro sobre la afluencia: "
-                "los días con mínimas más frías concentran la menor afluencia del período."
+                "Las noches frías tienen un efecto claro sobre el tráfico al día siguiente: "
+                "los días con temperaturas mínimas más bajas concentran la menor afluencia "
+                "del período. El frío nocturno puede ser un indicador de días "
+                "más fríos en general, lo que desincentiva la salida a la calle."
             ),
             "moderado_confirma": (
-                "Se aprecia una leve tendencia a menor afluencia en los días de mayor frío nocturno."
+                "Se aprecia cierta tendencia a menor afluencia en los días de mayor "
+                "frío nocturno, aunque la relación no es constante. "
+                "El efecto puede variar según la época del año o si coincide "
+                "con fines de semana u otras variables."
             ),
             "debil": (
-                "La temperatura mínima no muestra asociación estadística clara "
-                "con el tráfico exterior en este período."
+                "La temperatura mínima no muestra un vínculo claro con el tráfico "
+                "exterior en este período. La afluencia no varió de forma consistente "
+                "en función de las temperaturas nocturnas registradas."
             ),
             "contradice": (
-                "La temperatura mínima no siguió el patrón esperado: "
-                "el tráfico no se redujo de forma consistente en los días más fríos del período."
+                "A pesar de que el frío suele reducir la afluencia, en este período "
+                "el tráfico no bajó de forma consistente en los días más fríos. "
+                "Es posible que otros factores, como campañas específicas o "
+                "temporadas de alta demanda, hayan sostenido la afluencia."
             ),
         },
     },
@@ -82,20 +106,29 @@ _SIGNAL_SENTIMENT: dict[str, dict] = {
         "direccion": "positivo",
         "frases": {
             "fuerte_confirma": (
-                "La actividad portuaria muestra una relación directa con el tráfico exterior: "
-                "las jornadas con mayor número de pasajeros en puerto concentran los picos de afluencia."
+                "Hay una relación muy clara entre la llegada de cruceros y el tráfico "
+                "en la zona: los días con más pasajeros en el puerto son también "
+                "los de mayor afluencia exterior. Los turistas de crucero suponen "
+                "un aporte significativo y medible al tráfico de esta ubicación."
             ),
             "moderado_confirma": (
-                "Los días con mayor volumen de pasajeros de crucero tienden a coincidir "
-                "con mayor afluencia exterior, aunque la relación no es sistemática."
+                "Los días con mayor volumen de pasajeros de crucero tienden a "
+                "coincidir con más afluencia en la zona, aunque la relación "
+                "no es siempre proporcional. El perfil del crucero, el número "
+                "de horas en puerto o la climatología del día pueden hacer variar el impacto."
             ),
             "debil": (
-                "La afluencia de cruceristas no muestra correlación significativa "
-                "con el tráfico exterior en este período."
+                "El número de pasajeros de crucero no muestra una relación clara "
+                "con el tráfico exterior en este período. Es posible que los "
+                "cruceristas visiten otras zonas de la ciudad o que la muestra "
+                "de datos aún no sea suficiente para detectar el patrón."
             ),
             "contradice": (
                 "A pesar de los cruceros registrados, el tráfico exterior "
-                "no mostró un incremento consistente en esas jornadas."
+                "no aumentó de forma consistente en esas jornadas. "
+                "Puede ser que los pasajeros se concentraran en otras zonas "
+                "o que factores como el clima o el día de la semana "
+                "limitaran su desplazamiento hasta esta ubicación."
             ),
         },
     },
@@ -103,20 +136,28 @@ _SIGNAL_SENTIMENT: dict[str, dict] = {
         "direccion": "positivo",
         "frases": {
             "fuerte_confirma": (
-                "Los datos oficiales de pasajeros portuarios muestran una correlación clara "
-                "con el tráfico exterior: más actividad en puerto, más afluencia en la ubicación."
+                "Los datos oficiales de pasajeros portuarios confirman una relación "
+                "directa con el tráfico exterior: cuanto mayor es la actividad en el "
+                "puerto, mayor es la afluencia registrada en esta ubicación. "
+                "El turismo de crucero es un factor de impacto real y cuantificable."
             ),
             "moderado_confirma": (
-                "Los meses con mayor volumen oficial de cruceristas tienden a coincidir "
-                "con períodos de mayor afluencia exterior."
+                "Los períodos con mayor volumen oficial de cruceristas tienden a "
+                "coincidir con más afluencia exterior, aunque la relación no es "
+                "perfectamente proporcional. Otros factores pueden moderar "
+                "o amplificar el efecto según el momento del año."
             ),
             "debil": (
-                "El volumen oficial de pasajeros de crucero no muestra correlación "
-                "estadística con el tráfico exterior en este período."
+                "El volumen oficial de pasajeros de crucero no muestra una correlación "
+                "significativa con el tráfico exterior en este período. "
+                "La latencia de los datos oficiales (aproximadamente 25 días) "
+                "puede dificultar la detección del efecto en ventanas cortas de análisis."
             ),
             "contradice": (
                 "A pesar del volumen oficial de cruceristas, el tráfico exterior "
-                "no respondió de forma consistente en las jornadas de mayor actividad portuaria."
+                "no respondió de forma consistente en los períodos de mayor actividad portuaria. "
+                "Vale tener en cuenta que estos datos tienen una latencia de unos 25 días, "
+                "lo que puede desplazar temporalmente la señal respecto al impacto real."
             ),
         },
     },
@@ -124,20 +165,29 @@ _SIGNAL_SENTIMENT: dict[str, dict] = {
         "direccion": "positivo",
         "frases": {
             "fuerte_confirma": (
-                "Las escalas de crucero se asocian claramente a incrementos de afluencia: "
-                "los días con barco en puerto son sistemáticamente los de mayor tráfico exterior."
+                "Los días con barco en puerto son de forma sistemática los de mayor "
+                "tráfico exterior en este período. La escala de crucero actúa como "
+                "un catalizador claro: los pasajeros que desembarcan se distribuyen "
+                "por la zona y generan un pico de afluencia bien identificable."
             ),
             "moderado_confirma": (
-                "Los días con escala de crucero tienden a registrar mayor afluencia, "
-                "aunque el efecto varía según el volumen de pasajeros a bordo."
+                "Los días con escala de crucero tienden a registrar más afluencia "
+                "que los días sin barco, aunque el incremento no es siempre igual. "
+                "El tamaño del barco, el tiempo disponible en tierra y "
+                "la climatología del día pueden hacer que el efecto varíe bastante."
             ),
             "debil": (
-                "Las escalas de crucero no muestran un impacto estadístico claro "
-                "en el tráfico exterior del período analizado."
+                "Las escalas de crucero no muestran un impacto claro en el tráfico "
+                "exterior durante este período. Puede que el número de escalas sea "
+                "bajo, que los pasajeros se concentren en otras zonas, o que "
+                "la distancia al puerto limite su llegada hasta esta ubicación."
             ),
             "contradice": (
                 "A pesar de las escalas registradas, el tráfico exterior "
-                "no mostró un patrón de incremento consistente en esas jornadas."
+                "no mostró un patrón de incremento en esas jornadas. "
+                "Esto puede deberse a que los pasajeros optaron por rutas o "
+                "zonas diferentes, o a que otros factores negativos (tiempo, "
+                "día de semana, etc.) limitaron el efecto esperado."
             ),
         },
     },
@@ -197,7 +247,8 @@ def _interpret_correlacion(
         confirma = True
 
     lag_suffix = (
-        f" El efecto se observa con {lag_dias} día{'s' if lag_dias != 1 else ''} de retardo."
+        f" El mejor ajuste se obtiene mirando lo que pasó {lag_dias} día{'s' if lag_dias != 1 else ''} antes, "
+        f"lo que sugiere que esta señal anticipa el movimiento del tráfico con algo de adelanto."
         if lag_dias > 0
         else ""
     )
@@ -580,9 +631,9 @@ def _render_correlacion_signals(
                             ),
                             dbc.Col(
                                 html.Span(
-                                    "—",
+                                    "Sin datos",
                                     className="fw-bold text-muted",
-                                    style={"fontSize": "0.95rem"},
+                                    style={"fontSize": "0.80rem"},
                                 ),
                                 width=3,
                                 className="text-end d-flex align-items-center justify-content-end",
@@ -591,7 +642,8 @@ def _render_correlacion_signals(
                         className="g-1 align-items-center",
                     ),
                     html.P(
-                        "No hay registros suficientes para calcular la correlación en este período.",
+                        "No hay suficientes registros en el período seleccionado para calcular "
+                        "si esta señal tiene relación con el tráfico. Prueba a ampliar el rango de fechas.",
                         className="text-muted mb-0 mt-1",
                         style={"fontSize": "0.83rem", "lineHeight": "1.5", "fontStyle": "italic"},
                     ),
@@ -603,17 +655,18 @@ def _render_correlacion_signals(
 
     # Delta header — once, before signal list
     if delta_pct is not None:
-        movimiento = "bajada" if delta_pct < 0 else "subida"
+        movimiento = "bajó" if delta_pct < 0 else "subió"
         delta_color = "#DC3545" if delta_pct < 0 else "#28A745"
         delta_header = html.P(
             [
                 html.Span(
-                    f"La {movimiento} del {abs(delta_pct):.0f}% del tráfico exterior "
-                    f"respecto a la {periodo_label} anterior.",
+                    f"El tráfico exterior {movimiento} un {abs(delta_pct):.0f}% "
+                    f"respecto a la {periodo_label} anterior. ",
                     style={"fontWeight": "600", "color": delta_color},
                 ),
                 html.Span(
-                    " Posibles factores asociados:",
+                    "A continuación se analiza qué factores externos pueden "
+                    "explicar ese movimiento:",
                     className="text-muted",
                 ),
             ],
@@ -622,7 +675,7 @@ def _render_correlacion_signals(
         )
     else:
         delta_header = html.P(
-            "Posibles factores asociados al tráfico exterior:",
+            "Análisis de factores externos que pueden estar influyendo en el tráfico exterior:",
             className="text-muted mb-2",
             style={"fontSize": "0.88rem"},
         )
