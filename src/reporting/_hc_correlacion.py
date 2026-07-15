@@ -1192,7 +1192,11 @@ def _render_correlacion_signals(
                     html.P(
                         res["texto"],
                         className="text-muted mb-0 mt-1",
-                        style={"fontSize": "0.83rem", "lineHeight": "1.5"},
+                        style={
+                            "fontSize": "0.83rem",
+                            "lineHeight": "1.5",
+                            "overflowWrap": "break-word",
+                        },
                     ),
                     *(
                         [
@@ -1324,6 +1328,9 @@ def _render_correlacion_signals(
     return html.Div(
         [
             delta_header,
-            html.Div(items, style={"maxHeight": "380px", "overflowY": "auto"}),
+            html.Div(
+                items,
+                style={"maxHeight": "380px", "overflowY": "auto", "overflowX": "hidden"},
+            ),
         ]
     )
