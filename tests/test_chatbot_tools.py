@@ -82,10 +82,8 @@ from src.chatbot.tools import (  # noqa: E402
     compare_locations,
     get_active_features,
     get_anomalies,
-    get_calendar_events,
     get_cruise_calls,
     get_dwell_profile,
-    get_ev_ranks,
     get_external_features,
     get_forecast,
     get_gis_data,
@@ -379,27 +377,6 @@ class TestGetExternalFeatures:
         assert isinstance(r, dict)
 
 
-# ── get_calendar_events ───────────────────────────────────────────────────────
-
-
-class TestGetCalendarEvents:
-    def test_invalid_dates_returns_error(self):
-        r = get_calendar_events(_LOC_A, "not-a-date", _FECHA_FIN)
-        assert "error" in r
-
-    def test_valid_call_returns_structure(self):
-        r = get_calendar_events(_LOC_A, _FECHA_INI, _FECHA_FIN)
-        assert isinstance(r, dict)
-        if "error" not in r:
-            assert "n_eventos" in r
-            assert "eventos" in r
-            assert isinstance(r["eventos"], list)
-
-    def test_evento_key_filter_accepted(self):
-        r = get_calendar_events(_LOC_A, _FECHA_INI, _FECHA_FIN, evento_key="escala_crucero")
-        assert isinstance(r, dict)
-
-
 # ── get_cruise_calls ──────────────────────────────────────────────────────────
 
 
@@ -440,29 +417,6 @@ class TestGetModelMetrics:
     def test_zone_filter_accepted(self):
         r = get_model_metrics(_LOC_A, zone_uuid=_ZONE_A)
         assert isinstance(r, dict)
-
-
-# ── get_ev_ranks ──────────────────────────────────────────────────────────────
-
-
-class TestGetEvRanks:
-    def test_inverted_dates_returns_error(self):
-        r = get_ev_ranks(_LOC_A, _FECHA_FIN, _FECHA_INI)
-        assert "error" in r
-
-    def test_range_over_760_days_returns_error(self):
-        very_old = (date.today() - timedelta(days=800)).isoformat()
-        r = get_ev_ranks(_LOC_A, very_old, _FECHA_FIN)
-        assert "error" in r
-
-    def test_valid_call_returns_structure(self):
-        r = get_ev_ranks(_LOC_A, _FECHA_INI, _FECHA_FIN)
-        assert isinstance(r, dict)
-        if "error" not in r:
-            assert "n_dias_con_senal" in r
-            assert "dias" in r
-            assert isinstance(r["dias"], list)
-            assert "pico_por_tipo" in r
 
 
 # ── get_dwell_profile ─────────────────────────────────────────────────────────
