@@ -12,11 +12,6 @@ import importlib
 _REGISTRO: dict[str, str] = {
     "http_json": "http_json",
     "meteorologia": "meteorologia",
-    "festivos_calendario": "festivos",
-    "eventos": "eventos",  # dispatcher genérico — lee cfg["modulo"]
-    "eventos_api": "eventos",  # alias (valor legacy en DB)
-    "agenda_opendata": "http_json",
-    "noticias": "noticias",
 }
 
 

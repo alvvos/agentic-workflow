@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 
-from src.data_processing.supercalendario import CALENDARIO_FEATURE_COLS, get_calendario_features
+# supercalendario removed — calendar features dropped
 
 # ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -118,13 +118,6 @@ def _build_matrix(df: pd.DataFrame) -> pd.DataFrame:
     df["media_14d"] = df["total_visits"].rolling(14).mean()
     df["std_7d"] = df["total_visits"].rolling(7).std().fillna(0)
 
-    cal_rows = pd.DataFrame(
-        [get_calendario_features(f) for f in df["fecha"]],
-        index=df.index,
-    )
-    for col in CALENDARIO_FEATURE_COLS:
-        df[col] = cal_rows[col].values
-
     return df.dropna(subset=BASE_FEATURES).reset_index(drop=True)
 
 
@@ -172,7 +165,7 @@ def _evaluate_feature(
 
     df_full = _build_matrix(df_vis)
     fc = pd.Timestamp(fecha_corte)
-    all_base = BASE_FEATURES + CALENDARIO_FEATURE_COLS
+    all_base = BASE_FEATURES
 
     feat_series = _load_ext_feature(
         conn,

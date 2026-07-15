@@ -252,18 +252,16 @@ _DDL: list[str] = [
     """,
     """
     CREATE TABLE IF NOT EXISTS snapshots_geo (
-        ubicacion_id  TEXT             NOT NULL,
-        señal_id      TEXT             NOT NULL,
-        vigente_desde DATE             NOT NULL,
-        valor         DOUBLE PRECISION,
-        vigente_hasta DATE,
-        ingerido_en   TIMESTAMP        DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (ubicacion_id, señal_id, vigente_desde)
+        ubicacion_id   TEXT             NOT NULL,
+        señal_id       TEXT             NOT NULL,
+        valor          DOUBLE PRECISION,
+        actualizado_en TIMESTAMP        DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (ubicacion_id, señal_id)
     )
     """,
     """
-    CREATE INDEX IF NOT EXISTS idx_geo_ubicacion_fecha
-        ON snapshots_geo (ubicacion_id, vigente_desde)
+    CREATE INDEX IF NOT EXISTS idx_snapshots_geo_ubicacion
+        ON snapshots_geo (ubicacion_id)
     """,
     """
     CREATE TABLE IF NOT EXISTS valores_señales (
@@ -484,27 +482,6 @@ _DDL: list[str] = [
     )
     """,
     """
-    CREATE TABLE IF NOT EXISTS noticias (
-        article_id    TEXT      NOT NULL,
-        ubicacion_id  TEXT      NOT NULL,
-        titulo        TEXT,
-        descripcion   TEXT,
-        url           TEXT,
-        publicada_en  TIMESTAMP,
-        fuente_id     TEXT,
-        fuente_nombre TEXT,
-        categorias    TEXT,
-        idioma        TEXT,
-        contenido     TEXT,
-        ingerida_en   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (article_id, ubicacion_id)
-    )
-    """,
-    """
-    CREATE INDEX IF NOT EXISTS idx_noticias_ubicacion_fecha
-        ON noticias (ubicacion_id, publicada_en DESC)
-    """,
-    """
     CREATE TABLE IF NOT EXISTS fuentes (
         fuente          TEXT PRIMARY KEY,
         periodicidad    TEXT CHECK (periodicidad IN ('diaria', 'mensual', 'semanal')),
@@ -566,13 +543,13 @@ def _apply_ddl(conn: PgConn) -> None:
     _migrate_activacion_señales_contexto(conn)
     _migrate_activacion_señales_periodicidad(conn)
     _migrate_señales_display(conn)
-    _migrate_señales_display_upsert(conn)
     _migrate_puntos_interes(conn)
     _migrate_config_fuentes(conn)
     _migrate_registries(conn)
     _migrate_fuentes(conn)
     _migrar_tipo_conector(conn)
-    _migrar_config_thesportsdb(conn)
+    _migrate_snapshots_geo_simple(conn)
+    _purgar_senales_obsoletas(conn)
     _sync_users_from_json(conn)
 
 
@@ -723,90 +700,94 @@ def _migrar_columnas_espanol(conn: PgConn) -> None:
             """
         )
 
-    # visitas
-    _r("visitas", "total_visits", "total_visitas")
-    _r("visitas", "unique_visitors", "visitantes_unicos")
-    _r("visitas", "new_visitors", "visitantes_nuevos")
-    _r("visitas", "uv_7d", "unicos_7d")
-    _r("visitas", "uv_28d", "unicos_28d")
-    _r("visitas", "uv_month", "unicos_mes")
-    _r("visitas", "uv_year", "unicos_anyo")
-    _r("visitas", "freq_7d", "frecuencia_7d")
-    _r("visitas", "freq_28d", "frecuencia_28d")
-    _r("visitas", "freq_month", "frecuencia_mes")
-    _r("visitas", "freq_year", "frecuencia_anyo")
-    _r("visitas", "dwell_time_min", "tiempo_estancia_min")
-    _r("visitas", "dwell_hist", "histograma_estancia")
-    _r("visitas", "hourly_visits", "visitas_horarias")
-    # zonas
-    _r("zonas", "hidden", "oculta")
-    _r("zonas", "zone_type", "tipo_zona")
-    # tipos_zona
-    _r("tipos_zona", "zone_type", "tipo_zona")
-    # eventos
-    _r("eventos", "source_key", "clave_fuente")
-    # señales
-    _r("señales", "icon_cls", "icono")
-    _r("señales", "agg_fn", "funcion_agregacion")
-    _r("señales", "display_mode", "modo_visualizacion")
-    _r("señales", "canonical_type", "tipo_canonico")
-    _r("señales", "location_applicability", "aplicabilidad_ubicacion")
-    _r("señales", "org_applicability", "aplicabilidad_org")
-    # snapshots_geo
-    _r("snapshots_geo", "ingested_at", "ingerido_en")
-    # valores_señales
-    _r("valores_señales", "ingested_at", "ingerido_en")
-    # evaluaciones_señales
-    _r("evaluaciones_señales", "evaluated_at", "evaluado_en")
-    _r("evaluaciones_señales", "split_idx", "indice_split")
-    _r("evaluaciones_señales", "n_train", "n_entrenamiento")
-    _r("evaluaciones_señales", "n_eval", "n_evaluacion")
-    # activacion_señales
-    _r("activacion_señales", "evaluated_at", "evaluado_en")
-    # usuarios
-    _r("usuarios", "created_at", "creado_en")
-    _r("usuarios", "last_login", "ultimo_acceso")
-    _r("usuarios", "role", "rol")
-    # conversaciones
-    _r("conversaciones", "title", "titulo")
-    _r("conversaciones", "created_at", "creado_en")
-    _r("conversaciones", "updated_at", "actualizado_en")
-    # mensajes
-    _r("mensajes", "role", "rol")
-    _r("mensajes", "content", "contenido")
-    _r("mensajes", "created_at", "creado_en")
-    _r("mensajes", "seq", "orden")
-    # cache_chatbot
-    _r("cache_chatbot", "cache_key", "clave_cache")
-    _r("cache_chatbot", "question", "pregunta")
-    _r("cache_chatbot", "answer", "respuesta")
-    _r("cache_chatbot", "created_at", "creado_en")
-    _r("cache_chatbot", "hits", "aciertos")
-    _r("cache_chatbot", "expires_at", "expira_en")
-    # puntos_interes
-    _r("puntos_interes", "created_at", "creado_en")
-    # config_fuentes
-    _r("config_fuentes", "created_at", "creado_en")
-    # categorias_poi
-    _r("categorias_poi", "category", "categoria")
-    _r("categorias_poi", "icon_cls", "icono")
-    _r("categorias_poi", "badge_color", "color_badge")
-    # categorias_narrativa
-    _r("categorias_narrativa", "category_key", "clave")
-    _r("categorias_narrativa", "icon_cls", "icono")
-    _r("categorias_narrativa", "sort_order", "orden")
-    # niveles_alerta
-    _r("niveles_alerta", "level_key", "clave")
-    _r("niveles_alerta", "text_color", "color_texto")
-    _r("niveles_alerta", "bg_color", "color_fondo")
-    _r("niveles_alerta", "sort_order", "orden")
-    # fuentes
-    _r("fuentes", "created_at", "creado_en")
-    _r("fuentes", "params_schema", "esquema_params")
-    _r("fuentes", "params_ejemplo", "ejemplo_params")
-    # ubicaciones
-    _r("ubicaciones", "region_code", "codigo_region")
-    _r("ubicaciones", "catchment_rings_json", "anillos_captacion")
+    _RENAMES = [
+        # visitas
+        ("visitas", "total_visits", "total_visitas"),
+        ("visitas", "unique_visitors", "visitantes_unicos"),
+        ("visitas", "new_visitors", "visitantes_nuevos"),
+        ("visitas", "uv_7d", "unicos_7d"),
+        ("visitas", "uv_28d", "unicos_28d"),
+        ("visitas", "uv_month", "unicos_mes"),
+        ("visitas", "uv_year", "unicos_anyo"),
+        ("visitas", "freq_7d", "frecuencia_7d"),
+        ("visitas", "freq_28d", "frecuencia_28d"),
+        ("visitas", "freq_month", "frecuencia_mes"),
+        ("visitas", "freq_year", "frecuencia_anyo"),
+        ("visitas", "dwell_time_min", "tiempo_estancia_min"),
+        ("visitas", "dwell_hist", "histograma_estancia"),
+        ("visitas", "hourly_visits", "visitas_horarias"),
+        # zonas
+        ("zonas", "hidden", "oculta"),
+        ("zonas", "zone_type", "tipo_zona"),
+        # tipos_zona
+        ("tipos_zona", "zone_type", "tipo_zona"),
+        # eventos
+        ("eventos", "source_key", "clave_fuente"),
+        # señales
+        ("señales", "icon_cls", "icono"),
+        ("señales", "agg_fn", "funcion_agregacion"),
+        ("señales", "display_mode", "modo_visualizacion"),
+        ("señales", "canonical_type", "tipo_canonico"),
+        ("señales", "location_applicability", "aplicabilidad_ubicacion"),
+        ("señales", "org_applicability", "aplicabilidad_org"),
+        # snapshots_geo
+        ("snapshots_geo", "ingested_at", "ingerido_en"),
+        # valores_señales
+        ("valores_señales", "ingested_at", "ingerido_en"),
+        # evaluaciones_señales
+        ("evaluaciones_señales", "evaluated_at", "evaluado_en"),
+        ("evaluaciones_señales", "split_idx", "indice_split"),
+        ("evaluaciones_señales", "n_train", "n_entrenamiento"),
+        ("evaluaciones_señales", "n_eval", "n_evaluacion"),
+        # activacion_señales
+        ("activacion_señales", "evaluated_at", "evaluado_en"),
+        # usuarios
+        ("usuarios", "created_at", "creado_en"),
+        ("usuarios", "last_login", "ultimo_acceso"),
+        ("usuarios", "role", "rol"),
+        # conversaciones
+        ("conversaciones", "title", "titulo"),
+        ("conversaciones", "created_at", "creado_en"),
+        ("conversaciones", "updated_at", "actualizado_en"),
+        # mensajes
+        ("mensajes", "role", "rol"),
+        ("mensajes", "content", "contenido"),
+        ("mensajes", "created_at", "creado_en"),
+        ("mensajes", "seq", "orden"),
+        # cache_chatbot
+        ("cache_chatbot", "cache_key", "clave_cache"),
+        ("cache_chatbot", "question", "pregunta"),
+        ("cache_chatbot", "answer", "respuesta"),
+        ("cache_chatbot", "created_at", "creado_en"),
+        ("cache_chatbot", "hits", "aciertos"),
+        ("cache_chatbot", "expires_at", "expira_en"),
+        # puntos_interes
+        ("puntos_interes", "created_at", "creado_en"),
+        # config_fuentes
+        ("config_fuentes", "created_at", "creado_en"),
+        # categorias_poi
+        ("categorias_poi", "category", "categoria"),
+        ("categorias_poi", "icon_cls", "icono"),
+        ("categorias_poi", "badge_color", "color_badge"),
+        # categorias_narrativa
+        ("categorias_narrativa", "category_key", "clave"),
+        ("categorias_narrativa", "icon_cls", "icono"),
+        ("categorias_narrativa", "sort_order", "orden"),
+        # niveles_alerta
+        ("niveles_alerta", "level_key", "clave"),
+        ("niveles_alerta", "text_color", "color_texto"),
+        ("niveles_alerta", "bg_color", "color_fondo"),
+        ("niveles_alerta", "sort_order", "orden"),
+        # fuentes
+        ("fuentes", "created_at", "creado_en"),
+        ("fuentes", "params_schema", "esquema_params"),
+        ("fuentes", "params_ejemplo", "ejemplo_params"),
+        # ubicaciones
+        ("ubicaciones", "region_code", "codigo_region"),
+        ("ubicaciones", "catchment_rings_json", "anillos_captacion"),
+    ]
+    for table, old, new in _RENAMES:
+        _r(table, old, new)
 
 
 def _sync_users_from_json(conn: PgConn) -> None:
@@ -869,7 +850,7 @@ def _migrate_activacion_señales_periodicidad(conn: PgConn) -> None:
 
 
 def _migrate_señales_display(conn: PgConn) -> None:
-    """Añade columnas de display a señales y siembra metadatos de señales conocidas."""
+    """Añade columnas de display a señales y siembra/actualiza metadatos de señales conocidas."""
     conn.execute("ALTER TABLE señales ADD COLUMN IF NOT EXISTS label               TEXT")
     conn.execute("ALTER TABLE señales ADD COLUMN IF NOT EXISTS sublabel            TEXT")
     conn.execute("ALTER TABLE señales ADD COLUMN IF NOT EXISTS color               VARCHAR(16)")
@@ -881,103 +862,16 @@ def _migrate_señales_display(conn: PgConn) -> None:
         "ALTER TABLE señales ADD COLUMN IF NOT EXISTS modo_visualizacion  VARCHAR(20) DEFAULT 'yoy'"
     )
 
-    # ── señales display_mode='yoy' ──────────────────────────────────────
-    # (señal_id, label, sublabel, color, icon_cls, agg_fn, notas)
-    _YOY_UPDATES = [
-        (
-            "afluencia_metro_gran_via",
-            "Metro Gran Vía",
-            "validaciones diarias",
-            "#e67e22",
-            "fas fa-train-subway",
-            "sum",
-            "Validaciones diarias en Metro Gran Vía. Proxy del volumen de peatones en el eje.",
-        ),
-        (
-            "afluencia_metro_callao",
-            "Metro Callao",
-            "validaciones diarias",
-            "#00539B",
-            "fas fa-train-subway",
-            "sum",
-            "Validaciones diarias en Metro Callao. Proxy del volumen de peatones en el eje.",
-        ),
-        (
-            "n_turistas_isocrona",
-            "Turistas área",
-            "pers. en isócrona",
-            "#3498db",
-            "fas fa-passport",
-            "sum",
-            "Turistas activos en la isócrona de la ubicación — estimación de aforo turístico en el área.",
-        ),
-        (
-            "n_eventos_gran_via",
-            "Eventos Gran Vía",
-            "eventos en rango",
-            "#9b59b6",
-            "fas fa-calendar-check",
-            "sum",
-            "Eventos registrados en el eje Gran Vía en el rango de fechas — proxy de actividad cultural.",
-        ),
-        (
-            "ev_rank_concierto",
-            "Ranking conciertos",
-            "score 0-100",
-            "#8e44ad",
-            "fas fa-music",
-            "max",
-            "Score 0–100 de relevancia de conciertos en el área. 100 = sold-out en múltiples recintos.",
-        ),
-        (
-            "ev_rank_deportivo",
-            "Ranking deportivo",
-            "score 0-100",
-            "#e74c3c",
-            "fas fa-futbol",
-            "max",
-            "Score 0–100 de relevancia de eventos deportivos. 100 = derby o final de competición nacional.",
-        ),
-        (
-            "ev_rank_festival",
-            "Ranking festivales",
-            "score 0-100",
-            "#2980b9",
-            "fas fa-star",
-            "max",
-            "Score 0–100 de relevancia de festivales en el área.",
-        ),
-        (
-            "ev_rank_municipal",
-            "Ranking municipal",
-            "score 0-100",
-            "#e67e22",
-            "fas fa-city",
-            "max",
-            "Score 0–100 de relevancia de eventos municipales (ferias, verbenas, fiestas mayores).",
-        ),
-        (
-            "ev_rank_total",
-            "Ranking total",
-            "score 0-100",
-            "#2c3e50",
-            "fas fa-chart-bar",
-            "max",
-            "Score compuesto 0–100 que agrega todos los tipos de evento del área.",
-        ),
-    ]
-    for fk, lbl, sub, col, icon, agg, notas in _YOY_UPDATES:
-        conn.execute(
-            "UPDATE señales SET label=?, sublabel=?, color=?, icono=?, "
-            "funcion_agregacion=?, modo_visualizacion='yoy', notas=? WHERE señal_id=?",
-            [lbl, sub, col, icon, agg, notas, fk],
-        )
-
-    # ── señales display_mode='cruceros' ─────────────────────────────────
-    # (señal_id, label, sublabel, color, icon_cls, agg_fn, notas)
-    _CRUCEROS_UPDATES = [
+    # ── Señales canónicas — un UPSERT unificado ───────────────────────────────
+    # Campos: (señal_id, fuente, categoria, modo_visualizacion,
+    #          label, sublabel, color, icono, funcion_agregacion, notas)
+    _SIGNALS = [
+        # turismo · cruceros
         (
             "n_pasajeros_crucero_oficial",
+            "puertos_estado",
+            "turismo",
+            "cruceros",
             "Pasajeros crucero",
             "pax oficiales",
             "#1abc9c",
@@ -987,6 +881,9 @@ def _migrate_señales_display(conn: PgConn) -> None:
         ),
         (
             "n_pasajeros_crucero_dia",
+            "cruceros",
+            "turismo",
+            "cruceros",
             "Pasajeros crucero día",
             "pax totales",
             "#1abc9c",
@@ -994,19 +891,12 @@ def _migrate_señales_display(conn: PgConn) -> None:
             "sum",
             "Escalas de crucero scrapeadas de la web del puerto. Latencia 1 día. Fallback del dato oficial durante el período de lag.",
         ),
-    ]
-    for fk, lbl, sub, col, icon, agg, notas in _CRUCEROS_UPDATES:
-        conn.execute(
-            "UPDATE señales SET label=?, sublabel=?, color=?, icono=?, "
-            "funcion_agregacion=?, modo_visualizacion='cruceros', notas=? WHERE señal_id=?",
-            [lbl, sub, col, icon, agg, notas, fk],
-        )
-
-    # ── señales display_mode='calendario' ────────────────────────────────
-    # (señal_id, label, sublabel, color, icon_cls, agg_fn, notas)
-    _CAL_UPDATES = [
+        # clima · calendario
         (
             "llueve",
+            "open_meteo",
+            "clima",
+            "calendario",
             "Lluvia",
             "días",
             "#3498db",
@@ -1016,6 +906,9 @@ def _migrate_señales_display(conn: PgConn) -> None:
         ),
         (
             "temp_max",
+            "open_meteo",
+            "clima",
+            "calendario",
             "Temperatura máx.",
             "°C",
             "#e74c3c",
@@ -1025,6 +918,9 @@ def _migrate_señales_display(conn: PgConn) -> None:
         ),
         (
             "temp_min",
+            "open_meteo",
+            "clima",
+            "calendario",
             "Temperatura mín.",
             "°C",
             "#3498db",
@@ -1032,112 +928,55 @@ def _migrate_señales_display(conn: PgConn) -> None:
             "mean",
             "Temperatura mínima diaria en la ubicación (°C).",
         ),
-        (
-            "ev_festivo_regional",
-            "Festivo regional",
-            "días",
-            "#27ae60",
-            "fas fa-flag",
-            "sum",
-            "Días de festivo regional o nacional — impacto positivo en afluencia en el propio día.",
-        ),
-        (
-            "ev_vacaciones_escolares",
-            "Vacaciones escolares",
-            "días",
-            "#8e44ad",
-            "fas fa-school",
-            "sum",
-            "Días de vacaciones escolares — efecto variable según ubicación (turismo vs. residencial).",
-        ),
-        (
-            "cal_escolar_is_break",
-            "Período vacacional",
-            "días",
-            "#8e44ad",
-            "fas fa-school",
-            "sum",
-            "Indica si el día cae dentro de un período vacacional escolar.",
-        ),
-        (
-            "cal_escolar_dias_hasta",
-            "Días hasta vacaciones",
-            "días (media)",
-            "#8e44ad",
-            "fas fa-school",
-            "mean",
-            "Días restantes hasta el próximo período vacacional escolar (media del período).",
-        ),
     ]
-    for fk, lbl, sub, col, icon, agg, notas in _CAL_UPDATES:
-        conn.execute(
-            "UPDATE señales SET label=?, sublabel=?, color=?, icono=?, "
-            "funcion_agregacion=?, modo_visualizacion='calendario', notas=? WHERE señal_id=?",
-            [lbl, sub, col, icon, agg, notas, fk],
-        )
-
-    # ── eventos canonical tipos — display_mode='events_count' (INSERT) ─
-    # (señal_id, fuente, categoria, status, label, sublabel, color, icon_cls, agg_fn, notas)
-    _EVENTS_COUNT_ROWS = [
-        (
-            "concierto",
-            "calendar",
-            "eventos",
-            "con_cobertura",
-            "Conciertos",
-            "eventos por mes",
-            "#8e44ad",
-            "fas fa-music",
-            "sum",
-            "Conciertos y eventos musicales en el área. Fuente: Ticketmaster + agenda municipal.",
-        ),
-        (
-            "festival",
-            "calendar",
-            "eventos",
-            "con_cobertura",
-            "Festivales",
-            "eventos por mes",
-            "#2980b9",
-            "fas fa-star",
-            "sum",
-            "Festivales de música, arte y cultura en el área. Fuente: Ticketmaster + agenda municipal.",
-        ),
-        (
-            "deportivo",
-            "calendar",
-            "eventos",
-            "con_cobertura",
-            "Deportivo",
-            "eventos por mes",
-            "#e74c3c",
-            "fas fa-futbol",
-            "sum",
-            "Eventos deportivos (partidos, competiciones) en el área. Fuente: TheSportsDB + agenda municipal.",
-        ),
-        (
-            "evento_municipal",
-            "calendar",
-            "eventos",
-            "con_cobertura",
-            "Municipal",
-            "eventos por mes",
-            "#e67e22",
-            "fas fa-city",
-            "sum",
-            "Eventos municipales y ferias locales (ferias, verbenas, fiestas mayores). Fuente: agenda municipal.",
-        ),
-    ]
-    for fk, src, cat, stat, lbl, sub, col, icon, agg, notas in _EVENTS_COUNT_ROWS:
+    for sid, fuente, cat, mode, lbl, sub, col, icon, agg, notas in _SIGNALS:
         conn.execute(
             "INSERT INTO señales "
-            "(señal_id, fuente, categoria, status, label, sublabel, color, icono, funcion_agregacion, modo_visualizacion, notas) "
+            "  (señal_id, fuente, categoria, status, modo_visualizacion, "
+            "   label, sublabel, color, icono, funcion_agregacion, notas) "
+            "VALUES (?,?,?,'con_cobertura',?,?,?,?,?,?,?) "
+            "ON CONFLICT (señal_id) DO UPDATE SET "
+            "  label               = EXCLUDED.label, "
+            "  sublabel            = EXCLUDED.sublabel, "
+            "  color               = EXCLUDED.color, "
+            "  icono               = EXCLUDED.icono, "
+            "  funcion_agregacion  = EXCLUDED.funcion_agregacion, "
+            "  modo_visualizacion  = EXCLUDED.modo_visualizacion, "
+            "  notas               = EXCLUDED.notas",
+            [sid, fuente, cat, mode, lbl, sub, col, icon, agg, notas],
+        )
+
+    # ── Raw event type rows — also carry tipo_canonico ────────────────────────
+    _RAW_EVENTS = [
+        (
+            "escala_crucero",
+            "puertos_estado",
+            "cruceros",
+            "con_cobertura",
+            "Crucero",
+            None,
+            "#16a085",
+            "fas fa-ship",
+            "sum",
+            "raw",
+            None,
+        ),
+    ]
+    for row in _RAW_EVENTS:
+        conn.execute(
+            "INSERT INTO señales "
+            "  (señal_id, fuente, categoria, status, label, sublabel, color, icono, "
+            "   funcion_agregacion, modo_visualizacion, tipo_canonico) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?) "
             "ON CONFLICT (señal_id) DO UPDATE SET "
-            "label=EXCLUDED.label, sublabel=EXCLUDED.sublabel, color=EXCLUDED.color, "
-            "icono=EXCLUDED.icono, funcion_agregacion=EXCLUDED.funcion_agregacion, modo_visualizacion=EXCLUDED.modo_visualizacion, "
-            "notas=EXCLUDED.notas",
-            [fk, src, cat, stat, lbl, sub, col, icon, agg, "events_count", notas],
+            "  tipo_canonico       = EXCLUDED.tipo_canonico, "
+            "  label               = EXCLUDED.label, "
+            "  sublabel            = EXCLUDED.sublabel, "
+            "  color               = EXCLUDED.color, "
+            "  icono               = EXCLUDED.icono, "
+            "  funcion_agregacion  = EXCLUDED.funcion_agregacion, "
+            "  modo_visualizacion  = EXCLUDED.modo_visualizacion",
+            list(row),
         )
 
 
@@ -1248,110 +1087,6 @@ def _migrate_registries(conn: PgConn) -> None:
     conn.execute("ALTER TABLE señales ADD COLUMN IF NOT EXISTS fallback_señal_id TEXT")
 
     _RAW_EVENTS = [
-        (
-            "tm_concierto",
-            "ticketmaster",
-            "eventos",
-            "con_cobertura",
-            "Concierto",
-            None,
-            "#8e44ad",
-            "fas fa-music",
-            "sum",
-            "raw",
-            "concierto",
-        ),
-        (
-            "tm_festival",
-            "ticketmaster",
-            "eventos",
-            "con_cobertura",
-            "Festival",
-            None,
-            "#2980b9",
-            "fas fa-star",
-            "sum",
-            "raw",
-            "festival",
-        ),
-        (
-            "tm_deportivo",
-            "ticketmaster",
-            "eventos",
-            "con_cobertura",
-            "Deportivo",
-            None,
-            "#e74c3c",
-            "fas fa-futbol",
-            "sum",
-            "raw",
-            "deportivo",
-        ),
-        (
-            "concierto_wizink",
-            "manual",
-            "eventos",
-            "con_cobertura",
-            "Concierto",
-            None,
-            "#8e44ad",
-            "fas fa-music",
-            "sum",
-            "raw",
-            "concierto",
-        ),
-        (
-            "estreno_callao",
-            "manual",
-            "eventos",
-            "con_cobertura",
-            "Estreno",
-            None,
-            "#e67e22",
-            "fas fa-film",
-            "sum",
-            "raw",
-            "concierto",
-        ),
-        (
-            "festival_madrid",
-            "manual",
-            "eventos",
-            "con_cobertura",
-            "Festival",
-            None,
-            "#2980b9",
-            "fas fa-city",
-            "sum",
-            "raw",
-            "festival",
-        ),
-        (
-            "manifestacion_gran_via",
-            "manual",
-            "eventos",
-            "con_cobertura",
-            "Marcha",
-            None,
-            "#c0392b",
-            "fas fa-bullhorn",
-            "sum",
-            "raw",
-            "evento_municipal",
-        ),
-        (
-            "partido_deportivo",
-            "manual",
-            "eventos",
-            "con_cobertura",
-            "Deportivo",
-            None,
-            "#e74c3c",
-            "fas fa-futbol",
-            "sum",
-            "raw",
-            "deportivo",
-        ),
         (
             "escala_crucero",
             "puertos_estado",
@@ -1579,6 +1314,12 @@ def _migrate_zonas(conn: PgConn) -> None:
     conn.execute("ALTER TABLE zonas ADD COLUMN IF NOT EXISTS tipo_zona TEXT DEFAULT ''")
     conn.execute("ALTER TABLE zonas ADD COLUMN IF NOT EXISTS parent_zona_id TEXT DEFAULT NULL")
     conn.execute("ALTER TABLE zonas ADD COLUMN IF NOT EXISTS funnel_step INT DEFAULT NULL")
+    # zone_enum: valor "zone" del reporte diario Aitanna (mayor = más exterior).
+    # Fuente de verdad estable; no depende de nombres de zona.
+    conn.execute("ALTER TABLE zonas ADD COLUMN IF NOT EXISTS zone_enum INT DEFAULT NULL")
+    # Campos de la API Aitanna: lastZone / isTopParent
+    conn.execute("ALTER TABLE zonas ADD COLUMN IF NOT EXISTS es_ultima_zona BOOLEAN DEFAULT NULL")
+    conn.execute("ALTER TABLE zonas ADD COLUMN IF NOT EXISTS es_top_parent BOOLEAN DEFAULT NULL")
 
 
 def _migrate_zone_types_miniso(conn: PgConn) -> None:
@@ -1601,6 +1342,7 @@ def _migrate_zone_types_miniso(conn: PgConn) -> None:
             UPDATE zonas SET tipo_zona = ?, funnel_step = ?
             WHERE nombre = ?
               AND funnel_step IS NULL
+              AND (tipo_zona IS NULL OR tipo_zona = '')
               AND ubicacion_id IN (
                   SELECT ubicacion_id FROM ubicaciones WHERE org_id = ?
               )
@@ -1623,25 +1365,6 @@ def _migrate_config_fuentes(conn: PgConn) -> None:
             _json.dumps({"radio_m": 1200, "max_resultados": 200}),
         ),
         (
-            _GV_UUID,
-            "metro_madrid",
-            _json.dumps(
-                {
-                    "estaciones": [
-                        {"nombre": "Gran Vía", "slug": "gran_via"},
-                        {"nombre": "Callao", "slug": "callao"},
-                        {"nombre": "Sol", "slug": "sol"},
-                    ],
-                    "anyo_url": "https://www.metromadrid.es/export/sites/metro/comun/documentos/viajeros/Estadistica_{year}.xlsx",
-                }
-            ),
-        ),
-        (
-            _GV_UUID,
-            "ine_eoh",
-            _json.dumps({"provincia_nombre": "Madrid", "tabla_viajeros": 2078}),
-        ),
-        (
             _MALAGA_UUID,
             "cruceros",
             _json.dumps(
@@ -1657,174 +1380,6 @@ def _migrate_config_fuentes(conn: PgConn) -> None:
         "ON CONFLICT (ubicacion_id, fuente) DO NOTHING",
         _ROWS,
     )
-
-
-def _migrate_señales_display_upsert(conn: PgConn) -> None:
-    """
-    Garantiza que todos los señal_id con metadatos canónicos existan en la
-    tabla señales — incluso si ensure_feature_registry() no se ejecutó antes
-    que _migrate_señales_display (que solo hace UPDATE, no INSERT).
-    """
-    # (señal_id, fuente, categoria, display_mode, label, sublabel, color, icon_cls, agg_fn)
-    _KNOWN: list[tuple] = [
-        (
-            "afluencia_metro_gran_via",
-            "metro_madrid",
-            "movilidad",
-            "yoy",
-            "Metro Gran Vía",
-            "validaciones diarias",
-            "#e67e22",
-            "fas fa-train-subway",
-            "sum",
-        ),
-        (
-            "afluencia_metro_callao",
-            "metro_madrid",
-            "movilidad",
-            "yoy",
-            "Metro Callao",
-            "validaciones diarias",
-            "#00539B",
-            "fas fa-train-subway",
-            "sum",
-        ),
-        (
-            "afluencia_metro_sol",
-            "metro_madrid",
-            "movilidad",
-            "yoy",
-            "Metro Sol",
-            "validaciones diarias",
-            "#e67e22",
-            "fas fa-train-subway",
-            "sum",
-        ),
-        (
-            "n_turistas_isocrona",
-            "esri",
-            "turismo",
-            "yoy",
-            "Turistas área",
-            "pers. en isócrona",
-            "#3498db",
-            "fas fa-passport",
-            "sum",
-        ),
-        (
-            "n_eventos_gran_via",
-            "agenda_es",
-            "eventos",
-            "yoy",
-            "Eventos Gran Vía",
-            "eventos en rango",
-            "#9b59b6",
-            "fas fa-calendar-check",
-            "sum",
-        ),
-        (
-            "ev_rank_concierto",
-            "ticketmaster",
-            "eventos",
-            "yoy",
-            "Ranking conciertos",
-            "score 0-100",
-            "#8e44ad",
-            "fas fa-music",
-            "max",
-        ),
-        (
-            "ev_rank_deportivo",
-            "thesportsdb",
-            "eventos",
-            "yoy",
-            "Ranking deportivo",
-            "score 0-100",
-            "#e74c3c",
-            "fas fa-futbol",
-            "max",
-        ),
-        (
-            "ev_rank_festival",
-            "ticketmaster",
-            "eventos",
-            "yoy",
-            "Ranking festivales",
-            "score 0-100",
-            "#2980b9",
-            "fas fa-star",
-            "max",
-        ),
-        (
-            "ev_rank_municipal",
-            "agenda_es",
-            "eventos",
-            "yoy",
-            "Ranking municipal",
-            "score 0-100",
-            "#e67e22",
-            "fas fa-city",
-            "max",
-        ),
-        (
-            "ev_rank_total",
-            "agenda_es",
-            "eventos",
-            "yoy",
-            "Ranking total",
-            "score 0-100",
-            "#2c3e50",
-            "fas fa-chart-bar",
-            "max",
-        ),
-        (
-            "n_pasajeros_crucero_oficial",
-            "puertos_estado",
-            "turismo",
-            "cruceros",
-            "Pasajeros crucero",
-            "pax oficiales",
-            "#1abc9c",
-            "fas fa-ship",
-            "sum",
-        ),
-        (
-            "n_pasajeros_crucero_dia",
-            "cruceros",
-            "turismo",
-            "cruceros",
-            "Pasajeros crucero día",
-            "pax totales",
-            "#1abc9c",
-            "fas fa-ship",
-            "sum",
-        ),
-        (
-            "ine_viajeros_hoteleros",
-            "ine_eoh",
-            "turismo",
-            "yoy",
-            "Viajeros hoteleros",
-            "viajeros/mes",
-            "#16a085",
-            "fas fa-bed",
-            "sum",
-        ),
-    ]
-    for sid, fuente, cat, mode, lbl, sub, col, icon, agg in _KNOWN:
-        conn.execute(
-            """INSERT INTO señales (señal_id, fuente, categoria, status, modo_visualizacion,
-                                    label, sublabel, color, icono, funcion_agregacion)
-               VALUES (?,?,?,'con_cobertura',?,?,?,?,?,?)
-               ON CONFLICT (señal_id) DO UPDATE SET
-                   label               = EXCLUDED.label,
-                   sublabel            = EXCLUDED.sublabel,
-                   color               = EXCLUDED.color,
-                   icono               = EXCLUDED.icono,
-                   funcion_agregacion  = EXCLUDED.funcion_agregacion,
-                   modo_visualizacion  = EXCLUDED.modo_visualizacion""",
-            [sid, fuente, cat, mode, lbl, sub, col, icon, agg],
-        )
 
 
 def _migrate_puntos_interes(conn: PgConn) -> None:
@@ -1976,105 +1531,6 @@ _SOURCE_REGISTRY_SEED = [
         "ejemplo_params": {},
         "config": {},
     },
-    {
-        "fuente": "open_holidays",
-        "periodicidad": "diaria",
-        "categoria": "eventos",
-        "descripcion": "Festivos nacionales y regionales + vacaciones escolares (OpenHolidays API).",
-        "url_referencia": "https://www.openholidaysapi.org/",
-        "cobertura_desde": "2024-01-01",
-        "latencia_dias": 0,
-        "paises": [],
-        "esquema_params": None,
-        "ejemplo_params": {},
-        "config": {},
-    },
-    {
-        "fuente": "ticketmaster",
-        "periodicidad": "diaria",
-        "categoria": "eventos",
-        "descripcion": "Eventos de conciertos, festivales y deportes (Ticketmaster Discovery API).",
-        "url_referencia": "https://developer.ticketmaster.com/",
-        "cobertura_desde": "2024-01-01",
-        "latencia_dias": 0,
-        "paises": [],
-        "esquema_params": None,
-        "ejemplo_params": {},
-        "config": {},
-    },
-    {
-        "fuente": "thesportsdb",
-        "periodicidad": "diaria",
-        "categoria": "eventos",
-        "descripcion": "Partidos deportivos por ciudad (TheSportsDB API).",
-        "url_referencia": "https://www.thesportsdb.com/",
-        "cobertura_desde": "2024-01-01",
-        "latencia_dias": 0,
-        "paises": [],
-        "esquema_params": None,
-        "ejemplo_params": {
-            "equipos": ["real madrid", "atlético", "getafe"],
-            "sedes": ["santiago bernabéu", "estadio metropolitano"],
-        },
-        "config": {
-            "delay": 1.2,
-            "retries": 2,
-            "ligas": {
-                "ES": [
-                    {"nombre": "LaLiga", "id": "4335", "tipo": "liga"},
-                    {"nombre": "LaLiga 2", "id": "4336", "tipo": "liga"},
-                    {"nombre": "Copa del Rey", "id": "4337", "tipo": "copa"},
-                    {"nombre": "Supercopa de España", "id": "5104", "tipo": "copa"},
-                ],
-                "MX": [
-                    {"nombre": "Liga MX", "id": "4350", "tipo": "liga"},
-                    {"nombre": "Liga de Expansión", "id": "4351", "tipo": "liga"},
-                ],
-                "EU": [
-                    {"nombre": "UEFA Champions", "id": "4480", "tipo": "champions"},
-                    {"nombre": "UEFA Europa", "id": "4481", "tipo": "champions"},
-                    {"nombre": "UEFA Conference", "id": "4966", "tipo": "champions"},
-                ],
-            },
-            "scores": {
-                "liga": 55,
-                "copa": 65,
-                "champions": 85,
-                "derby": 80,
-                "factor_visitante": 0.4,
-            },
-        },
-    },
-    {
-        "fuente": "agenda_es",
-        "periodicidad": "diaria",
-        "categoria": "eventos",
-        "descripcion": "Agenda cultural y eventos municipales.",
-        "url_referencia": None,
-        "cobertura_desde": "2024-01-01",
-        "latencia_dias": 0,
-        "paises": ["ES"],
-        "esquema_params": None,
-        "ejemplo_params": {},
-        "config": {},
-    },
-    {
-        "fuente": "newsdata",
-        "periodicidad": "diaria",
-        "categoria": "noticias",
-        "descripcion": "Noticias locales por ciudad/país (Newsdata.io API). Requiere NEWSDATA_API_KEY.",
-        "url_referencia": "https://newsdata.io/",
-        "cobertura_desde": "2024-01-01",
-        "latencia_dias": 0,
-        "paises": [],
-        "esquema_params": None,
-        "ejemplo_params": {},
-        "config": {
-            "tipo_conector": "noticias",
-            "max_paginas": 3,
-            "categorias": ["business", "entertainment", "politics", "sports", "tourism"],
-        },
-    },
     # ── Diarias configuradas ──────────────────────────────────────────────────
     {
         "fuente": "cruceros",
@@ -2099,27 +1555,6 @@ _SOURCE_REGISTRY_SEED = [
     },
     # ── Mensuales ─────────────────────────────────────────────────────────────
     {
-        "fuente": "metro_madrid",
-        "periodicidad": "mensual",
-        "categoria": "movilidad",
-        "descripcion": "Validaciones mensuales por estación de metro (Metro de Madrid / CRTM). Proxy del volumen de peatones en la isócrona de la ubicación.",
-        "url_referencia": "https://www.metromadrid.es/en/metro-de-madrid/statistics",
-        "cobertura_desde": "2016-01",
-        "latencia_dias": 45,
-        "paises": ["ES"],
-        "esquema_params": "{'estaciones': [{'nombre': '<nombre exacto en el Excel de Metro Madrid>', 'slug': '<snake_case>'}], 'anyo_url': '<URL pattern con {year}>', 'feature_key_prefix': 'afluencia_metro_'}",
-        "ejemplo_params": {
-            "estaciones": [
-                {"nombre": "Gran Via", "slug": "gran_via"},
-                {"nombre": "Callao", "slug": "callao"},
-            ],
-            "anyo_url": "https://www.metromadrid.es/...",
-        },
-        "config": {
-            "feature_key_prefix": "afluencia_metro_",
-        },
-    },
-    {
         "fuente": "puertos_estado",
         "periodicidad": "mensual",
         "categoria": "turismo",
@@ -2134,24 +1569,6 @@ _SOURCE_REGISTRY_SEED = [
             "feature_key": "n_pasajeros_crucero_oficial",
             "listing_url": "https://www.puertos.es/en/data/statistics/monthly",
             "hoja_excel": "Pasajeros crucero",
-        },
-    },
-    {
-        "fuente": "ine_eoh",
-        "periodicidad": "mensual",
-        "categoria": "turismo",
-        "descripcion": "Viajeros y pernoctaciones en establecimientos hoteleros — INE Encuesta de Ocupación Hotelera.",
-        "url_referencia": "https://www.ine.es/dyngs/INEbase/es/operacion.htm?c=Estadistica_C&cid=1254736177015",
-        "cobertura_desde": "1999-01",
-        "latencia_dias": 45,
-        "paises": ["ES"],
-        "esquema_params": "{'provincia_nombre': '<fragmento del nombre de provincia en series INE>'}",
-        "ejemplo_params": {"provincia_nombre": "Malaga"},
-        "config": {
-            "base_url": "https://servicios.ine.es/wstempus/js/ES",
-            "tabla_viajeros": 2078,
-            "feature_key_viajeros": "ine_viajeros_hoteleros",
-            "feature_key_pernoctaciones": "ine_pernoctaciones_hoteleras",
         },
     },
     {
@@ -2259,16 +1676,9 @@ def _migrar_tipo_conector(conn: PgConn) -> None:
 
     mapeo = {
         "weather": {"tipo_conector": "meteorologia"},
-        "open_holidays": {"tipo_conector": "festivos_calendario"},
-        "ticketmaster": {"tipo_conector": "eventos_api", "modulo": "ticketmaster"},
-        "thesportsdb": {"tipo_conector": "eventos_api", "modulo": "thesportsdb"},
-        "agenda_es": {"tipo_conector": "eventos_api", "modulo": "agenda_es"},
         "cruceros": {"tipo_conector": "agenda_ajax_tabla"},
-        "metro_madrid": {"tipo_conector": "excel_mensual", "modo": "url"},
         "puertos_estado": {"tipo_conector": "excel_mensual", "modo": "listado"},
-        "ine_eoh": {"tipo_conector": "series_estadisticas"},
         "esri_places": {"tipo_conector": "pois_radio"},
-        "newsdata": {"tipo_conector": "noticias"},
     }
     for fuente, extra_config in mapeo.items():
         conn.execute(
@@ -2277,47 +1687,113 @@ def _migrar_tipo_conector(conn: PgConn) -> None:
         )
 
 
-def _migrar_config_thesportsdb(conn: PgConn) -> None:
-    """Migra ligas y scores de thesportsdb de código a DB. Idempotente."""
-    import json as _json
-
-    ya_migrado = conn.execute(
-        "SELECT (config -> 'ligas') IS NOT NULL FROM fuentes WHERE fuente = 'thesportsdb'"
-    ).fetchone()
-    if ya_migrado and ya_migrado[0]:
-        return
-
-    extra = {
-        "delay": 1.2,
-        "retries": 2,
-        "ligas": {
-            "ES": [
-                {"nombre": "LaLiga", "id": "4335", "tipo": "liga"},
-                {"nombre": "LaLiga 2", "id": "4336", "tipo": "liga"},
-                {"nombre": "Copa del Rey", "id": "4337", "tipo": "copa"},
-                {"nombre": "Supercopa de España", "id": "5104", "tipo": "copa"},
-            ],
-            "MX": [
-                {"nombre": "Liga MX", "id": "4350", "tipo": "liga"},
-                {"nombre": "Liga de Expansión", "id": "4351", "tipo": "liga"},
-            ],
-            "EU": [
-                {"nombre": "UEFA Champions", "id": "4480", "tipo": "champions"},
-                {"nombre": "UEFA Europa", "id": "4481", "tipo": "champions"},
-                {"nombre": "UEFA Conference", "id": "4966", "tipo": "champions"},
-            ],
-        },
-        "scores": {
-            "liga": 55,
-            "copa": 65,
-            "champions": 85,
-            "derby": 80,
-            "factor_visitante": 0.4,
-        },
+def _migrate_snapshots_geo_simple(conn: PgConn) -> None:
+    """
+    Simplifica snapshots_geo a un modelo plano: una fila por (ubicacion_id, señal_id).
+    La cadencia es mensual y borra lo anterior en cada ingesta — sin histórico temporal.
+    Si la tabla ya tiene el esquema nuevo (sin vigente_desde), no hace nada.
+    """
+    cols = {
+        r[0]
+        for r in conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'snapshots_geo'"
+        ).fetchall()
     }
+    if not cols or "vigente_desde" not in cols:
+        return
+    conn.execute("DROP TABLE IF EXISTS snapshots_geo CASCADE")
     conn.execute(
-        "UPDATE fuentes SET config = config || %s::jsonb WHERE fuente = 'thesportsdb'",
-        [_json.dumps(extra)],
+        """
+        CREATE TABLE snapshots_geo (
+            ubicacion_id   TEXT             NOT NULL,
+            señal_id       TEXT             NOT NULL,
+            valor          DOUBLE PRECISION,
+            actualizado_en TIMESTAMP        DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (ubicacion_id, señal_id)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_snapshots_geo_ubicacion ON snapshots_geo (ubicacion_id)"
+    )
+
+
+def _purgar_senales_obsoletas(conn: PgConn) -> None:
+    """
+    Elimina de la DB las señales y eventos de fuentes ya eliminadas.
+    Idempotente — usa DELETE WHERE ... IN (...) seguro.
+    """
+    # Desactivar fuentes eliminadas (no DELETE, por si hay referencias históricas)
+    _fuentes_obsoletas = [
+        "open_holidays",
+        "ticketmaster",
+        "thesportsdb",
+        "agenda_es",
+        "newsdata",
+        "metro_madrid",
+        "ine_eoh",
+    ]
+    placeholders = ",".join(["%s"] * len(_fuentes_obsoletas))
+    conn.execute(
+        f"UPDATE fuentes SET activo = FALSE WHERE fuente IN ({placeholders})",
+        _fuentes_obsoletas,
+    )
+
+    # Señales a eliminar (CASCADE borra valores_señales, activacion_señales, evaluaciones_señales)
+    _senales_obsoletas = [
+        # eventos / agenda
+        "ev_vacaciones_escolares",
+        "ev_festivo_regional",
+        "ev_rank_deportivo",
+        "ev_rank_concierto",
+        "ev_rank_festival",
+        "ev_rank_municipal",
+        "ev_rank_total",
+        "n_eventos_gran_via",
+        "tm_concierto",
+        "tm_festival",
+        "tm_deportivo",
+        "concierto_wizink",
+        "estreno_callao",
+        "festival_madrid",
+        "manifestacion_gran_via",
+        "partido_deportivo",
+        "concierto",
+        "festival",
+        "deportivo",
+        "evento_municipal",
+        # movilidad
+        "afluencia_metro_gran_via",
+        "afluencia_metro_callao",
+        "afluencia_metro_sol",
+        # turismo no-cruceros
+        "n_turistas_isocrona",
+        "ine_viajeros_hoteleros",
+        # calendario escolar
+        "cal_escolar_is_break",
+        "cal_escolar_dias_hasta",
+    ]
+    s_placeholders = ",".join(["%s"] * len(_senales_obsoletas))
+    conn.execute(
+        f"DELETE FROM señales WHERE señal_id IN ({s_placeholders})",
+        _senales_obsoletas,
+    )
+
+    # Eventos crudos: conservar solo escalas de crucero
+    conn.execute("DELETE FROM eventos WHERE evento_key NOT IN ('escala_crucero')")
+
+    # Sync markers de fuentes eliminadas
+    _sync_markers = [f"_sync_{f}" for f in _fuentes_obsoletas]
+    sm_placeholders = ",".join(["%s"] * len(_sync_markers))
+    conn.execute(
+        f"DELETE FROM valores_señales WHERE señal_id IN ({sm_placeholders})",
+        _sync_markers,
+    )
+
+    # config_fuentes para fuentes eliminadas
+    conn.execute(
+        f"DELETE FROM config_fuentes WHERE fuente IN ({placeholders})",
+        _fuentes_obsoletas,
     )
 
 

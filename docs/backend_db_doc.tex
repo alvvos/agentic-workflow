@@ -1,0 +1,1712 @@
+\documentclass[12pt, a4paper]{article}
+
+% ── Codificación y lenguaje ────────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish, es-tabla]{babel}
+\usepackage{url}
+
+% ── Tipografía ─────────────────────────────────────────────────────────────────
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% ── Geometría ──────────────────────────────────────────────────────────────────
+\usepackage[top=2.5cm, bottom=2.5cm, left=3cm, right=2.5cm]{geometry}
+
+% ── Matemáticas ────────────────────────────────────────────────────────────────
+\usepackage{amsmath, amssymb}
+
+% ── Tablas ─────────────────────────────────────────────────────────────────────
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+
+% ── Código fuente ──────────────────────────────────────────────────────────────
+\usepackage{listings}
+\usepackage{xcolor}
+
+\definecolor{azulUni}{RGB}{0, 51, 102}
+\definecolor{grisClaro}{RGB}{245, 245, 245}
+\definecolor{grisOscuro}{RGB}{90, 90, 90}
+\definecolor{verdeKw}{RGB}{0, 128, 0}
+\definecolor{rojoStr}{RGB}{163, 21, 21}
+\definecolor{azulComentario}{RGB}{60, 100, 180}
+
+\lstset{
+  basicstyle=\small\ttfamily,
+  backgroundcolor=\color{grisClaro},
+  keywordstyle=\color{verdeKw}\bfseries,
+  stringstyle=\color{rojoStr},
+  commentstyle=\color{azulComentario}\itshape,
+  breaklines=true,
+  frame=single,
+  rulecolor=\color{gray!40},
+  framesep=4pt,
+  xleftmargin=8pt,
+  xrightmargin=4pt,
+  showstringspaces=false,
+  tabsize=2,
+  captionpos=b,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=6pt,
+}
+
+% ── Formato de secciones ───────────────────────────────────────────────────────
+\usepackage{titlesec}
+\titleformat{\section}{\large\bfseries\color{azulUni}}{\thesection.}{0.6em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection.}{0.5em}{}
+\titleformat{\subsubsection}{\normalsize\itshape\bfseries}{\thesubsubsection.}{0.4em}{}
+
+% ── Párrafos ───────────────────────────────────────────────────────────────────
+\usepackage{parskip}
+\setlength{\parskip}{0.55em}
+
+% ── Listas ─────────────────────────────────────────────────────────────────────
+\usepackage{enumitem}
+\setlist[itemize]{topsep=2pt, itemsep=2pt}
+\setlist[enumerate]{topsep=2pt, itemsep=2pt}
+
+% ── Gráficos ───────────────────────────────────────────────────────────────────
+\usepackage{graphicx}
+\usepackage{float}
+
+% ── Hipervínculos ──────────────────────────────────────────────────────────────
+\usepackage[hidelinks, colorlinks=true, linkcolor=azulUni, urlcolor=azulUni]{hyperref}
+
+% ── Cabecera y pie ─────────────────────────────────────────────────────────────
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{gray}{Aitanna reporting — Documentación para técnicos y producto sobre backend y base de datos}}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+% ── Comandos auxiliares ────────────────────────────────────────────────────────
+\newcommand{\sql}[1]{\texttt{\small #1}}
+\newcommand{\pymod}[1]{\texttt{#1}}
+\newcommand{\col}[1]{\texttt{#1}}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\begin{document}
+\thispagestyle{empty}
+% ── PORTADA ───────────────────────────────────────────────────────────────────
+\begin{titlepage}
+  \centering
+  \vspace*{1.5cm}
+
+  {\Large \textbf{\textcolor{azulUni}{Reporting}}}
+
+  \vspace{0.3cm}
+  {\large Panel de analítica retail multi-tenant}
+
+  \vspace{2.5cm}
+  \rule{\linewidth}{0.8pt}
+  \vspace{0.4cm}
+
+  {\LARGE \textbf{Documentación técnica:\\[0.3em]
+  Backend y Base de datos}}
+
+  \vspace{0.4cm}
+  \rule{\linewidth}{0.8pt}
+
+  \vspace{1cm}
+  {\large \textit{Referencia interna de arquitectura, esquema PostgreSQL,\\
+  flujos de datos y conectores externos}}
+
+  \vspace{2.5cm}
+
+  \begin{tabular}{rl}
+    \textbf{Autor:}          & Álvaro Salís \\[0.4em]
+    \textbf{Versión:}        & v2.2 \\[0.4em]
+    \textbf{Stack principal:}          & Python 3.12, Dash/Plotly, PostgreSQL 16, XGBoost \\[0.4em]
+    \textbf{Fecha:}          & Julio de 2026 \\
+  \end{tabular}
+
+  \vfill
+  {\small Documento de uso interno para el equipo de Summer. Contiene información sensible de arquitectura y credenciales de referencia.}
+\end{titlepage}
+
+\newpage
+\tableofcontents
+\newpage
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Introducción y visión general}
+
+\subsection{Propósito del sistema}
+
+El panel de reporting nace de la idea de poder cruzar afluencias de tráfico de personas en localizaciones físicas con factores exógenos y señales de contexto que puedan mejorar el porcentaje de explicabilidad sobre la varianza total del dato dependiente (las visitas). Si bien no se busca ordenar el caos del tráfico exterior a la perfección, si es posible descartar la causalidad de una variable sobre el flujo o bien inferir relaciones causa efecto mediante la centralización de fuentes de información y el criterio profesional humano. (¿Que ha pasado en la Gran Vía esta semana?, ¿Que producto ha habido en el escaparate ese mes?, ¿Hemos tenido suficiente personal durante el estreno de la nueva película de Marvel?). Se busca facilitar al cliente la labor de investigación o brainstorming al momento de aportar explicaciones sobre un impacto puntual detectado en un periodo de tiempo.
+
+\subsection{Tenants actuales}
+
+En este momento solo se registran en el servidor datos y estructuras de información vinculadas exclusivamente al cliente Miniso. Gracias a que es la organización con mayor histórico de capturas de datos, se me ha permitido en estos meses tratar de diferentes maneras la información e ir aprendiendo sobre la lógica de negocio sobre el modulo de reporting.
+
+La plataforma está preparada para alojar multiples clientes o tenants. En cuanto al access level por cliente, cada usuario tiene como atributo en su fila su propia lista de 'uuids' a nivel de organización a las que tiene acceso.
+
+\begin{lstlisting}[language=Python]
+def get_current_org_access() -> list | None:
+    """Devuelve la lista de org_uuids accesibles, o None si el usuario ve todo (admin/dev)."""
+    if MODO_DESARROLLO:
+        return None
+    if flask.session.get("role") == "admin":
+        return None
+    return flask.session.get("org_access", [])
+\end{lstlisting}
+
+
+\subsection{Alcance del documento}
+
+Para este documento me gustaría cubrir exclusivamente el funcionamiento del backend (monolito por capas basado en callbacks), la base de datos montada sobre el gestor PostgreSQL (open source), los conectores externos (ingestores también llamados) y los flujos de ingesta preconfigurados disparables en instantes concretos. Quedan fuera de este escrito la lógica del frontend Dash, el diseño UX, y las relaciones matemáticas del modelo de ML explicadas en otro documento más formal y riguroso.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Stack tecnológico}
+
+ \subsection{Componentes principales}
+
+  La siguiente tabla recoge las tecnologías principales del sistema, sus versiones
+  mínimas requeridas y su función dentro de la arquitectura.
+
+  \begin{table}[H]
+  \centering
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabular}{llp{6.5cm}}
+  \toprule
+  \textbf{Componente} & \textbf{Versión} & \textbf{Función} \\
+  \midrule
+  Python          & 3.12              & Lenguaje base del backend \\
+  Dash / Plotly   & $\geq$2.x         & Framework web reactivo y motor de gráficas \\
+  Flask           & (vía Dash)        & Servidor HTTP subyacente; gestión de sesiones y rutas REST \\
+  PostgreSQL      & 16                & Base de datos relacional principal (Docker) \\
+  psycopg v3      & $\geq$3.1         & Driver PostgreSQL con pool de conexiones (\texttt{psycopg-pool}) \\
+  pandas          & $\geq$2.x         & Manipulación de DataFrames en memoria \\
+  XGBoost         & última estable    & Modelo de predicción de visitas por zona \\
+  scikit-learn    & última estable    & Preprocesado y métricas de evaluación ML \\
+  Prefect         & $\geq$3.0, $<$4.0 & Orquestación del pipeline de onboarding de ubicaciones \\
+  gunicorn        & 26.x              & Servidor WSGI de producción \\
+  Playwright      & última estable    & Renderizado PDF headless (endpoint \texttt{/api/html-to-pdf}) \\
+  Claude API      & (Anthropic SDK)   & Chatbot integrado en el panel (streaming SSE) \\
+  Esri / ArcGIS   & —                 & Features geoespaciales (POIs, isócronas, catchment rings) \\
+  Dash Bootstrap  & (tema LUX)        & Sistema de diseño y componentes UI \\
+  \bottomrule
+  \end{tabular}
+  \caption{Componentes principales del sistema}
+  \label{tab:stack}
+  \end{table}
+
+  \subsection{Infraestructura de producción}
+
+  El sistema se despliega en una máquina virtual de Google Cloud con la siguiente
+  configuración:
+
+  \begin{table}[H]
+  \centering
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabular}{ll}
+  \toprule
+  \textbf{Elemento} & \textbf{Detalle} \\
+  \midrule
+  Proveedor          & Google Cloud (Compute Engine) \\
+  IP pública         & \texttt{34.175.22.17} \\
+  Puertos expuestos  & 80 (HTTP) · 443 (HTTPS) \\
+  App server         & gunicorn · 1 worker · \texttt{127.0.0.1:8000} · timeout 300\,s \\
+  Process manager    & systemd · servicio \texttt{agentic-workflow.service} \\
+  Flujos Prefect     & systemd · servicio \texttt{prefect-flows.service} · UI en \texttt{127.0.0.1:4200} \\
+  Base de datos      & PostgreSQL 16 en Docker Compose · puerto 5433 (local) \\
+  Deploy             & \texttt{\textasciitilde/deploy.sh <versión>} vía SSH · git tags semver \\
+  Timer nocturno     & \texttt{agentic-sync-noche} · diario a las 10:45 UTC \\
+  Timer mensual      & \texttt{agentic-sync-mensual} · día 1 de cada mes, 03:00 UTC \\
+  \bottomrule
+  \end{tabular}
+  \caption{Configuración del servidor de producción}
+  \label{tab:infra}
+  \end{table}
+
+  El proceso de despliegue consiste en crear un tag semver en git
+  (\texttt{vX.Y.Z}), hacer push al repositorio y ejecutar el script
+  \texttt{deploy.sh} en el servidor vía SSH. El script detiene el servicio
+  systemd, actualiza el código al tag indicado, reinstala dependencias si es
+  necesario, aplica el DDL de PostgreSQL de forma idempotente y reinicia el
+  servicio.
+
+  \subsection{Variables de entorno}
+
+  La configuración sensible se gestiona mediante un fichero \texttt{.env} en la
+  raíz del proyecto, cargado al inicio con \texttt{python-dotenv}. Nunca debe
+  versionarse. La tabla~\ref{tab:env} recoge todas las variables reconocidas por
+  el sistema.
+
+  \begin{table}[H]
+  \centering
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabular}{lp{3.2cm}p{5.8cm}}
+  \toprule
+  \textbf{Variable} & \textbf{default} & \textbf{Descripción} \\
+  \midrule
+\textbf{Variable} & \textbf{default} & \textbf{Descripción} \\
+\midrule
+\texttt{AITANNA\_API\_KEY}   & —                  & API key de Aitanna (obligatoria en producción) \\
+\texttt{ESRI\_KEY}           & —                  & API key ArcGIS Location Platform; sin ella \texttt{esri\_client.py} usa datos mock \\
+\texttt{ANTHROPIC\_API\_KEY} & —                  & Clave Claude API para el chatbot integrado \\
+\texttt{SECRET\_KEY}         & \texttt{dev-only-change-in-prod} & Clave de firma de sesiones Flask; \textbf{cambiar obligatoriamente en producción} \\
+\texttt{DB\_HOST}            & \texttt{localhost}  & Host de PostgreSQL \\
+\texttt{DB\_PORT}            & \texttt{5432}       & Puerto de PostgreSQL \\
+\texttt{DB\_USER}            & \texttt{agentic}    & Usuario de PostgreSQL \\
+\texttt{DB\_PASSWORD}        & —                  & Contraseña de PostgreSQL \\
+\texttt{DB\_NAME}            & \texttt{agentic}    & Nombre de la base de datos \\
+\texttt{DB\_POOL\_MAX}       & \texttt{10}         & Tamaño máximo del pool de conexiones \\
+\texttt{DB\_POOL\_TIMEOUT}   & \texttt{30}         & Timeout de adquisición de conexión (segundos) \\
+\texttt{MODO\_DESARROLLO}    & \texttt{false}      & Si \texttt{true}, simplemente desactiva autenticación y usa \texttt{session\_id = local\_dev} \\
+\bottomrule
+\end{tabular}
+\caption{Variables de entorno del sistema}
+\label{tab:env}
+\end{table}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Base de datos en PostgreSQL 16}
+
+Apartir de esta sección, vamos a entrar un poco más en conceptos simples de arquitectura adaptados a todos los lectores.
+
+\subsection{Conexión y pool}
+
+El fichero \path{src/db/store.py} es troncal dentro de la estructura del proyecto, dentro de sus principales tareas está la gestión del pool de conexiones a la base de datos \texttt{psycopg (v3)}. Para que todos podamos entender que significa esto basicamente consiste en una solución a un problema muy simple. Abrir una conexión nueva entre un cliente y una base de datos es un proceso costoso a nivel de CPU (autenticación, asignación de memoria y red etc). Lo que hacemos es cortar por lo sano: nosotros designamos un número máximo de conexiones concurrentes (en nuestro caso son 10), y cada cliente, cuando necesite pedir algo, consulta esta caché de conexiones abiertas y listas para usar, hace uso de una y, en cuanto termina, la cierra y devuelve para que otro pueda usarla.
+
+Para desglosar a nivel de código esto un poco más vamos a tratar cada función esencial sobre este aspecto:
+
+\begin{itemize}
+    \item \texttt{\_build\_pool():} Construye el ConnectionPool de psycopg v3. Lee todas las variables de entorno (DB\_HOST, DB\_PORT, etc.), calcula el connect\_timeout como el mínimo entre el pool timeout y 10 segundos, y registra pool.close en atexit para que se cierre limpiamente al apagar el proceso.
+
+    El constructor primario de esta clase es el siguiente:
+
+\begin{lstlisting}[language=Python]
+    class ConnectionPool(conninfo: ConninfoParam="", *, connection_class: type[CT]=cast(type[CT], Connection), kwargs: KwargsParam | None=None, min_size: int=4, max_size: int | None=None, open: bool | None=None, configure: ConnectionCB[CT] | None=None, check: ConnectionCB[CT] | None=None, reset: ConnectionCB[CT] | None=None, name: str | None=None, close_returns: bool=False, timeout: float=30.0, max_waiting: int=0, max_lifetime: float=60 * 60.0, max_idle: float=10 * 60.0, reconnect_timeout: float=5 * 60.0, reconnect_failed: ConnectFailedCB | None=None, num_workers: int=3)
+\end{lstlisting}
+    \item{\_pool():} Es un singleton con doble-check lock a nivel macro (\_POOL\_LOCK). Garantiza que solo se crea un pool por proceso aunque múltiples hilos lleguen a la vez al if \_POOL is None. Para esto se hace uso la librería de python \path{threading} que como sabemos simula paralelismo real gracias a la conmutación de contextos, se podrían redactar varios documentos tan solo de esta librería así que no entraré mucho más en este tema aunque me gustase.
+\begin{lstlisting}[language=Python]
+def _pool() -> ConnectionPool:
+    global _POOL
+    if _POOL is None:
+        with _POOL_LOCK:
+            if _POOL is None:
+                _POOL = _build_pool()
+    return _POOL
+\end{lstlisting}
+\end{itemize}
+
+Sobre los wrappers y resultados de conexión, solo hay que saber que cuando ejecutas un SELECT, psycopg te devuelve un cursor. Con \texttt{\_PgResult} podemos envolver cada respuesta a gusto (quedándonos solo una fila concreta, con varias al estilo group by, o recibir de vuelta un dataframe de pandas). Finalmente la clase \texttt{PgConn} lleva la conexión física (\_conn) y el cursor (\_cur). El pool vive fuera, en \_pool(). Gracias a su método \texttt{execute} por ejemplo, podemos hacer una petición y recibirla comodamente como queramos, podemos insertar varias filas de golpe sin forzar un búcle (usualmente en ON CONFLICT se da la instrucción DO UPDATE pero también para datos que se siembran una vez está el DO NOTHING, ej: Cuando entra una organización nueva). Y como condición necesaria como hemos visto, se debe gestionar el cierre y devolución de la conexión.
+
+\begin{lstlisting}[language=Python]
+class PgConn:
+    """
+    execute()      devuelve _PgResult con .fetchone() / .fetchall() / .df()
+    executemany()  batched INSERT/UPDATE via psycopg cursor.executemany
+    """
+
+    __slots__ = ("_conn", "_cur")
+
+    def __init__(self, raw: psycopg.Connection):
+        self._conn = raw
+        self._cur: psycopg.Cursor = raw.cursor()
+
+    def execute(self, sql: str, params=None) -> _PgResult:
+        self._cur.execute(_norm_sql(sql), params)
+        return _PgResult(self._cur)
+
+    def executemany(self, sql: str, params_list) -> None:
+        if not params_list:
+            return
+        self._cur.executemany(_norm_sql(sql), params_list)
+
+    def close(self) -> None:
+        try:
+            self._cur.close()
+        except Exception:
+            pass
+        try:
+            _pool().putconn(self._conn)
+        except Exception:
+            pass
+\end{lstlisting}
+
+
+
+Vale la pena añadir que la función \texttt{get\_conn()} devuelve una instancia de \texttt{PgConn} que a su vez adquiere una conexión del pool. Esta función es \textit{thread-safe} por construcción: el pool gestiona la asignación de conexiones a distintos hilos de gunicorn sin que tengamos que hacer nada en especial. Si todas las conexiones están ocupadas (las 10 que mencionamos anteriormente) y se supera el \texttt{DB\_POOL\_TIMEOUT} (30 segundos por defecto), psycopg lanza una excepción que el sistema propaga como error vigilado o que podemos decir que tenemos controlado.
+
+Para conectarse directamente a PostgreSQL desde la terminal del servidor (útil para depuración o consultas ad hoc):
+
+\begin{lstlisting}[language=bash]
+# Desde el host (PostgreSQL en Docker en puerto 5433):
+docker exec -it agentic-db psql -U agentic -d agentic
+
+# O alternativamente:
+psql -h localhost -p 5433 -U agentic -d agentic
+\end{lstlisting}
+También como opción más visual se puede lanzar un contenedor que corra un visor de bases de datos como \textit{pgadmin} y mapearlo en nuestro localhost a través del protocolo \textit{ssh}.
+
+\subsection{Grupos de tablas}
+
+La base de datos contiene \textbf{23 tablas} organizadas en ocho grupos funcionales:
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{lp{8cm}}
+\toprule
+\textbf{Grupo} & \textbf{Tablas} \\
+\midrule
+Dimensiones        & \texttt{organizaciones}, \texttt{ubicaciones}, \texttt{zonas} \\
+Usuarios y acceso  & \texttt{usuarios}, \texttt{accesos\_usuario} \\
+Hechos             & \texttt{visitas} \\
+Señales externas   & \texttt{valores\_señales}, \texttt{snapshots\_geo}, \texttt{señales}, \texttt{activacion\_señales}, \texttt{evaluaciones\_señales} \\
+Calendario y eventos & \texttt{eventos} \\
+Chatbot            & \texttt{conversaciones}, \texttt{mensajes}, \texttt{cache\_chatbot} \\
+Display (DB-driven) & \texttt{categorias\_poi}, \texttt{tipos\_zona}, \texttt{categorias\_narrativa}, \texttt{niveles\_alerta} \\
+Configuración      & \texttt{puntos\_interes}, \texttt{config\_fuentes}, \texttt{fuentes}, \texttt{noticias} \\
+\bottomrule
+\end{tabular}
+\caption{Grupos de tablas del esquema PostgreSQL}
+\label{tab:grupos_tablas}
+\end{table}
+
+\subsection{Tablas de dimensión}
+
+\subsubsection{organizaciones}
+
+En resumidas cuentas actua como catálogo de clientes (tenants). Una fila por organización.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{org\_id}            & TEXT PK          & UUID de la organización (viene de Aitanna API) \\
+\texttt{nombre}             & TEXT NOT NULL    & Nombre comercial \\
+\texttt{pais\_codigo}       & TEXT NOT NULL    & ISO 2 (ES, MX, \ldots) \\
+\texttt{config\_calendario} & JSONB DEFAULT \{\} & Reservado para configuración por org (actualmente no se utiliza) \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{organizaciones}}
+\end{table}
+
+\subsubsection{ubicaciones}
+
+Son las tiendas físicas asociadas a cada organización por composición fuerte. Es la fuente de verdad del árbol org : ubicación : zona. La función \texttt{get\_active\_locations()} filtra \texttt{activa=TRUE (cuando tiene dato crudo de visitas) AND lat IS NOT NULL AND lon IS NOT NULL (esto de momento se delega en Nominatim pero Google tiene también su propio traductor Dirección -> coordenadas que podría interesarnos)}.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{ubicacion\_id}      & TEXT PK          & UUID de la ubicación \\
+\texttt{org\_id}            & TEXT NOT NULL    & FK : \texttt{organizaciones} \\
+\texttt{nombre}             & TEXT NOT NULL    & Nombre de la tienda \\
+\texttt{lat}                & DOUBLE PRECISION & Latitud WGS-84 \\
+\texttt{lon}                & DOUBLE PRECISION & Longitud WGS-84 \\
+\texttt{ciudad}             & TEXT             & Ciudad \\
+\texttt{provincia}          & TEXT             & Provincia / estado \\
+\texttt{pais\_codigo}       & TEXT NOT NULL    & ISO 2 \\
+\texttt{codigo\_region}     & TEXT             & Código de región NUTS / estado \\
+\texttt{codigo\_postal}     & TEXT             & Código postal \\
+\texttt{direccion}          & TEXT             & Dirección completa \\
+\texttt{activa}             & BOOLEAN TRUE     & FALSE oculta la ubicación del panel \\
+\texttt{anillos\_captacion} & TEXT             & GeoJSON de isócronas Esri (conocidos como catchment rings) \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{ubicaciones}}
+\end{table}
+
+\subsubsection{zonas}
+
+Zonas de computo dentro de cada tienda. Una zona puede tener una zona padre (árbol), ser topFather o ser zona hoja, es decir, sin hijos. (Pendiente de actualizar, se muestra schema actual).
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{zona\_id}        & TEXT PK          & UUID de la zona \\
+\texttt{ubicacion\_id}   & TEXT NOT NULL    & FK : \texttt{ubicaciones} \\
+\texttt{nombre}          & TEXT NOT NULL    & Nombre de la zona \\
+\texttt{oculta}          & BOOLEAN FALSE    & TRUE = excluida del panel \\
+\texttt{tipo\_zona}      & TEXT ''          & Tipo (entrance, floor, etc.) \\
+\texttt{parent\_zona\_id} & TEXT NULL       & FK a si mismo : zona padre (nullable)\\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{zonas}}
+\end{table}
+
+\subsubsection{usuarios}
+
+Usuarios del panel. Se sincroniza desde \texttt{users.json} en cada arranque del proceso (\texttt{\_sync\_users\_from\_json}), vía \texttt{ON CONFLICT DO UPDATE} para actualizar hashes.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{usuario\_id}    & TEXT PK          & Nombre de usuario \\
+\texttt{password\_hash} & TEXT NOT NULL    & Hash de Werkzeug (pbkdf2:sha256)\\
+\texttt{rol}            & TEXT 'user'      & 'admin' o 'user' \\
+\texttt{creado\_en}     & TIMESTAMP        & Fecha de creación \\
+\texttt{ultimo\_acceso} & TIMESTAMP NULL   & Último login exitoso \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{usuarios}}
+\end{table}
+
+\subsubsection{accesos\_usuario}
+
+Controla qué organizaciones puede ver cada usuario no-admin, de momento la relación cardinal es 1:1. PK compuesta con CASCADE. La eliminación en cascada lo que hace es no dejar datos huérfanos, por ejemplo, no pueden haber ubicaciones de una organización que no existe en base de datos, si se borra una organización, se borran todos sus datos asociados de absolutamente todas las tablas, incluida por supuesto la de ubicaciones.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{usuario\_id} & TEXT NOT NULL & FK : \texttt{usuarios} ON DELETE CASCADE \\
+\texttt{org\_id}     & TEXT NOT NULL & FK : \texttt{organizaciones} ON DELETE CASCADE \\
+\multicolumn{3}{l}{PK (\texttt{usuario\_id}, \texttt{org\_id})} \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{accesos\_usuario}}
+\end{table}
+
+\subsection{Tabla de hechos}
+
+\subsubsection{visitas}
+
+El paradigma es una fila por día y zona. Es la fuente principal para el modelo ML y el panel de analítica. La ingesta diaria viene a fecha de hoy desde la API Aitanna (\texttt{sincronizador.py} con \texttt{ThreadPoolExecutor max\_workers=5}). En un futuro este dato \textit{raw}  será ingestado desde la base de datos primaria de IOT, evitando así el almacenamiento duplicado de este dato tan pesado sobre la arquitectura general de la empresa entre los diferentes sistemas.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{fecha}                      & DATE PK     & Día del dato \\
+\texttt{zona\_id}                   & TEXT PK     & FK : \texttt{zonas} \\
+\texttt{ubicacion\_id}              & TEXT NOT NULL & FK : \texttt{ubicaciones} (índice) \\
+\texttt{org\_id}                    & TEXT NOT NULL & FK : \texttt{organizaciones} \\
+\texttt{total\_visitas}             & INTEGER     & Visitas totales del día \\
+\texttt{visitantes\_unicos}         & INTEGER     & Visitantes únicos del día \\
+\texttt{visitantes\_nuevos}         & INTEGER     & Visitantes nuevos (primera visita) \\
+\texttt{unicos\_7d / 28d / mes / anyo}  & DOUBLE  & Visitantes únicos en ventana móvil \\
+\texttt{frecuencia\_7d / 28d / mes / anyo} & DOUBLE & Frecuencia media de visita \\
+\texttt{tiempo\_estancia\_min}      & DOUBLE      & Tiempo medio de permanencia (minutos) \\
+\texttt{histograma\_estancia}       & TEXT        & JSON con distribución de estancias \\
+\texttt{visitas\_horarias}          & TEXT        & JSON con desglose por hora \\
+\texttt{boxplot\_estancia}          & TEXT        & JSON para boxplot de estancia \\
+\texttt{histograma\_frecuencia\_7d/28d/mes/anyo} & TEXT & JSON histogramas de frecuencia \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{visitas}}
+\end{table}
+
+Índice: \texttt{idx\_visitas\_ubicacion\_fecha} en \texttt{(ubicacion\_id, fecha)}.
+
+\subsection{Features externas}
+
+\subsubsection{valores\_señales}
+
+Serie temporal  para almacenar cualquier señal externa. El reto está en formar un esquema único para todas las fuentes externas en cuanto a la ingesta, las hay por peticioners AJAX,   scraping a Excels, vía API como la meteorología o los festivos con \textit{\textbf{holidays}}, que es una librería de Python (el caso ideal). Las features mensuales se expanden a todos los días del mes (rectas horizontales). Días sin fila = sin dato (\texttt{fillna(0.0)} al leer). Nunca se hace \textit{fill}.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{fecha}        & DATE PK   & Día del dato \\
+\texttt{ubicacion\_id} & TEXT PK  & FK : \texttt{ubicaciones} \\
+\texttt{señal\_id}    & TEXT PK   & FK : \texttt{señales} ON DELETE CASCADE \\
+\texttt{valor}        & DOUBLE    & Valor de la señal ese día \\
+\texttt{ingerido\_en} & TIMESTAMP & Momento de ingesta \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{valores\_señales}}
+\end{table}
+
+Índice: \texttt{idx\_valores\_ubicacion\_fecha} en \texttt{(ubicacion\_id, fecha)}.
+
+\subsubsection{snapshots\_geo}
+
+Features geoespaciales de Esri. Una fila por combinación \texttt{(ubicacion\_id, señal\_id)}: sin historial temporal, sin versionado SCD2. La cadencia es mensual y la estrategia de actualización es DELETE + INSERT — cada mes se reemplaza el valor completo de la ubicación con los datos más recientes de Esri. La primera ingesta ya está ejecutada para 6 ubicaciones ES con 50 features cada una.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{ubicacion\_id}   & TEXT PK    & FK : \texttt{ubicaciones} \\
+\texttt{señal\_id}       & TEXT PK    & Clave de feature (ej.\ \texttt{poblacion\_5min}) \\
+\texttt{valor}           & DOUBLE PRECISION & Valor más reciente \\
+\texttt{actualizado\_en} & TIMESTAMP  & Momento de la última ingesta \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{snapshots\_geo}}
+\end{table}
+
+\subsubsection{señales}
+
+Catálogo global de señales. Fuente de verdad para la capa de render (labels, colores, iconos, \texttt{display\_mode}). ON DELETE CASCADE hacia \texttt{valores\_señales}, \texttt{activacion\_señales} y \texttt{evaluaciones\_señales}.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\multicolumn{3}{l}{\textit{Columnas base}} \\
+\texttt{señal\_id}               & TEXT PK             & Clave única (ej.\ \texttt{open\_meteo\_temp\_max}) \\
+\texttt{fuente}                  & TEXT NOT NULL       & Ingestor de origen \\
+\texttt{categoria}               & TEXT                & Agrupación temática \\
+\texttt{aplicabilidad\_org}      & JSONB 'all'       & Lista de \texttt{org\_id}s o \texttt{"all"} \\
+\texttt{aplicabilidad\_ubicacion} & JSONB             & Lista de \texttt{ubicacion\_id}s o null \\
+\texttt{status}                  & TEXT 'incompleto'   & incompleto | con\_cobertura \\
+\texttt{notas}                   & TEXT                & — \\
+\texttt{registrado\_en}          & TIMESTAMP           & — \\
+\midrule
+\multicolumn{3}{l}{\textit{Columnas de display (añadidas vía migración)}} \\
+\texttt{label}         & TEXT & Etiqueta legible en el panel \\
+\texttt{sublabel}      & TEXT & Descripción corta \\
+\texttt{color}         & TEXT & Color hex para la gráfica \\
+\texttt{icono}         & TEXT & Clase CSS del icono \\
+\texttt{fn\_agrupacion} & TEXT & Función de agregación (sum / mean / max) \\
+\texttt{modo\_display} & TEXT & yoy | events\_count | cruceros | calendario | hidden \\
+\texttt{tipo\_canonico} & TEXT & Tipo semántico para el render \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{señales}}
+\end{table}
+
+\subsubsection{activacion\_señales}
+
+Decisión por (\texttt{señal\_id}, \texttt{ubicacion\_id}) de si la señal entra al modelo. El estado \texttt{contexto} permite que la señal sea visible en el panel sin entrar al XGBoost.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{señal\_id}     & TEXT PK            & FK : \texttt{señales} ON DELETE CASCADE \\
+\texttt{ubicacion\_id} & TEXT PK            & FK : \texttt{ubicaciones} \\
+\texttt{status}        & TEXT 'inactive'    & active | contexto | inactive \\
+\texttt{wmape\_delta}  & DOUBLE NULL        & Mejora en WMAPE respecto al baseline (negativo = mejora) \\
+\texttt{evaluado\_en}  & TIMESTAMPTZ        & Momento de la última evaluación \\
+\texttt{periodicidad}  & TEXT NULL          & Frecuencia de actualización de la señal \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{activacion\_señales}}
+\end{table}
+
+\subsubsection{evaluaciones\_señales}
+
+Resultados de evaluación walk-forward por señal y ubicación. Generados por el Agente 4 del pipeline de onboarding o por \texttt{feature\_lab.ipynb}.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{id}               & SERIAL PK    & Identificador autoincremental \\
+\texttt{evaluado\_en}     & TIMESTAMPTZ  & Momento de la evaluación \\
+\texttt{señal\_id}        & TEXT NOT NULL & FK : \texttt{señales} \\
+\texttt{ubicacion\_id}    & TEXT NOT NULL & Ubicación evaluada \\
+\texttt{indice\_split}    & INT          & Índice del fold walk-forward \\
+\texttt{fecha\_eval\_ini} & DATE         & Inicio de la ventana de evaluación \\
+\texttt{fecha\_eval\_fin} & DATE         & Fin de la ventana de evaluación \\
+\texttt{n\_entrenamiento} & INT          & Filas en entrenamiento \\
+\texttt{n\_evaluacion}    & INT          & Filas en evaluación \\
+\texttt{wmape\_baseline}  & DOUBLE       & WMAPE sin la señal \\
+\texttt{wmape\_con\_feat} & DOUBLE       & WMAPE con la señal \\
+\texttt{wmape\_delta}     & DOUBLE       & Diferencia (negativo = mejora) \\
+\texttt{horizonte}        & INT          & Días de horizonte predichos \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{evaluaciones\_señales}}
+\end{table}
+
+\subsection{Calendario y eventos}
+
+\subsubsection{eventos}
+
+Eventos discretos ligados a org o ubicación (festivos, conciertos, escalas de crucero, eventos deportivos). \texttt{clave\_fuente} garantiza deduplicación: un evento con la misma \texttt{clave\_fuente} no se inserta dos veces (\texttt{ON CONFLICT DO NOTHING} en los ingestores).
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{id}           & UUID PK       & \texttt{gen\_random\_uuid()} \\
+\texttt{org\_id}      & TEXT NULL     & FK : \texttt{organizaciones} (evento a nivel org) \\
+\texttt{ubicacion\_id} & TEXT NULL    & FK : \texttt{ubicaciones} (evento local) \\
+\texttt{pais\_codigo} & TEXT          & ISO 2 para festivos nacionales \\
+\texttt{evento\_key}  & TEXT NOT NULL & Tipo de evento (tm\_concierto, festivo\_local, escala\_crucero, \ldots) \\
+\texttt{fecha\_inicio} & DATE NOT NULL & — \\
+\texttt{fecha\_fin}   & DATE NOT NULL & — \\
+\texttt{metadata}     & JSONB \{\}   & Datos adicionales del evento \\
+\texttt{fuente}       & TEXT 'manual' & Ingestor de origen \\
+\texttt{clave\_fuente} & TEXT UNIQUE  & Deduplicación por source key \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{eventos}}
+\end{table}
+
+Índices: \texttt{idx\_eventos\_org\_fecha} en \texttt{(org\_id, fecha\_inicio)}, \texttt{idx\_eventos\_ubicacion\_fecha} en \texttt{(ubicacion\_id, fecha\_inicio)}.
+
+\subsection{Modelos ML}
+
+El registro de modelos ML fue eliminado en la migración a la arquitectura actual.
+Los modelos XGBoost se entrenan \textit{on-demand} por request y no se persisten en base de datos.
+La caché de modelos entrenados está planificada para una versión futura mediante serialización \texttt{.ubj}.
+
+\subsection{Chatbot}
+
+\subsubsection{conversaciones}
+
+Una fila por conversación del chatbot. El campo \texttt{ubicacion\_id} guarda el contexto geográfico con el que el usuario inició la conversación.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{conversacion\_id} & TEXT PK       & Identificador de la conversación \\
+\texttt{usuario\_id}      & TEXT NOT NULL & FK : \texttt{usuarios} \\
+\texttt{titulo}           & TEXT          & 'Nueva conversación' por defecto \\
+\texttt{ubicacion\_id}    & TEXT NULL     & Contexto geográfico de la conversación \\
+\texttt{creado\_en}       & TIMESTAMP     & — \\
+\texttt{actualizado\_en}  & TIMESTAMP     & Actualizado en cada mensaje nuevo \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{conversaciones}}
+\end{table}
+
+Índice: \texttt{idx\_chat\_usuario\_updated} en \texttt{(usuario\_id, actualizado\_en DESC)} para listar conversaciones recientes.
+
+\subsubsection{mensajes}
+
+Un mensaje por fila. El campo \texttt{orden} garantiza la secuencia en cada conversación.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{msg\_id}          & UUID PK       & \texttt{gen\_random\_uuid()} \\
+\texttt{conversacion\_id} & TEXT NOT NULL & FK : \texttt{conversaciones} ON DELETE CASCADE \\
+\texttt{orden}            & INT NOT NULL  & Secuencia del mensaje en la conversación \\
+\texttt{rol}              & TEXT NOT NULL & 'user' o 'assistant' \\
+\texttt{contenido}        & TEXT          & Texto o JSON de tool calls \\
+\texttt{creado\_en}       & TIMESTAMP     & — \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{mensajes}}
+\end{table}
+
+Índice: \texttt{idx\_mensajes\_conversacion} en \texttt{(conversacion\_id, orden)}.
+
+\subsubsection{cache\_chatbot}
+
+Caché de respuestas del chatbot. \texttt{clave\_cache} = SHA-256(pregunta + \texttt{ubicacion\_id}). Incluye contador de aciertos y TTL explícito (\texttt{expira\_en}).
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{clave\_cache}  & TEXT PK       & Hash SHA-256 \\
+\texttt{pregunta}      & TEXT NOT NULL & — \\
+\texttt{ubicacion\_id} & TEXT NULL     & — \\
+\texttt{respuesta}     & TEXT NOT NULL & — \\
+\texttt{creado\_en}    & TIMESTAMP     & — \\
+\texttt{aciertos}      & INTEGER 0     & Incrementado en cada hit de caché \\
+\texttt{expira\_en}    & TIMESTAMP     & TTL de la entrada \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{cache\_chatbot}}
+\end{table}
+
+Índice: \texttt{idx\_cache\_expires} en \texttt{(expira\_en)} para purga eficiente.
+
+\subsection{Registros de display (capa DB-driven)}
+
+Desde la versión v2.2.47, toda decisión de label, color e icono proviene de la base de datos.
+No existe ningún diccionario hardcodeado en Python. La función \texttt{\_load\_feature\_meta(conn, ubicacion\_id)}
+devuelve \texttt{\{señal\_id: \{label, sublabel, color, icono, fn\_agrupacion, modo\_display\}\}}
+para poblar dinámicamente los componentes del panel.
+
+\subsubsection{categorias\_poi}
+
+Metadatos de display para categorías de POIs en el mapa geoespacial.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{categoria}    & TEXT PK        & Identificador (competidor, transporte, ocio, \ldots) \\
+\texttt{label}        & TEXT NOT NULL  & Etiqueta legible \\
+\texttt{icono}        & VARCHAR(64)    & Clase CSS del icono \\
+\texttt{color}        & VARCHAR(16)    & Color hex \\
+\texttt{color\_badge} & VARCHAR(16)    & Color del badge en el mapa \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{categorias\_poi}}
+\end{table}
+
+\subsubsection{tipos\_zona}
+
+Estilos por tipo de zona física en la tienda.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{tipo\_zona} & TEXT PK       & Identificador (entrance, floor, cashier, \ldots) \\
+\texttt{label}      & TEXT NOT NULL & — \\
+\texttt{icono}      & VARCHAR(64)   & Clase CSS del icono \\
+\texttt{color}      & VARCHAR(16)   & Color hex \\
+\texttt{tooltip}    & TEXT          & Texto de ayuda en el panel \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{tipos\_zona}}
+\end{table}
+
+\subsubsection{categorias\_narrativa}
+
+Categorías del acordeón de narrativa ejecutiva (Panel PM).
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{clave} & TEXT PK       & Identificador de categoría \\
+\texttt{label} & TEXT NOT NULL & — \\
+\texttt{icono} & VARCHAR(64)   & Clase CSS del icono \\
+\texttt{orden} & INT 99        & Orden de aparición en el acordeón \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{categorias\_narrativa}}
+\end{table}
+
+\subsubsection{niveles\_alerta}
+
+Niveles de alerta para los mensajes de la narrativa ejecutiva.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{clave}        & TEXT PK    & ok | warning | critical \\
+\texttt{color\_texto} & VARCHAR(16) & Color del texto \\
+\texttt{color\_fondo} & VARCHAR(16) & Color del fondo \\
+\texttt{orden}        & INT 99     & — \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{niveles\_alerta}}
+\end{table}
+
+\subsection{Tablas de configuración por ubicación}
+
+\subsubsection{puntos\_interes}
+
+Puntos de interés geoespaciales vinculados a cada ubicación: competidores, transporte, ocio, etc.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{id}               & SERIAL PK      & — \\
+\texttt{org\_id}          & TEXT NOT NULL  & — \\
+\texttt{ubicacion\_id}    & TEXT NOT NULL  & FK : \texttt{ubicaciones} \\
+\texttt{nombre}           & TEXT NOT NULL  & — \\
+\texttt{lat}              & DOUBLE NOT NULL & WGS-84 \\
+\texttt{lon}              & DOUBLE NOT NULL & WGS-84 \\
+\texttt{categoria}        & TEXT NOT NULL  & competidor | transporte | ocio | \ldots \\
+\texttt{valor\_relativo}  & DOUBLE 0.5     & Relevancia relativa (0–1) \\
+\texttt{detalle}          & TEXT           & — \\
+\texttt{radio\_m}         & INTEGER        & Radio de influencia en metros \\
+\texttt{isocrona\_minutos} & INTEGER       & Tiempo de isócrona (minutos a pie/coche) \\
+\texttt{isocrona\_geojson} & JSONB         & GeoJSON de la isócrona Esri \\
+\texttt{fuente}           & TEXT 'manual'  & Origen del dato \\
+\texttt{activo}           & BOOLEAN TRUE   & — \\
+\texttt{creado\_en}       & TIMESTAMP      & — \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{puntos\_interes}}
+\end{table}
+
+UNIQUE \texttt{(ubicacion\_id, nombre, categoria)}. Índice parcial: \texttt{idx\_puntos\_interes\_ubicacion WHERE activo = TRUE}.
+
+\subsubsection{config\_fuentes}
+
+Configuración por ubicación y fuente externa. Esquema data-driven: añadir una fuente nueva no requiere tocar código Python, solo un INSERT en esta tabla.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{id}           & SERIAL PK     & — \\
+\texttt{ubicacion\_id} & TEXT NOT NULL & FK : \texttt{ubicaciones} \\
+\texttt{fuente}       & TEXT NOT NULL  & Nombre del ingestor (ej.\ 'cruceros', 'esri\_places') \\
+\texttt{params}       & JSONB \{\}    & Parámetros específicos del ingestor \\
+\texttt{activo}       & BOOLEAN TRUE  & FALSE desactiva la fuente para esta ubicación \\
+\texttt{creado\_en}   & TIMESTAMP     & — \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{config\_fuentes}}
+\end{table}
+
+UNIQUE \texttt{(ubicacion\_id, fuente)}. Índice parcial: \texttt{idx\_config\_fuentes\_fuente WHERE activo = TRUE}.
+
+\subsubsection{fuentes}
+
+Catálogo global de fuentes de datos externas. Una fila por ingestor. El campo \texttt{config} contiene la configuración por defecto del pipeline dlt.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{fuente}           & TEXT PK        & Identificador del ingestor \\
+\texttt{periodicidad}     & TEXT           & diaria | mensual | semanal \\
+\texttt{categoria}        & TEXT           & Agrupación (clima, eventos, movilidad, \ldots) \\
+\texttt{descripcion}      & TEXT           & — \\
+\texttt{url\_referencia}  & TEXT           & — \\
+\texttt{cobertura\_desde} & TEXT           & Desde cuándo hay datos históricos disponibles \\
+\texttt{latencia\_dias}   & INTEGER        & Días de latencia típica de la fuente \\
+\texttt{paises}           & JSONB []       & Lista de códigos ISO de países cubiertos \\
+\texttt{esquema\_params}  & TEXT           & Descripción del contrato de params \\
+\texttt{ejemplo\_params}  & JSONB \{\}    & Ejemplo de params para \texttt{config\_fuentes} \\
+\texttt{config}           & JSONB \{\} NOT NULL & Config por defecto para el pipeline dlt \\
+\texttt{activo}           & BOOLEAN TRUE   & — \\
+\texttt{creado\_en}       & TIMESTAMP      & — \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{fuentes}}
+\end{table}
+
+\subsubsection{noticias}
+
+Artículos de noticias locales. PK compuesta \texttt{(article\_id, ubicacion\_id)}. La tabla existe en el DDL pero la ingesta está desactivada en la versión actual; no hay datos activos.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Columna} & \textbf{Tipo / Default} & \textbf{Descripción} \\
+\midrule
+\texttt{article\_id}    & TEXT PK       & ID del artículo en Newsdata.io \\
+\texttt{ubicacion\_id}  & TEXT PK       & FK : \texttt{ubicaciones} \\
+\texttt{titulo}         & TEXT          & — \\
+\texttt{descripcion}    & TEXT          & — \\
+\texttt{url}            & TEXT          & — \\
+\texttt{publicada\_en}  & TIMESTAMP     & pubDate de la API \\
+\texttt{fuente\_id}     & TEXT          & ID de la fuente (Newsdata) \\
+\texttt{fuente\_nombre} & TEXT          & Nombre legible de la fuente \\
+\texttt{categorias}     & TEXT          & JSON array de categorías \\
+\texttt{idioma}         & TEXT          & Código ISO de idioma \\
+\texttt{contenido}      & TEXT          & Cuerpo completo del artículo (hasta 5.000 chars) \\
+\texttt{ingerida\_en}   & TIMESTAMP     & Momento de ingesta local \\
+\bottomrule
+\end{tabular}
+\caption{Tabla \texttt{noticias}}
+\end{table}
+
+Índice: \texttt{idx\_noticias\_ubicacion\_fecha} en \texttt{(ubicacion\_id, publicada\_en DESC)}.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Arquitectura del backend}
+
+\subsection{Punto de entrada — app.py}
+
+El fichero \path{app.py} es el punto de entrada del sistema. Su responsabilidad es relativamente pequeña en cuanto a líneas de código, pero es importante entender bien lo que hace: primero importa todos los módulos de callbacks (el propio acto de importar los registra como listeners reactivos de Dash), luego registra la autenticación Flask y finalmente pone en marcha el servidor.
+
+Lo que más llama la atención a quien lee el fichero por primera vez es esta línea:
+
+\begin{lstlisting}[language=Python]
+app.layout = serve_layout
+\end{lstlisting}
+
+Estamos asignando la función, no el resultado de llamarla. Esto significa que Dash invoca \texttt{serve\_layout()} en cada nueva petición HTTP, no una sola vez al arrancar el proceso. La razón es práctica: los desplegables de organización y ubicación tienen que reflejar el usuario autenticado en ese momento, y eso solo es posible si reconstruimos el layout con la sesión Flask activa. Si lo hiciésemos en startup, todos los usuarios verían los desplegables del primer usuario que se conectó, lo cual sería un bug multi-tenant serio.
+
+El arranque completo del proceso es:
+
+\begin{lstlisting}[language=Python]
+import src.callbacks.admin          # noqa: F401
+import src.callbacks.analytics      # noqa: F401
+import src.callbacks.chat_callbacks # noqa: F401
+# ... resto de callbacks
+import src.core.auth                # noqa: F401
+from src.core.config import app, server
+from src.layout.main_layout import serve_layout
+
+app.layout = serve_layout
+
+if __name__ == "__main__":
+    app.run(debug=True, use_reloader=False, host="0.0.0.0", port=8051)
+\end{lstlisting}
+
+\subsection{Estructura de módulos}
+
+El proyecto está organizado en capas horizontales bien diferenciadas. A continuación describimos brevemente cada carpeta:
+
+\begin{itemize}
+  \item \texttt{src/core/} — Configuración global (\texttt{config.py}: instancia Dash, \texttt{MODO\_DESARROLLO}, constantes de color), autenticación Flask (\texttt{auth.py}), tema visual (\texttt{theme.py}), utilidades compartidas y el módulo \texttt{data\_master.py} que mantiene los mapas en memoria de tiendas y zonas.
+
+  \item \texttt{src/db/} — Todo lo relacionado con la base de datos: \texttt{store.py} (pool de conexiones psycopg v3), \texttt{queries.py} (capa de lectura, funciones auxiliares), \texttt{seed.py} (migración inicial idempotente JSON/CSV $\rightarrow$ PostgreSQL).
+
+  \item \texttt{src/data\_ingestion/} — Ingesta incremental de visitas desde Aitanna (\texttt{sincronizador.py}), actualización del árbol de ubicaciones (\texttt{actualizar\_arbol\_ubicaciones.py}), snapshots geo (\texttt{geo.py}), cliente Esri (\texttt{esri\_client.py}), scripts de ingesta diaria y mensual (\texttt{sync\_diaria.py}, \texttt{sync\_mensual.py}).
+
+  \item \texttt{src/data\_processing/} — Enriquecimiento y transformaciones: unión con datos geo (\texttt{geo\_enrichment.py}), radar de calendario con coloreado de anomalías (\texttt{data\_radar.py}).
+
+  \item \texttt{src/pipeline/} — Orquestador dlt para fuentes externas: \texttt{runner.py} (ejecutor data-driven), \texttt{config.py} (factory de pipeline y destino personalizado), \texttt{resources/} (registro de conectores por tipo\_conector).
+
+  \item \texttt{src/conectores/} — Conectores a APIs externas: meteorología (Open-Meteo), cruceros (Puertos del Estado Excel mensual), POIs y features geoespaciales (Esri/ArcGIS).
+
+  \item \texttt{src/services/} — Único fichero: \texttt{ml\_predictivo.py}. Contiene el modelo XGBoost, el feature engineering, el loop autorregresivo de predicción y el registro de modelos.
+
+  \item \texttt{src/reporting/} — Generación de componentes de reporting: \texttt{health\_check.py} (Panel PM narrativo), \texttt{ml\_dashboard.py} (visualización de predicciones), \texttt{geo\_panel.py} (mapa de contexto geoespacial Esri).
+
+  \item \texttt{src/onboarding/} — Pipeline Prefect de incorporación de nuevas ubicaciones: \texttt{pipeline.py} (orquestador Prefect con los 5 agentes), \texttt{quality\_gate.py}, \texttt{feature\_router.py}, \texttt{context\_scout.py}, \texttt{feature\_eval.py}, \texttt{smoke\_test.py}, \texttt{\_eval\_core.py} (núcleo walk-forward reutilizable).
+
+  \item \texttt{src/chatbot/} — Chatbot integrado con Claude API: cliente (\texttt{client.py}), catálogo de 12 tools (\texttt{tools.py}), caché de respuestas (\texttt{cache.py}), historial de conversaciones, servidor MCP (\texttt{mcp\_server.py}), streaming SSE (\texttt{streaming.py}).
+
+  \item \texttt{src/callbacks/} — Todos los callbacks Dash registrados en \texttt{app.py}: filtros de selección (\texttt{filtros.py}), sincronización (\texttt{sync.py}), analítica maestra (\texttt{analytics.py}), exportaciones (\texttt{exports.py}), chat (\texttt{chat\_callbacks.py}), administración (\texttt{admin.py}), estado del sistema (\texttt{estado\_callbacks.py}), pipeline (\texttt{pipeline\_callbacks.py}), administración de POIs (\texttt{admin\_pois.py}).
+
+  \item \texttt{src/layout/} — Construcción del layout Dash: \texttt{main\_layout.py} (\texttt{serve\_layout()}), barra lateral, tabs por sección (BI, predicción, admin, chatbot, etc.).
+\end{itemize}
+
+\subsection{Módulo de base de datos (src/db/)}
+
+\subsubsection{store.py — capa de conexión}
+
+El módulo \path{src/db/store.py} actúa como capa de abstracción entre el resto del proyecto y la base de datos PostgreSQL. Ya describimos el pool en la sección anterior; aquí complementamos con el resto de las primitivas del módulo.
+
+La función pública principal es \texttt{get\_conn()}, que adquiere una conexión del pool y la devuelve envuelta en \texttt{PgConn}. El parámetro \texttt{read\_only} existe en la firma por compatibilidad pero no modifica el comportamiento: todas las conexiones van al mismo pool con \texttt{autocommit=True}.
+
+\begin{lstlisting}[language=Python]
+def get_conn(read_only: bool = False) -> "PgConn":
+    _apply_ddl()   # primer get_conn() por proceso aplica el DDL
+    raw = _pool().getconn()
+    raw.autocommit = True
+    return PgConn(raw)
+\end{lstlisting}
+
+La primera vez que se llama a \texttt{get\_conn()} en un proceso, se dispara \texttt{\_apply\_ddl()} que aplica el DDL completo de forma idempotente (todas las sentencias usan \texttt{CREATE TABLE IF NOT EXISTS}, \texttt{ADD COLUMN IF NOT EXISTS}, etc.). Esto elimina la necesidad de herramientas de migración externas: al arrancar gunicorn el esquema se auto-actualiza. El flag \texttt{\_DDL\_APPLIED} (protegido con \texttt{\_DDL\_LOCK}) garantiza que el DDL se aplica exactamente una vez por proceso, aunque varios hilos lleguen al mismo tiempo.
+
+La clase \texttt{\_PgResult} envuelve el cursor de psycopg y expone tres métodos: \texttt{fetchone()} para obtener la primera fila, \texttt{fetchall()} para todas, y \texttt{df()} que construye un \texttt{pd.DataFrame} directamente con las columnas del cursor. Esta última es la que más usamos en la práctica: prácticamente cualquier SELECT que vaya a alimentar un gráfico o el modelo ML pasa por \texttt{.df()}.
+
+\subsubsection{queries.py — capa de lectura}
+
+El módulo \path{src/db/queries.py} contiene toda la lógica de lectura del proyecto. No hay SQL disperso por los callbacks ni por el módulo ML: cualquier acceso a datos pasa por aquí. La función más importante es \texttt{get\_df\_enriquecido()}, que es el punto de entrada para el pipeline de ML:
+
+\begin{lstlisting}[language=Python]
+def get_df_enriquecido(ubicacion_id: str,
+                       session_id: Optional[str] = None) -> pd.DataFrame:
+    """
+    Returns an enriched DataFrame for ML training:
+        fecha, location_id, zona_id, total_visits,
+        temp_max, temp_min, llueve, es_festivo
+    Priority: PostgreSQL visitas : session CSV fallback.
+    Weather:  valores_señales cache : OpenMeteo API.
+    Holidays: computed from org's pais_codigo.
+    """
+    conn = get_conn()
+    org = get_org_info(ubicacion_id)
+    pais = org["pais_codigo"]
+    # 1. Raw visit data from visitas
+    # 2. Weather: lee valores_señales; fetch OpenMeteo en miss
+    # 3. Holidays: holidays.Spain(subdiv=codigo_region, years=year)
+    # ...
+\end{lstlisting}
+
+Internamente lo que hace es: primero lee la tabla \texttt{visitas} para esa ubicación; si está vacía, intenta cargar el CSV de sesión como fallback. Después obtiene el clima desde la caché de \texttt{valores\_señales}, y si hay fechas sin datos llama a la API Open-Meteo archive y lo persiste. Finalmente calcula \texttt{es\_festivo} con la librería \texttt{holidays} usando el \texttt{pais\_codigo} y \texttt{codigo\_region} de la organización (soporta ES con subdivisión autonómica y MX).
+
+El resto de funciones de \texttt{queries.py} más utilizadas:
+
+\begin{itemize}
+  \item \texttt{get\_org\_info(ubicacion\_id)} $\rightarrow$ \texttt{\{org\_id, pais\_codigo, config\_calendario\}} — contexto de organización para un request.
+  \item \texttt{get\_location\_coords(ubicacion\_id)} $\rightarrow$ \texttt{(lat, lon)} o \texttt{None} — coordenadas para llamadas a Open-Meteo y Esri.
+  \item \texttt{get\_zones\_for\_loc(ubicacion\_id)} $\rightarrow$ \texttt{list[dict]} — zonas visibles para los desplegables del panel.
+  \item \texttt{get\_active\_ext\_features(ubicacion\_id, fecha\_min, fecha\_max)} $\rightarrow$ \texttt{DataFrame} — señales con \texttt{status='active'} en \texttt{activacion\_señales}, con \texttt{fillna(0.0)} aplicado para no romper el training de XGBoost.
+  \item \texttt{get\_df\_visitas(ubicacion\_ids)} — versión multi-ubicación de la lectura de visitas, usada por el callback maestro.
+  \item \texttt{get\_geo\_vals(ubicacion\_id)} — SELECT plano sobre \texttt{snapshots\_geo}: devuelve un dict con los valores actuales de todas las features Esri para la ubicación. Sin dimensión temporal; siempre el dato más reciente.
+\end{itemize}
+
+\subsubsection{seed.py — migración inicial}
+
+El módulo \path{src/db/seed.py} es el script de migración inicial. Su trabajo es trasvasar toda la información que antes vivía en ficheros JSON y CSV a las tablas de PostgreSQL. Todo el código está diseñado para ser idempotente: se puede ejecutar varias veces sin riesgo, porque todos los INSERTs usan \texttt{ON CONFLICT DO NOTHING} o \texttt{DO UPDATE}.
+
+\begin{lstlisting}[language=Python]
+def seed_ubicaciones() -> dict:
+    conn = get_conn()
+    raw = json.loads((_DATA / "todas_las_ubicaciones.json").read_text("utf-8"))
+
+    orgs, locs, zonas = [], [], []
+    for org in raw:
+        pais = _pais(first_loc)
+        config = json.dumps(_PRESETS.get(pais, _PRESET_ES))
+        orgs.append((org_id, org["name"], pais, config))
+        for loc in org["locations"]:
+            locs.append(...)
+            for z in loc.get("zones", []):
+                zonas.append(...)
+
+    conn.executemany(
+        "INSERT INTO organizaciones VALUES (?,?,?,?) ON CONFLICT DO NOTHING",
+        orgs,
+    )
+    # ... idem para ubicaciones y zonas
+    return {"orgs": len(orgs), "locs": len(locs), "zonas": len(zonas)}
+\end{lstlisting}
+
+El helper \texttt{\_pais(loc)} infiere el código ISO-2 del país desde el campo \texttt{country\_code}, o en su ausencia desde \texttt{country} usando \texttt{\_COUNTRY\_MAP} (España, Mexico, USA y sus variantes), o como último recurso buscando palabras clave en el campo \texttt{address}.
+
+La secuencia completa de ejecución (una vez levantado Docker):
+
+\begin{lstlisting}[language=bash]
+docker compose up -d db
+python -m src.db.seed
+\end{lstlisting}
+
+El \texttt{run\_all()} del módulo ejecuta en orden: ubicaciones, tipos de zona, geo snapshots, registro de señales, flags de activación, CSV de visitas, usuarios y conversaciones del chatbot.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Flujo de datos principal}
+
+\subsection{Flujo de analítica por request}
+
+Cuando el usuario pulsa el botón de analítica (o cambia de ubicación/ventana temporal en el desplegable), lo que ocurre por debajo es una cadena de operaciones que va desde la base de datos hasta los componentes visuales del panel. Veámoslo paso a paso.
+
+Lo primero es obtener los datos de visitas. El callback maestro llama a \texttt{get\_df\_visitas(locs)}, que hace un SELECT directo a la tabla \texttt{visitas} para las ubicaciones seleccionadas. Esto es lo más rápido del flujo: hay un índice en \texttt{(ubicacion\_id, fecha)} que garantiza lecturas rápidas aunque la tabla tenga varios años de histórico.
+
+Para el Panel PM (\texttt{health\_check.py}), lo que hacemos es tomar ese DataFrame crudo y calcular deltas WoW/MoM/YoY, detectar zonas con comportamiento anómalo y generar los mensajes narrativos con semáforo. No necesita el DataFrame enriquecido.
+
+Para el módulo de predicción ML, el flujo es más complejo. Llamamos a \texttt{get\_df\_enriquecido(ubicacion\_id)}, que ejecuta el JOIN en memoria:
+
+\begin{verbatim}
+visitas (PostgreSQL)
+    + clima (valores_señales, fetch Open-Meteo en miss)
+    + es_festivo (holidays.Spain/Mexico por pais_codigo)
+    + features activas (activacion_señales WHERE status='active'
+                        : valores_señales JOIN)
+    : DataFrame enriquecido (en memoria, por request)
+        : ml_predictivo.ejecutar_auditoria_predictiva()
+            + geo features (snapshots_geo, SELECT plano por ubicacion_id)
+            : XGBoost train (70/15/15: train/calibracion/val)
+            : loop autorregresivo N días
+            : WMAPE, MAE, accuracy + bandas conformes
+\end{verbatim}
+
+La clave de este diseño es que todo el enriquecimiento ocurre en memoria Python, no en SQL. Esto nos da flexibilidad para cambiar el pipeline sin tocar el esquema de la base de datos, aunque tiene el coste de que cada request hace más trabajo de CPU en el servidor de aplicación.
+
+\subsection{Callback maestro}
+
+El callback maestro se encuentra en \path{src/callbacks/analytics.py} y se llama \texttt{master\_reactive\_analytics()}. Es el callback más pesado del sistema: cuando cualquiera de sus nueve Inputs cambia, se recalcula todo el contenido del panel. Su firma real es:
+
+\begin{lstlisting}[language=Python]
+@app.callback(
+    [
+        Output("bi-dynamic-content",     "children"),
+        Output("bi-status-visor",        "children"),
+        Output("audit-results",          "children"),
+        Output("panel-ejecutivo-content","children"),
+    ],
+    [
+        Input("drop-locs",            "value"),
+        Input("tipo-fecha",           "value"),
+        Input("date-rango",           "start_date"),
+        Input("date-rango",           "end_date"),
+        Input("date-dia",             "date"),
+        Input("zonas-activas-combined","data"),
+        Input("bi-comparativa",       "value"),
+        Input("pm-ventana",           "value"),
+        Input("data-version",         "data"),
+    ],
+    [State("session-id", "data")],
+    prevent_initial_call=False,
+)
+def master_reactive_analytics(locs, t_f, sd, ed, dia,
+                               zones_bi, comp, pm_ventana,
+                               _data_v, s_id):
+    ...
+\end{lstlisting}
+
+Las cuatro Outputs corresponden a: el área de contenido BI principal, el visor de estado (mensaje de ``sin datos'' o errores), la tabla de auditoría y el panel ejecutivo PM. El modo de comparación (\texttt{bi-comparativa}) acepta \texttt{wow} (semana a semana), \texttt{mom} (mes a mes), \texttt{yoy} (año a año) o \texttt{none}. Vale la pena notar que \texttt{src/models/anomalys.py} se importa en este callback pero está marcado como WIP: si el flujo de ejecución llega a la rama que llama a \texttt{generar\_panel\_bi\_completo()}, obtendremos un \texttt{RuntimeError} (ver bugs conocidos, sección~\ref{sec:bugs}).
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Pipeline de ingesta}
+
+\subsection{Ingesta nocturna — sync\_noche.py}
+
+La ingesta nocturna es el proceso más crítico del sistema. Lo dispara un timer systemd (\texttt{agentic-sync-noche}) todos los días a las 10:45 UTC. Lo que hace se puede resumir en tres fases secuenciales:
+
+\textbf{Fase 0 — Actualización del árbol:} se hace una llamada a la API Aitanna (\texttt{GET /api/v1/get-all-locations-and-zones}) y se comparan los UUIDs recibidos con los que ya tenemos en \texttt{ubicaciones}. Si aparecen UUIDs nuevos, se hace un upsert en la DB y se lanza el flow de onboarding de Prefect para cada uno de ellos. Si no hay novedades, se pasa directamente a la Fase A.
+
+\textbf{Fase A — Visitas:} el \texttt{sincronizador.py} descarga los datos de visitas de Aitanna de forma incremental. Para cada ubicación calcula cuántos días faltan desde la última fecha en \texttt{visitas} hasta hoy, y descarga solo esos días. La descarga es paralela: usamos un \texttt{ThreadPoolExecutor} con 5 workers, lo que nos permite descargar varios días de una misma tienda en paralelo sin bloquear las otras:
+
+\begin{lstlisting}[language=Python]
+with ThreadPoolExecutor(max_workers=5) as executor:
+    futuros = [executor.submit(peticion_dia, loc_id, f)
+               for f in fechas_a_descargar]
+    for futuro in as_completed(futuros):
+        fecha_str, datos, status = futuro.result()
+        if status != "OK" or not datos:
+            continue
+        for zona in datos:
+            filas_buffer.append(...)
+
+if filas_buffer:
+    _upsert_visitas(filas_buffer)
+\end{lstlisting}
+
+El upsert usa \texttt{ON CONFLICT (fecha, zona\_id) DO UPDATE} para que si un día ya estaba en la DB se sobreescriba con el dato más reciente (la API puede actualizar datos de días anteriores con un pequeño retraso).
+
+\textbf{Fase B — Features diarias:} el runner del pipeline dlt ejecuta los conectores con \texttt{periodicidad='diaria'} y \texttt{activo=TRUE} en la tabla \texttt{fuentes}. En la versión actual solo está activo el conector de meteorología Open-Meteo (\texttt{temp\_max}, \texttt{temp\_min}, \texttt{llueve}). Los cruceros se gestionan en la fase mensual (ver sección siguiente).
+
+\subsection{Ingesta mensual — sync\_mensual.py}
+
+La ingesta mensual la dispara el timer \texttt{agentic-sync-mensual} el día 1 de cada mes a las 03:00 UTC. Su diseño es completamente data-driven: el runner (\path{src/pipeline/runner.py}) lee la tabla \texttt{fuentes} para descubrir qué fuentes están activas con \texttt{periodicidad='mensual'}, y para cada una construye la lista de ubicaciones con sus parámetros incrustados desde \texttt{config\_fuentes}:
+
+\begin{lstlisting}[language=Python]
+def run(periodicidad: str | None = None, ...) -> dict[str, int]:
+    fuentes = _read_fuentes(periodicidad)  # SELECT fuente, config FROM fuentes
+    all_locations = get_active_locations(location_uuid)
+    configured = _configured_sources()     # fuentes con params en config_fuentes
+
+    for fuente, cfg in fuentes:
+        tipo = cfg.get("tipo_conector")
+        source_fn = get_source_fn(tipo)
+        ubicaciones = _build_ubicaciones(fuente, all_locations, configured)
+        stale = [u for u in ubicaciones
+                 if not is_fresh(u["ubicacion_id"], fuente, max_age_hours)]
+        pipeline = make_pipeline(fuente)
+        pipeline.run(source_fn(stale, cfg, d_from, d_to))
+\end{lstlisting}
+
+El único ingestor mensual activo actualmente es \textbf{Puertos del Estado} (\texttt{n\_pasajeros\_crucero\_oficial}), que descarga el Excel oficial de escalas portuarias y distribuye el total mensual de pasajeros uniformemente entre los días del mes para Miniso Málaga Muelle 1.
+
+\subsection{Parámetros por fuente — location\_source\_config}
+
+Una de las decisiones de diseño más importantes del pipeline es que los parámetros específicos de cada fuente para cada ubicación se almacenan en la tabla \texttt{config\_fuentes.params} (JSONB), no en el código. Esto significa que para activar una nueva fuente de datos en una tienda concreta basta con hacer un INSERT en la base de datos: los ingestores ya existen, simplemente leen su configuración de ahí.
+
+Ejemplos concretos de cómo se usan los params por fuente:
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{llp{6cm}}
+\toprule
+\textbf{Fuente} & \textbf{Clave en params} & \textbf{Ejemplo} \\
+\midrule
+\texttt{cruceros}      & \texttt{ajax\_url}       & URL del endpoint WP-AJAX del puerto \\
+\texttt{puertos\_estado} & \texttt{port\_authority} & \texttt{"Malaga"} (nombre en el Excel oficial) \\
+\texttt{esri\_places}  & \texttt{radio\_m}        & \texttt{1200} (radio de búsqueda de POIs en metros) \\
+\bottomrule
+\end{tabular}
+\caption{Ejemplos de parámetros por fuente en \texttt{config\_fuentes}}
+\end{table}
+
+La función \texttt{\_build\_ubicaciones(fuente, all\_locations, configured)} del runner comprueba si la fuente tiene entradas en \texttt{config\_fuentes}: si las tiene, construye la lista con solo esas ubicaciones y sus params incrustados; si no, aplica la fuente a todas las ubicaciones activas con params vacíos. De esta forma, fuentes genéricas como \texttt{weather} se aplican globalmente y fuentes específicas como \texttt{cruceros} solo donde tiene sentido.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Pipeline de features externas}
+
+\subsection{Ciclo de vida de una feature}
+
+Una feature externa recorre un ciclo de vida bien definido antes de entrar al modelo de predicción. Lo que buscamos con este ciclo es que nunca entre una señal al modelo que no hayamos validado, y que siempre podamos revocar esa validación si los datos empeoran.
+
+\begin{verbatim}
+Fuente externa
+    ↓
+valores_señales (ingesta via dlt : SeñalesDestino)
+    ↓
+señales.status: incompleto : con_cobertura
+    (cuando la cobertura histórica es suficiente para evaluar)
+    ↓
+Evaluación WMAPE walk-forward
+    (feature_lab.ipynb / Agente 4 del pipeline de onboarding)
+    ↓
+activacion_señales.status:
+    inactive  : la señal fue evaluada pero no mejora el modelo
+    contexto  : visible en el panel, no entra al XGBoost
+    active    : entra al vector de training
+    ↓
+queries.get_active_ext_features(ubicacion_id, fecha_min, fecha_max)
+    : DataFrame con fillna(0.0) : vector de features XGBoost
+\end{verbatim}
+
+\subsection{Estados en feature\_flags}
+
+La tabla \texttt{activacion\_señales} tiene exactamente tres estados posibles. Entenderlos bien es importante porque dictan el comportamiento de varias partes del sistema:
+
+\textbf{active}: la señal entra al vector de features del modelo XGBoost. \texttt{get\_active\_ext\_features()} la incluye. El training la incorpora automáticamente. Es el estado al que aspira cualquier nueva señal si supera la evaluación walk-forward con una mejora de al menos 0,5 puntos porcentuales de WMAPE.
+
+\textbf{contexto}: la señal es visible en el panel bajo la sección ``Señal del contexto exterior'', pero no entra al modelo de predicción. El código de render usa \texttt{IN ('active', 'contexto')} para decidir qué mostrar, mientras que \texttt{get\_active\_ext\_features()} filtra estrictamente por \texttt{'active'}. Actualmente no hay señales en estado \texttt{contexto} en producción.
+
+\textbf{inactive}: la señal fue evaluada y no mejoró el modelo lo suficiente. Permanece registrada para poder ser reevaluada en el futuro si hay más datos o si cambia la metodología de evaluación.
+
+\subsection{Estado del registro de features (julio 2026)}
+
+El estado actual del registro de señales en producción (julio 2026):
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{lllp{5cm}}
+\toprule
+\textbf{Fuente} & \textbf{N.º señales} & \textbf{Status} & \textbf{Notas} \\
+\midrule
+\texttt{open\_meteo}  & 3 & \texttt{con\_cobertura / active} & \texttt{temp\_max}, \texttt{temp\_min}, \texttt{llueve}; todas las ubicaciones activas \\
+\texttt{cruceros}     & 2 & \texttt{con\_cobertura / active} & \texttt{n\_pasajeros\_crucero\_dia} (scraping diario) y \texttt{n\_pasajeros\_crucero\_oficial} (Puertos del Estado, mensual); solo Málaga Muelle 1 \\
+\texttt{esri}         & 50 & \texttt{con\_cobertura / inactive} & Geo-enriquecimiento en \texttt{snapshots\_geo}; datos estáticos, no aportan varianza temporal al XGBoost — se usan en el panel geo pero no en el vector de training \\
+\bottomrule
+\end{tabular}
+\caption{Estado del registro de features externas (julio 2026)}
+\end{table}
+
+El vector de features de producción activo es: features base de lags/rolling + 3 clima (Open-Meteo) + 2 cruceros (solo Málaga). Los snapshots Esri se usan exclusivamente en el panel geoespacial.
+
+\subsection{Capa de render DB-driven}
+
+Desde la versión v2.2.47, no existe ningún diccionario de labels, colores o iconos hardcodeado en código Python. Toda la decisión de cómo renderizar una señal en el panel proviene de la base de datos, específicamente de las columnas de display añadidas a la tabla \texttt{señales}: \texttt{label}, \texttt{sublabel}, \texttt{color}, \texttt{icono}, \texttt{fn\_agrupacion} y \texttt{modo\_display}.
+
+La función central de esta capa es \texttt{\_load\_feature\_meta(conn, ubicacion\_id)}, que devuelve un diccionario con forma \texttt{\{señal\_id: \{label, sublabel, color, icono, fn\_agrupacion, modo\_display\}\}} para todas las señales activas o en contexto de esa ubicación. Con ese diccionario, el componente de render sabe exactamente qué mostrar sin preguntar al código.
+
+El campo \texttt{modo\_display} es el que más impacto tiene en el comportamiento visual:
+
+\begin{itemize}
+  \item \texttt{cruceros} — tabla de escalas de crucero con fecha y número de pasajeros (Málaga Muelle 1).
+  \item \texttt{calendario} — grid de calendario coloreado; usado por las señales de clima (\texttt{llueve}, \texttt{temp\_max}, \texttt{temp\_min}).
+  \item \texttt{hidden} — la señal existe en DB pero no se renderiza en el panel.
+\end{itemize}
+
+El contrato de escalabilidad de esta arquitectura es simple: añadir una nueva señal al panel no requiere tocar código Python. Basta con hacer un INSERT en \texttt{señales} con los valores de display correctos y un INSERT en \texttt{activacion\_señales} para las ubicaciones donde aplica. El sistema la recoge automáticamente en el siguiente request.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Onboarding de nuevas ubicaciones}
+
+\subsection{Flujo de detección y arranque}
+
+El onboarding de nuevas ubicaciones se activa automáticamente. Durante la Fase 0 de \texttt{sync\_noche}, el script \texttt{actualizar\_arbol\_ubicaciones.py} descarga el árbol completo de Aitanna y compara los UUIDs recibidos con los que ya están en \texttt{ubicaciones}. Si detecta alguno nuevo, hace el upsert en la DB y llama a:
+
+\begin{lstlisting}[language=Python]
+from src.onboarding.pipeline import onboard_nuevas_ubicaciones
+onboard_nuevas_ubicaciones(nuevos_uuids)
+\end{lstlisting}
+
+Esto lanza el flow de Prefect, visible en la UI de Prefect (\texttt{http://127.0.0.1:4200}) como el flow \texttt{onboarding-lote}. Cada UUID de la lista genera su propio subflow \texttt{onboarding-ubicacion} visible como fila separada en la UI, lo que permite depurar problemas por ubicación de forma individual.
+
+\subsection{Subflow por ubicación}
+
+El flow \texttt{onboarding-ubicacion} ejecuta cinco agentes en secuencia. Si el Agente 1 falla, el flujo se detiene y la ubicación queda bloqueada con las issues reportadas en los logs de Prefect.
+
+\begin{lstlisting}[language=Python]
+@flow(name="onboarding-ubicacion")
+def onboarding_ubicacion(location_uuid: str) -> bool:
+    result   = quality_gate_task(location_uuid)   # Agente 1
+    if not result.ok:
+        return False
+    routing  = feature_router_task(location_uuid) # Agente 2
+    dias     = activar_clima_task(location_uuid, routing)
+    scout    = context_scout_task(location_uuid)  # Agente 3
+    eval_r   = feature_eval_task(location_uuid)   # Agente 4
+    smoke    = smoke_test_task(location_uuid)      # Agente 5
+    return smoke.ok
+\end{lstlisting}
+
+Los cinco agentes hacen lo siguiente:
+
+\begin{enumerate}
+  \item \textbf{Quality Gate} (\texttt{quality-gate}): valida que la ubicación tenga coordenadas válidas, y si no las tiene intenta geocodificarla. Calcula el bounding box de la isócrona y marca advertencias si hay datos faltantes (nombre, ciudad, etc.).
+
+  \item \textbf{Feature Router} (\texttt{feature-router}): decide qué fuentes de datos aplican a esta ubicación según su país, ciudad y configuración de org. Por ejemplo, \texttt{cruceros} solo aplica a ciudades con puerto relevante; \texttt{puertos\_estado} solo a ubicaciones con \texttt{port\_authority} configurado en \texttt{config\_fuentes}.
+
+  \item \textbf{Context Scout} (\texttt{context-scout}): utiliza Claude API para evaluar un catálogo curado de fuentes abiertas contra el contexto geográfico de la ubicación. Las señales se clasifican en una escala de directitud A$\rightarrow$D (A=personas reales contadas, B=actividad observable, C=índice sectorial, D=macro). El agente no añade señales de tipo D si ya hay señales de tipo A o B disponibles. Solo registra fuentes que el sistema tiene ingestor implementado y activo.
+
+  \item \textbf{Feature Evaluator} (\texttt{feature-evaluator}): ejecuta una evaluación walk-forward sobre las señales con cobertura histórica suficiente. El umbral de activación es $-0{,}5$ puntos porcentuales de WMAPE. Las señales que superan el umbral se auto-activan (pasan de \texttt{contexto} a \texttt{active} en \texttt{activacion\_señales}).
+
+  \item \textbf{Smoke Test} (\texttt{smoke-test}): cuatro checks de sanidad: (1) la ubicación está marcada como activa en DB, (2) tiene filas en \texttt{visitas}, (3) tiene cobertura de al menos una señal, (4) tiene zonas definidas.
+\end{enumerate}
+
+\subsection{Archivos del módulo}
+
+El módulo \texttt{src/onboarding/} contiene los siguientes ficheros:
+
+\begin{itemize}
+  \item \texttt{pipeline.py} — Orquestador Prefect. Define los \texttt{@task} y los \texttt{@flow}, incluyendo \texttt{onboard\_nuevas\_ubicaciones} (flow de entrada) y \texttt{onboarding\_ubicacion} (subflow por ubicación).
+  \item \texttt{quality\_gate.py} — Agente 1. Valida y geocodifica la ubicación. Devuelve \texttt{QualityResult}.
+  \item \texttt{feature\_router.py} — Agente 2. Decide las fuentes aplicables. Devuelve \texttt{RoutingResult}.
+  \item \texttt{context\_scout.py} — Agente 3. Integra Claude API para el catálogo de señales. Funciones \texttt{descubrir\_fuentes()} y \texttt{registrar\_fuentes()}.
+  \item \texttt{feature\_eval.py} — Agente 4. Evaluación walk-forward WMAPE. Devuelve \texttt{FeatureEvalResult}.
+  \item \texttt{smoke\_test.py} — Agente 5. Cuatro checks de sanidad. Devuelve \texttt{SmokeTestResult}.
+  \item \texttt{\_eval\_core.py} — Núcleo del walk-forward desacoplado del pipeline Prefect. Se puede importar directamente desde producción o desde \texttt{feature\_lab.ipynb} para reevaluar señales manualmente.
+  \item \texttt{scripts/serve\_flows.py} — Sirve los flows como deployments de Prefect. Lo gestiona el servicio systemd \texttt{prefect-flows.service}.
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Módulo de predicción ML}
+
+\subsection{Arquitectura del modelo}
+
+El módulo \path{src/services/ml\_predictivo.py} contiene todo el ciclo de vida del modelo predictivo. Entrenamos un XGBoost por zona y por request: no hay un modelo global ni por organización, sino uno específico para cada combinación (ubicación, zona) que se calcula en el momento en que el usuario pide la predicción.
+
+La función de entrada pública es:
+
+\begin{lstlisting}[language=Python]
+def ejecutar_auditoria_predictiva(
+    df_master,       # DataFrame enriquecido (salida de get_df_enriquecido)
+    location_uuid,   # UUID de la tienda
+    zone_uuid,       # UUID de la zona específica
+    falso_hoy,       # fecha de corte (str YYYY-MM-DD o date)
+    horizonte_dias   # N días a predecir hacia adelante
+):
+    ...
+\end{lstlisting}
+
+El split temporal en la versión actual usa tres particiones: 70\% training puro, 15\% calibración conformal y 15\% validación para early stopping. Los hiperparámetros del modelo son \texttt{n\_estimators=250}, \texttt{learning\_rate=0.05}, \texttt{max\_depth=4} y \texttt{early\_stopping\_rounds=20}. Las métricas devueltas son WMAPE (error porcentual ponderado por volumen), MAE (error absoluto medio) y accuracy como \texttt{(1 - wmape) * 100}. Además, desde la última versión se calculan bandas conformes con cobertura nominal del 90\% usando el cuantil empírico sobre el conjunto de calibración.
+
+\subsection{Feature engineering}
+
+El feature engineering se aplica sobre el DataFrame de training antes del split. Lo que hacemos es construir un vector de features que capture la estacionalidad, las tendencias recientes y el contexto externo:
+
+\begin{lstlisting}[language=Python]
+# Lags y medias móviles
+train["lag_1d"]   = train["total_visits"].shift(1)
+train["lag_7d"]   = train["total_visits"].shift(7)
+train["lag_14d"]  = train["total_visits"].shift(14)
+train["media_7d"] = train["total_visits"].rolling(7).mean()
+train["media_14d"]= train["total_visits"].rolling(14).mean()
+train["std_7d"]   = train["total_visits"].rolling(7).std().fillna(0)
+
+# Flags de calendario
+train["es_finde"]       = train["fecha"].dt.dayofweek.isin([5,6]).astype(int)
+train["dia_semana"]     = train["fecha"].dt.dayofweek
+train["quincena"]       = (train["dia_mes"] > 15).astype(int)
+train["vispera_festivo"]= train["fecha"].apply(
+    lambda d: 1 if (d + timedelta(days=1)) in festivos else 0)
+
+# Interacciones clima
+train["mucho_calor"]  = (train["temp_max"] >= 32.0).astype(int)
+train["mucho_frio"]   = (train["temp_min"] <= 8.0).astype(int)
+train["clima_ideal"]  = ((train["temp_max"].between(18.0, 26.0))
+                         & (train["llueve"] == 0)).astype(int)
+train["finde_lluvioso"]= train["es_finde"] * train["llueve"]
+\end{lstlisting}
+
+Para Miniso Málaga se añaden las 2 features de cruceros (\texttt{n\_pasajeros\_crucero\_dia}, \texttt{n\_pasajeros\_crucero\_oficial}) cuando están disponibles. Las filas con NaN en los lags se descartan antes del training con \texttt{dropna()}.
+
+\subsection{Caché de modelos}
+
+El sistema tiene un mecanismo de caché de modelos implementado aunque incipiente. Cuando el request corresponde a una fecha cercana a hoy (\texttt{es\_produccion = abs(days) <= 2}), el código intenta cargar el modelo serializado para esa combinación de ubicación y zona desde el directorio \texttt{src/models/registry/}:
+
+\begin{lstlisting}[language=Python]
+model_path  = f"{location_uuid}_{zone_uuid}.ubj"
+meta_path   = f"{location_uuid}_{zone_uuid}.meta.json"
+# Invalidacion: features distintas o modelo > 7 dias
+if meta.get("features") != features:
+    return None, {}, None
+age_days = (datetime.now() - datetime.fromisoformat(
+    meta["trained_at"])).days
+if age_days > 7:
+    return None, {}, None
+\end{lstlisting}
+
+Si hay un modelo cacheado válido, se carga con \texttt{xgb.XGBRegressor().load\_model()} y se salta el entrenamiento. Si no lo hay, se entrena y se guarda con \texttt{model.save\_model()} en formato \texttt{.ubj} junto a un \texttt{.meta.json} con la lista de features y las métricas. La invalidación es automática cuando cambia el set de features activas o cuando el modelo tiene más de 7 días.
+
+Lo que no tenemos todavía es un registro central ni un proceso programado de reentrenamiento: si el modelo caduca a las 03:00 de la madrugada, el primer usuario que pida una predicción ese día paga el coste del entrenamiento. Para el volumen actual esto es aceptable, pero en cuanto añadamos más tenants o más señales geo habrá que plantear un proceso de reentrenamiento en batch.
+
+\subsection{Integración geo (Esri)}
+
+La integración geoespacial con Esri se articula alrededor de \texttt{GEO\_FEATURE\_COLS}, la lista de 50 features definida en \path{src/data\_processing/geo\_enrichment.py}. Incluye desde población en ring buffers peatonales (400/800/1200m) hasta pirámide de edad quinquenal, renta del hogar, gasto del consumidor, tasa de desempleo y penetración del canal online, más cinco scores de POI calculados localmente.
+
+La arquitectura es plana: un único valor por \texttt{(ubicacion\_id, señal\_id)} en \texttt{snapshots\_geo}, sin dimensión temporal. La pregunta que motivó el diseño anterior con snapshots SCD2 era «¿qué valor tenía esta feature en enero de 2024?», y la respuesta honesta es que la población de un radio de 800m no cambia lo suficiente mes a mes como para que valga la pena conservar esa granularidad. Lo que sí cambia es si la ingesta ha sido ejecutada o no. Por eso el modelo simplemente coge el valor más reciente disponible y, si no hay ninguno, degrada sin errores entrenando como si esa feature no existiera.
+
+La incorporación de datos Esri al DataFrame de training es un JOIN simple por ubicación: \texttt{get\_geo\_vals(ubicacion\_id)} en \path{src/data\_processing/geo\_enrichment.py} hace un SELECT plano a \texttt{snapshots\_geo} y devuelve un dict con los 50 valores actuales. Si la tabla está vacía para esa ubicación, el dict viene vacío y el modelo entrena exactamente igual que antes de la integración.
+
+La ingesta mensual de un lote Esri se hace con:
+
+\begin{lstlisting}[language=Python]
+from src.data_ingestion.geo import ingestar_snapshot_esri
+
+ingestar_snapshot_esri(ubicacion_id, valores)
+\end{lstlisting}
+
+Internamente, la función llama a \texttt{calcular\_scores\_poi(ubicacion\_id)} para los 5 scores locales de POI, mezcla el resultado con los 46 valores de GeoEnrichment recibidos, y llama a \texttt{ingestar\_snapshot(ubicacion\_id, todos)} que ejecuta un DELETE seguido de INSERT para reemplazar atómicamente todos los valores de esa ubicación. No hay backdating, no hay append-only, no hay lógica de cierre de periodos. La cadencia prevista es mensual.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Conectores externos}
+
+\subsection{Aitanna API}
+
+Aitanna es la plataforma de conteo de personas que genera los datos primarios del sistema. Hay dos endpoints que usamos: \texttt{GET /api/v1/get-all-locations-and-zones} para descargar el árbol completo de organizaciones, ubicaciones y zonas (lo llama \texttt{actualizar\_arbol\_ubicaciones.py} en la Fase 0 de sync\_noche), y \texttt{GET /api/v1/internal/get-anonymous-report/location/\{uuid\}/date/\{fecha\}} para los datos de visitas diarios por zona.
+
+La autenticación es una API key en cabecera \texttt{x-api-key}. Todas las llamadas a la API pasan el filtro de \texttt{ALLOWED\_ORG\_IDS} (un \texttt{frozenset} en \texttt{\_common.py}) que garantiza que aunque la API devuelva datos de otras organizaciones, solo procesamos las que están explícitamente autorizadas. La descarga paralela con \texttt{ThreadPoolExecutor(max\_workers=5)} la describimos en la sección de ingesta nocturna.
+
+\subsection{Open-Meteo}
+
+Open-Meteo es la fuente de datos meteorológicos, y tiene la ventaja de ser gratuita y sin autenticación. Usamos dos endpoints: \texttt{archive-api.open-meteo.com/v1/archive} para datos históricos confirmados y \texttt{api.open-meteo.com/v1/forecast} para los próximos 16 días (con \texttt{past\_days=7} para cubrir el hueco entre el histórico y hoy). Las tres variables que ingerimos son \texttt{temp\_max}, \texttt{temp\_min} y una bandera binaria \texttt{llueve} (1 si precipitación $>$ 0mm, 0 si no). Los datos se persisten en \texttt{valores\_señales} con \texttt{ON CONFLICT DO NOTHING} para el histórico y \texttt{DO UPDATE} para el forecast (que puede actualizar datos de días recientes con mejores modelos).
+
+\subsection{Puertos del Estado}
+
+Los datos de cruceros son un ejemplo perfecto del valor que tiene el sistema de señales: el día que escala un crucero de 3.000 pasajeros en Málaga, el tráfico peatonal en el Muelle Uno sube de forma notable y sin esta señal el modelo simplemente lo etiqueta como anomalía inexplicable. La fuente es el registro de escalas publicado por puertos específicos (en nuestro caso puertomalaga.com via WP-AJAX). La ingesta es mensual. La feature se llama \texttt{n\_pasajeros\_crucero\_dia} y persiste en \texttt{valores\_señales}. El parámetro que configura qué puerto consultar es \texttt{port\_authority} en \texttt{config\_fuentes.params}, actualmente con valor \texttt{"malaga"} para Miniso Muelle Uno.
+
+\subsection{Esri (ArcGIS Location Platform)}
+
+Esri es el proveedor de inteligencia geoespacial. A través de su ArcGIS Location Platform, obtenemos datos de GeoEnrichment: demografía, renta del hogar, gasto del consumidor, empleo y penetración del canal online dentro de los radios de catchment de cada tienda. El cliente está en \path{src/data\_ingestion/esri\_client.py} con la función \texttt{fetch\_geoenrich(ubicacion\_id, lat, lon)}: si no hay \texttt{ESRI\_KEY} configurada en el entorno, el cliente devuelve datos mock para que el desarrollo local funcione sin credenciales.
+
+La función hace dos llamadas al API de GeoEnrichment. La primera usa un ring buffer con radios 400/800/1200m y la variable \texttt{KeyFacts.TOTPOP\_CY} para extraer la población en cada anillo peatonal (\texttt{poblacion\_5min}, \texttt{poblacion\_10min}, \texttt{poblacion\_15min}). La segunda usa un círculo de 800m con un paquete de aproximadamente 42 variables AIS del catálogo estándar de Esri: pirámide de edad quinquenal, renta media del hogar, gasto del consumidor por categoría, tasa de desempleo y cuota del canal online. El resultado de ambas llamadas se fusiona en un único dict que se pasa a \texttt{ingestar\_snapshot\_esri()}.
+
+La nota operativa más importante es que el endpoint \texttt{NetworkServiceArea} (isócronas reales por la red viaria) devuelve errores internos de forma intermitente; la alternativa estable es el ring buffer geométrico con radios 400/800/1200m, que es lo que usamos en producción. La primera ingesta se ha ejecutado para 6 ubicaciones ES con 50 features cada una.
+
+\subsection{Claude API (Anthropic)}
+
+El chatbot integrado en el panel usa la Claude API de Anthropic para responder preguntas sobre los datos de la tienda seleccionada. La clave de autenticación es \texttt{ANTHROPIC\_API\_KEY}. El chatbot tiene acceso a 12 tools definidas en \texttt{src/chatbot/tools.py}: funciones que consultan la base de datos y devuelven los datos en formato JSON que Claude puede interpretar (\texttt{get\_pm\_data}, \texttt{get\_forecast}, \texttt{get\_gis\_data}, \texttt{get\_weather\_holidays}, \texttt{get\_cruise\_calls}, \texttt{get\_dwell\_profile}, etc.).
+
+Las respuestas se entregan en streaming via Server-Sent Events (SSE) desde \texttt{src/chatbot/streaming.py}, lo que permite que el usuario vea el texto aparecer token a token sin tener que esperar a que la respuesta esté completa. El módulo también incluye un servidor MCP (\texttt{src/chatbot/mcp\_server.py}) para uso con herramientas compatibles con el protocolo MCP de Anthropic. El historial de conversaciones se persiste en las tablas \texttt{conversaciones} y \texttt{mensajes}, y las respuestas frecuentes se cachean en \texttt{cache\_chatbot} usando un hash SHA-256 de la pregunta más el \texttt{ubicacion\_id} como clave.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Seguridad y autenticación}
+
+\subsection{Autenticación de usuarios}
+
+La autenticación está implementada en \path{src/core/auth.py} como sesiones cookie gestionadas por Flask. El flujo de login es sencillo: el usuario envía \texttt{POST /login} con usuario y contraseña, el sistema busca el hash Werkzeug (\texttt{pbkdf2:sha256}) en la tabla \texttt{usuarios} de PostgreSQL, y si coincide establece la sesión Flask con \texttt{flask.session["user"]}, \texttt{flask.session["role"]} y \texttt{flask.session["org\_access"]}.
+
+\begin{lstlisting}[language=Python]
+@server.before_request
+def require_login():
+    if MODO_DESARROLLO:
+        return
+    if any(flask.request.path.startswith(p) for p in _ALLOWED_PATHS):
+        return
+    if not flask.session.get("user"):
+        return flask.redirect("/login")
+\end{lstlisting}
+
+El hook \texttt{before\_request} intercepta todas las peticiones excepto las rutas de login, logout y assets estáticos. En \texttt{MODO\_DESARROLLO=true} el hook no hace nada y el usuario se identifica como \texttt{local\_dev} con rol \texttt{admin}.
+
+El sistema tiene un fallback a \texttt{users.json} para el período de transición mientras se migran los usuarios a PostgreSQL. Si el usuario no existe en la tabla \texttt{usuarios}, el sistema busca en el fichero JSON. Esto permite arrancar en una instalación nueva sin haber ejecutado \texttt{seed.py}. Hay dos roles: \texttt{admin} (acceso total, incluidas las tabs ML y administración) y \texttt{user} (panel de cliente sin capacidades de configuración).
+
+\subsection{Control de acceso multi-tenant}
+
+El control de acceso multi-tenant funciona en dos niveles. A nivel de panel, la función \texttt{get\_current\_org\_access()} (ya mostrada en la sección 1.2) devuelve la lista de \texttt{org\_id} accesibles para el usuario autenticado. Esa lista viene de \texttt{flask.session["org\_access"]}, que se populó en el login desde \texttt{accesos\_usuario}. Los dropdowns de organización y ubicación en \texttt{serve\_layout()} se filtran con esa lista, así que un usuario de cliente solo ve sus propias tiendas.
+
+A nivel de ingestores, hay una segunda barrera: \texttt{ALLOWED\_ORG\_IDS} en \texttt{src/data\_ingestion/\_common.py} es un \texttt{frozenset} de los UUIDs de organizaciones que el sistema procesa. Aunque la API de Aitanna devuelva datos de más organizaciones, el ingestor los descarta si el \texttt{org\_id} no está en ese set. Esto es una medida de seguridad adicional que garantiza que no procesamos accidentalmente datos de tenants que no están en nuestro contrato.
+
+\subsection{Gestión de secretos}
+
+Toda la configuración sensible (claves de API, credenciales de base de datos, clave de firma de sesiones) vive en el fichero \texttt{.env} en la raíz del proyecto, cargado mediante \texttt{python-dotenv}. El fichero \textbf{nunca debe versionarse}: está en \texttt{.gitignore} y no debe eliminarse de ahí en ningún caso. La tabla de variables de entorno reconocidas por el sistema está en la sección 2.3 de este documento. En producción, la variable \texttt{SECRET\_KEY} debe tener un valor aleatorio robusto — el default \texttt{dev-only-change-in-prod} es solo para desarrollo local.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Despliegue y operaciones}
+
+\subsection{Flujo de despliegue}
+
+El proceso de despliegue es manual y deliberado. Cuando hay una versión lista para producción, lo que hacemos es crear un tag semver en git localmente, hacer push, y ejecutar el script de despliegue en el servidor vía SSH:
+
+\begin{lstlisting}[language=bash]
+# Local: etiquetar y publicar
+git tag v2.2.50
+git push origin v2.2.50
+
+# Servidor: desplegar la versión
+ssh usuario@34.175.22.17 "~/deploy.sh v2.2.50"
+\end{lstlisting}
+
+El script \texttt{deploy.sh} ejecuta en orden: detiene el servicio \texttt{agentic-workflow.service}, hace \texttt{git fetch} y \texttt{git checkout v2.2.50}, reinstala las dependencias con \texttt{pip install -r requirements.txt} solo si \texttt{requirements.txt} cambió, y arranca el servicio de nuevo. El DDL se aplica automáticamente en el primer \texttt{get\_conn()} del proceso arrancado (como describimos en la sección del módulo de base de datos).
+
+\subsection{Servicios systemd}
+
+El servidor de producción ejecuta cuatro servicios systemd:
+
+\begin{itemize}
+  \item \textbf{\texttt{agentic-workflow.service}} — El proceso principal de la aplicación. Arranca gunicorn con 1 worker, bound a \texttt{127.0.0.1:8000}, timeout de 300 segundos (necesario para las predicciones ML en picos de carga). Nginx actúa como proxy inverso en los puertos 80/443.
+
+  \item \textbf{\texttt{agentic-sync-noche.timer}} — Timer diario a las 10:45 UTC que dispara la ingesta nocturna (Fase 0 + Fase A + Fase B descritas en la sección 6.1).
+
+  \item \textbf{\texttt{agentic-sync-mensual.timer}} — Timer el día 1 de cada mes a las 03:00 UTC para la ingesta de fuentes mensuales (cruceros, metro, etc.).
+
+  \item \textbf{\texttt{prefect-flows.service}} — Proceso que sirve los flows de Prefect como deployments (via \texttt{scripts/serve\_flows.py}). La UI de Prefect es accesible localmente en \texttt{http://127.0.0.1:4200} para monitorizar los flows de onboarding.
+\end{itemize}
+
+\subsection{Docker Compose — PostgreSQL}
+
+PostgreSQL 16 y el servidor de Prefect se levantan con Docker Compose. Usamos el puerto 5433 en lugar del 5432 estándar para evitar conflictos con una instalación de PostgreSQL en el sistema host si la hubiera. Los datos se persisten en un volumen Docker nombrado \texttt{postgres\_data} que sobrevive a los reinicios del contenedor.
+
+\begin{lstlisting}[language=bash]
+# Levantar la base de datos y Prefect server
+docker compose up -d
+
+# Verificar que PostgreSQL está listo
+docker compose ps
+
+# Aplicar seed inicial (primera vez)
+python -m src.db.seed
+\end{lstlisting}
+
+El \texttt{docker-compose.yml} define dos servicios: \texttt{db} (\texttt{postgres:16-alpine}, puerto 5433) y \texttt{prefect-server} (\texttt{prefecthq/prefect:3-latest}, puerto 4200). Ambos están configurados para reiniciarse automáticamente (\texttt{restart: unless-stopped}).
+
+\subsection{Endpoint PDF headless}
+
+El endpoint \texttt{/api/html-to-pdf} en \path{src/core/pdf\_endpoint.py} permite exportar cualquier vista del panel como PDF. Lo que hace es lanzar una instancia de Chromium en modo headless vía Playwright, cargar la URL del panel con la sesión activa y capturar el PDF del renderizado. En el primer arranque en un servidor nuevo hay que descargar el binario de Chromium:
+
+\begin{lstlisting}[language=bash]
+playwright install chromium  # ~150 MB, solo la primera vez
+\end{lstlisting}
+
+El endpoint acepta \texttt{POST} con la URL a renderizar y devuelve el PDF en el cuerpo de la respuesta con \texttt{Content-Type: application/pdf}.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Bugs conocidos y limitaciones}
+\label{sec:bugs}
+
+Los siguientes bugs están documentados y pendientes de resolución. Ninguno bloquea el funcionamiento normal del sistema, pero vale la pena tenerlos presentes al tocar las áreas afectadas:
+
+\begin{enumerate}
+  \item \textbf{\texttt{src/models/anomalys.py} (WIP importado en producción).} El módulo \texttt{generar\_panel\_bi\_completo()} se importa desde \texttt{src/callbacks/analytics.py} pero está incompleto. Si el flujo de ejecución del callback maestro llega a la rama que lo llama, se produce un \texttt{RuntimeError}. La rama no se alcanza en el uso normal, pero hay que tenerlo en cuenta antes de refactorizar el callback.
+
+  \item \textbf{\texttt{src/data\_processing/constructor\_master.py}: clave de latitud incorrecta.} El código lee \texttt{loc.get('latitude', ...)} pero el campo en \texttt{ubicaciones} se llama \texttt{lat}. Es un bug pre-existente que no afecta al flujo principal (que usa \texttt{queries.get\_location\_coords()} correctamente). Corregir al tocar ese archivo.
+
+  \item \textbf{Esri \texttt{NetworkServiceArea}: error interno intermitente.} El endpoint de isócronas reales por la red viaria de Esri devuelve \texttt{"Internal error"} de forma no determinista. La solución es usar siempre \texttt{RingBuffer} con radios 400/800/1200m, que es geométricamente menos preciso pero 100\% estable.
+
+  \item \textbf{Variable AIS \texttt{TOTOCCME} (empleados por hogar): valores anómalos.} Los valores devueltos por Esri GeoEnrichment para esta variable muestran distribuciones sospechosas (ej. 19/19/42/1 personas por hogar). No usar esta variable en el modelo hasta verificar la documentación AIS de Esri y confirmar la unidad de medida.
+
+  \item \textbf{Tenerife CC Nivaria: sin coordenadas en \texttt{ubicaciones}.} Esta tienda no tiene \texttt{lat/lon} registrados. Está excluida de todos los procesos de prefetch que requieren coordenadas (Open-Meteo, Esri, POIs). Pendiente de geocodificación via \texttt{actualizar\_arbol\_ubicaciones.py}.
+
+  \item \textbf{\texttt{src/data\_processing/fuentes\_eventos/}: duplicidad con \texttt{prefetch/}.} Este directorio duplica funcionalidad que ya existe en \texttt{src/data\_ingestion/prefetch/}. La fuente canónica son los scripts de \texttt{prefetch/}; los de \texttt{fuentes\_eventos/} son legado de la arquitectura anterior y deberían eliminarse en la próxima refactorización.
+\end{enumerate}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Referencia rápida — interfaces clave}
+
+Esta sección recoge los snippets de uso más frecuentes para quien necesite integrar o depurar partes del sistema desde una sesión de Python o un notebook.
+
+\textbf{Conexión directa a la base de datos:}
+\begin{lstlisting}[language=Python]
+from src.db.store import get_conn
+
+conn = get_conn()
+df = conn.execute(
+    "SELECT fecha, total_visitas FROM visitas WHERE ubicacion_id = ?",
+    ["<uuid>"]
+).df()
+\end{lstlisting}
+
+\textbf{DataFrame enriquecido listo para ML:}
+\begin{lstlisting}[language=Python]
+from src.db.queries import get_df_enriquecido
+
+df = get_df_enriquecido("<ubicacion_uuid>")
+# Columnas: fecha, location_id, zona_id, total_visits,
+#           temp_max, temp_min, llueve, es_festivo
+\end{lstlisting}
+
+\textbf{Predicción para una zona:}
+\begin{lstlisting}[language=Python]
+from src.db.queries import get_df_enriquecido
+from src.services.ml_predictivo import ejecutar_auditoria_predictiva
+
+df = get_df_enriquecido("<ubicacion_uuid>")
+resultado = ejecutar_auditoria_predictiva(
+    df_master=df,
+    location_uuid="<ubicacion_uuid>",
+    zone_uuid="<zona_uuid>",
+    falso_hoy="2026-07-14",
+    horizonte_dias=14
+)
+# resultado["status"], resultado["metricas"], resultado["grafica"]
+\end{lstlisting}
+
+\textbf{Zonas de una ubicación:}
+\begin{lstlisting}[language=Python]
+from src.db.queries import get_zones_for_loc
+
+zonas = get_zones_for_loc("<ubicacion_uuid>")
+# [{zona_id, nombre, tipo_zona, oculta, parent_zona_id}, ...]
+\end{lstlisting}
+
+\textbf{Ubicaciones activas con coordenadas:}
+\begin{lstlisting}[language=Python]
+from src.data_ingestion._common import get_active_locations
+
+locs = get_active_locations()
+# [{ubicacion_id, nombre, lat, lon, ciudad, pais_codigo, org_id}, ...]
+\end{lstlisting}
+
+\textbf{Ingestar un snapshot Esri para una ubicación:}
+\begin{lstlisting}[language=Python]
+from src.data_ingestion.geo import ingestar_snapshot_esri
+
+# valores: los ~46 campos de GeoEnrichment; los 5 scores POI
+# los calcula internamente la funcion.
+ingestar_snapshot_esri(
+    ubicacion_id="<uuid>",
+    valores={
+        "poblacion_5min": 12000,
+        "poblacion_10min": 35000,
+        "poblacion_15min": 58000,
+        # ... resto de variables AIS
+    }
+)
+\end{lstlisting}
+
+\textbf{Señales activas para una ubicación (para el panel):}
+\begin{lstlisting}[language=Python]
+from src.db.queries import get_señales_propias_meta
+
+meta = get_señales_propias_meta("<ubicacion_uuid>")
+# {señal_id: {label, color, sublabel, icono, funcion_agregacion}}
+\end{lstlisting}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\end{document}

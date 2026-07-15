@@ -9,7 +9,6 @@ import pandas as pd
 import xgboost as xgb
 from sklearn.metrics import mean_absolute_error
 
-from src.data_processing.supercalendario import CALENDARIO_FEATURE_COLS, get_calendario_features
 from src.db.queries import get_active_ext_features, get_org_info
 
 _HOL_CACHE: dict = {}
@@ -136,7 +135,6 @@ def _loop_prediccion(
         media_14d = np.mean(visits_array[-14:]) if len(visits_array) >= 14 else 0
         std_7d = np.std(visits_array[-7:]) if len(visits_array) >= 7 else 0
 
-        cal_feats = get_calendario_features(current_date, org_config=org_config)
         pred_ts = pd.Timestamp(current_date)
         ext_feats: dict = {}
         for col in ext_cols_safe:
@@ -169,7 +167,6 @@ def _loop_prediccion(
                     "mucho_calor": 1 if t_max >= 32.0 else 0,
                     "mucho_frio": 1 if t_min <= 8.0 else 0,
                     "clima_ideal": 1 if (18.0 <= t_max <= 26.0 and llueve == 0) else 0,
-                    **cal_feats,
                     **ext_feats,
                 }
             ]
@@ -259,14 +256,6 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
         train["std_7d"] = train["total_visits"].rolling(7).std().fillna(0)
         train = train.dropna().reset_index(drop=True)
 
-        # Join supercalendario
-        cal_rows = pd.DataFrame(
-            [get_calendario_features(fecha, org_config=org_config) for fecha in train["fecha"]],
-            index=train.index,
-        )
-        for col in CALENDARIO_FEATURE_COLS:
-            train[col] = cal_rows[col].values
-
         # Features externas activas
         ext_df = get_active_ext_features(
             location_uuid,
@@ -310,7 +299,7 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
             "mucho_calor",
             "mucho_frio",
             "clima_ideal",
-        ] + CALENDARIO_FEATURE_COLS
+        ]
 
         _reserved = set(_BASE_FEATURES)
         ext_cols_safe = [c for c in ext_cols if c not in _reserved]

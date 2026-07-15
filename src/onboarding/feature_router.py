@@ -7,10 +7,6 @@ activas y el motivo de cada decisión para que quede trazable en los logs.
 
 Fuentes gestionadas:
     weather        Open-Meteo (clima histórico + forecast)
-    open_holidays  Festivos públicos por país
-    ticketmaster   Eventos TM (conciertos, festivales)
-    agenda_es      Agenda cultural ES
-    thesportsdb    Eventos deportivos internacionales
     cruceros       Puerto de Málaga — solo Málaga
     esri           ArcGIS GeoEnrichment — requiere ESRI_KEY + coordenadas
 """
@@ -19,12 +15,6 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-
-# Países con cobertura en OpenHolidays API
-_PAISES_FESTIVOS = {"ES", "MX", "US", "FR", "DE", "GB", "IT", "PT", "BE", "NL", "AT", "CH"}
-
-# Países con cobertura útil en Ticketmaster
-_PAISES_TICKETMASTER = {"ES", "MX", "US", "FR", "DE", "GB"}
 
 
 @dataclass
@@ -57,7 +47,6 @@ def enrutar(location_uuid: str) -> RoutingResult:
         )
 
     nombre, ciudad, pais_codigo, lat, lon = row
-    pais = (pais_codigo or "").upper()
     tiene_coords = bool(lat and lon)
 
     fuentes: list[str] = []
@@ -68,27 +57,6 @@ def enrutar(location_uuid: str) -> RoutingResult:
         fuentes.append("weather")
     else:
         excluidas["weather"] = "sin coordenadas"
-
-    # ── Festivos ──────────────────────────────────────────────────────────────
-    if pais in _PAISES_FESTIVOS:
-        fuentes.append("open_holidays")
-    else:
-        excluidas["open_holidays"] = f"pais_codigo '{pais}' sin cobertura en OpenHolidays"
-
-    # ── Ticketmaster ──────────────────────────────────────────────────────────
-    if pais in _PAISES_TICKETMASTER:
-        fuentes.append("ticketmaster")
-    else:
-        excluidas["ticketmaster"] = f"pais_codigo '{pais}' sin cobertura TM"
-
-    # ── Agenda cultural ES ────────────────────────────────────────────────────
-    if pais == "ES":
-        fuentes.append("agenda_es")
-    else:
-        excluidas["agenda_es"] = f"solo ES (pais_codigo='{pais}')"
-
-    # ── Deportes ──────────────────────────────────────────────────────────────
-    fuentes.append("thesportsdb")
 
     # ── Cruceros ──────────────────────────────────────────────────────────────
     # Activamos cruceros si la ubicación tiene una fila activa en

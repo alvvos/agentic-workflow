@@ -200,7 +200,7 @@ def get_gis_data(location_uuid: str, fecha: str | None = None) -> dict:
 
         vals = get_geo_vals(location_uuid, fecha)
     except Exception as e:
-        return {"error": f"No se pudo cargar geo_features.json: {e}"}
+        return {"error": f"No se pudieron cargar los datos geoespaciales: {e}"}
 
     activos = {k: v for k, v in vals.items() if v is not None}
     if not activos:
@@ -905,100 +905,6 @@ def get_external_features(
     }
 
 
-# ── Herramienta 11: get_calendar_events ──────────────────────────────────────
-
-
-def get_calendar_events(
-    location_uuid: str,
-    fecha_inicio: str,
-    fecha_fin: str,
-    evento_key: str | None = None,
-) -> dict:
-    """
-    Devuelve los eventos del calendario externo de una ubicación en un rango
-    de fechas: conciertos, festivales, partidos, cruceros, festivos, vacaciones,
-    estrenos, manifestaciones, etc. Incluye título, impacto y tipo de evento.
-    """
-    try:
-        t0, t1 = pd.Timestamp(fecha_inicio), pd.Timestamp(fecha_fin)
-    except Exception:
-        return {"error": "Formato de fecha no válido. Usa YYYY-MM-DD."}
-
-    try:
-        from src.db.store import get_conn
-
-        conn = get_conn()
-        query = """SELECT evento_key, fecha_inicio, fecha_fin, metadata
-                   FROM eventos
-                   WHERE ubicacion_id = ? AND fecha_fin >= ? AND fecha_inicio <= ?"""
-        params: list = [location_uuid, str(t0.date()), str(t1.date())]
-        if evento_key:
-            query += " AND evento_key = ?"
-            params.append(evento_key)
-        query += " ORDER BY fecha_inicio"
-        rows = conn.execute(query, params).fetchall()
-    except Exception as e:
-        return {"error": f"Error al consultar el calendario: {e}"}
-
-    _META_KEYS = (
-        "titulo",
-        "nombre",
-        "barco",
-        "artista",
-        "venue",
-        "venue_nombre",
-        "aforo",
-        "n_pasajeros",
-        "pasajeros",
-        "operador",
-        "naviera",
-        "terminal",
-        "rsvp_count",
-        "going",
-        "url",
-        "impacto",
-    )
-
-    eventos = []
-    for key, fi, ff, meta_raw in rows:
-        meta = (
-            meta_raw if isinstance(meta_raw, dict) else (json.loads(meta_raw) if meta_raw else {})
-        )
-        titulo = (
-            meta.get("titulo")
-            or meta.get("nombre")
-            or meta.get("barco")
-            or key.replace("_", " ").title()
-        )
-        entry: dict = {
-            "evento_key": key,
-            "titulo": titulo,
-            "fecha_inicio": str(fi),
-            "fecha_fin": str(ff),
-        }
-        # Exponer toda la metadata relevante directamente
-        for k in _META_KEYS:
-            if k in meta and meta[k] is not None and k not in ("titulo", "nombre"):
-                entry[k] = meta[k]
-        eventos.append(entry)
-
-    por_tipo: dict = {}
-    for ev in eventos:
-        por_tipo.setdefault(ev["evento_key"], 0)
-        por_tipo[ev["evento_key"]] += 1
-
-    loc = _find_location(location_uuid)
-    nombre = loc.get("name", location_uuid) if loc else location_uuid
-
-    return {
-        "ubicacion": nombre,
-        "periodo": {"inicio": fecha_inicio, "fin": fecha_fin},
-        "n_eventos": len(eventos),
-        "por_tipo": por_tipo,
-        "eventos": eventos,
-    }
-
-
 # ── Herramienta 12: get_cruise_calls ─────────────────────────────────────────
 
 
@@ -1207,94 +1113,6 @@ def get_model_metrics(
         "modelo_mas_reciente": modelos[0] if modelos else None,
         "todos_modelos": modelos,
         "evaluacion_features": feat_evals,
-    }
-
-
-# ── Herramienta 14: get_ev_ranks ─────────────────────────────────────────────
-
-
-def get_ev_ranks(
-    location_uuid: str,
-    fecha_inicio: str,
-    fecha_fin: str,
-) -> dict:
-    """
-    Devuelve los scores diarios de presión de eventos externos (ev_rank_*)
-    para una ubicación y rango de fechas.
-
-    Los ev_ranks son señales 0-100 que cuantifican el impacto potencial de
-    eventos sobre el tráfico de visitantes:
-      - ev_rank_concierto:  presión por conciertos en el área
-      - ev_rank_festival:   presión por festivales
-      - ev_rank_deportivo:  presión por eventos deportivos
-      - ev_rank_municipal:  presión por eventos municipales / culturales
-      - ev_rank_total:      máximo de los anteriores (señal combinada)
-
-    Útil para entender qué días tuvieron mayor contexto de eventos y
-    correlacionar con anomalías de tráfico.
-    """
-    try:
-        t0, t1 = pd.Timestamp(fecha_inicio), pd.Timestamp(fecha_fin)
-    except Exception:
-        return {"error": "Formato de fecha no válido. Usa YYYY-MM-DD."}
-    if t1 < t0:
-        return {"error": "fecha_inicio debe ser anterior a fecha_fin."}
-    if (t1 - t0).days > MAX_DAYS_EXT:
-        return {"error": f"Rango máximo: {MAX_DAYS_EXT} días."}
-
-    _EV_KEYS = [
-        "ev_rank_concierto",
-        "ev_rank_festival",
-        "ev_rank_deportivo",
-        "ev_rank_municipal",
-        "ev_rank_total",
-    ]
-
-    try:
-        from src.db.store import get_conn
-
-        conn = get_conn()
-        placeholders = ",".join(["?"] * len(_EV_KEYS))
-        rows = conn.execute(
-            f"""SELECT señal_id, fecha::text, valor
-                FROM valores_señales
-                WHERE ubicacion_id = ? AND señal_id IN ({placeholders})
-                  AND fecha >= ? AND fecha <= ? AND valor IS NOT NULL
-                ORDER BY fecha, señal_id""",
-            [location_uuid] + _EV_KEYS + [str(t0.date()), str(t1.date())],
-        ).fetchall()
-    except Exception as e:
-        return {"error": f"Error al consultar ev_ranks: {e}"}
-
-    # Agrupar por fecha
-    by_date: dict[str, dict] = {}
-    for fk, fecha, val in rows:
-        by_date.setdefault(fecha, {})[fk] = round(float(val), 1)
-
-    # Días con señal > 0
-    dias_con_senal = [
-        {"fecha": f, **scores}
-        for f, scores in sorted(by_date.items())
-        if any(v > 0 for v in scores.values())
-    ]
-
-    # Pico por tipología
-    picos: dict = {}
-    for fk in _EV_KEYS:
-        vals = [(f, s[fk]) for f, s in by_date.items() if fk in s and s[fk] > 0]
-        if vals:
-            best = max(vals, key=lambda x: x[1])
-            picos[fk] = {"fecha": best[0], "score": best[1]}
-
-    loc = _find_location(location_uuid)
-    nombre = loc.get("name", location_uuid) if loc else location_uuid
-
-    return {
-        "ubicacion": nombre,
-        "periodo": {"inicio": fecha_inicio, "fin": fecha_fin},
-        "n_dias_con_senal": len(dias_con_senal),
-        "pico_por_tipo": picos,
-        "dias": dias_con_senal,
     }
 
 

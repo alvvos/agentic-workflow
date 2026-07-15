@@ -20,9 +20,7 @@ from src.chatbot.tools import (
     compare_locations,
     get_active_features,
     get_anomalies,
-    get_calendar_events,
     get_cruise_calls,
-    get_ev_ranks,
     get_external_features,
     get_forecast,
     get_gis_data,
@@ -238,28 +236,6 @@ _TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "get_calendar_events",
-        "description": (
-            "Devuelve los eventos del calendario externo de una ubicación en un rango de fechas: "
-            "conciertos, festivales, partidos deportivos, escalas de cruceros, festivos regionales, "
-            "vacaciones escolares, estrenos, manifestaciones, etc. "
-            "Incluye título del evento, tipo, impacto y fechas de inicio y fin."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "location_uuid": {"type": "string", "description": "UUID de la ubicación."},
-                "fecha_inicio": {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
-                "fecha_fin": {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
-                "evento_key": {
-                    "type": "string",
-                    "description": "Filtrar por tipo de evento (opcional, ej: 'concierto_wizink').",
-                },
-            },
-            "required": ["location_uuid", "fecha_inicio", "fecha_fin"],
-        },
-    },
-    {
         "name": "get_cruise_calls",
         "description": (
             "Devuelve las escalas individuales de cruceros en una ubicación portuaria: "
@@ -301,27 +277,6 @@ _TOOL_DEFINITIONS = [
             "required": ["location_uuid"],
         },
     },
-    {
-        "name": "get_ev_ranks",
-        "description": (
-            "Devuelve los scores diarios de presión de eventos externos (ev_rank_*) "
-            "para una ubicación y rango de fechas. "
-            "Los scores van de 0 a 100 e indican el impacto potencial sobre el tráfico: "
-            "ev_rank_concierto, ev_rank_festival, ev_rank_deportivo, ev_rank_municipal "
-            "y ev_rank_total (máximo combinado). "
-            "Úsala para entender qué días tuvieron mayor actividad de eventos y "
-            "correlacionar picos o caídas de tráfico con el contexto externo."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "location_uuid": {"type": "string", "description": "UUID de la ubicación."},
-                "fecha_inicio": {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
-                "fecha_fin": {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
-            },
-            "required": ["location_uuid", "fecha_inicio", "fecha_fin"],
-        },
-    },
 ]
 
 _TOOL_FN = {
@@ -335,10 +290,8 @@ _TOOL_FN = {
     "get_location_info": lambda args: get_location_info(**args),
     "get_active_features": lambda args: get_active_features(**args),
     "get_external_features": lambda args: get_external_features(**args),
-    "get_calendar_events": lambda args: get_calendar_events(**args),
     "get_cruise_calls": lambda args: get_cruise_calls(**args),
     "get_model_metrics": lambda args: get_model_metrics(**args),
-    "get_ev_ranks": lambda args: get_ev_ranks(**args),
 }
 
 
@@ -352,8 +305,8 @@ def _system_prompt(
         f"Hoy es {today}. "
         "Eres el asistente analítico del panel de Project Management (PM Dashboard). "
         "Tienes acceso a datos reales de tráfico de visitantes, datos geoespaciales, "
-        "clima, festivos, features externas (turistas, cruceros, metro), calendario de eventos, "
-        "escalas de cruceros, métricas del modelo predictivo e información de ubicaciones. "
+        "clima, escalas de cruceros, features externas (cruceros, Esri), "
+        "métricas del modelo predictivo e información de ubicaciones. "
         "Responde siempre en español, de forma concisa y orientada a decisiones de negocio. "
         "Si necesitas datos para responder, usa las herramientas disponibles. "
         "No inventes cifras; si no tienes datos, dilo claramente. "

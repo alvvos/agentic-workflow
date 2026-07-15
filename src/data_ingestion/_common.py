@@ -22,30 +22,13 @@ from src.db.store import get_conn
 ALLOWED_ORG_IDS: frozenset[str] = frozenset(
     {
         "5c13b57d-782d-4458-911b-64cd40eebb55",  # Miniso España
-        "5345a134-3495-4884-a780-c9b37a50df20",  # Kiosko MX
     }
 )
 
 # ── Ventanas de tiempo ────────────────────────────────────────────────────────
 
-EVENTS_DATE_FROM = date(2024, 1, 1)
-EVENTS_HORIZON = 90  # dias adelante para eventos
 WEATHER_ARCHIVE_LAG = 7  # dias de retraso del archivo Open-Meteo
 WEATHER_FORECAST = 16  # dias de pronostico (limite free tier)
-
-# ── Feature columns ───────────────────────────────────────────────────────────
-# Definidas aqui para que eventos_client.py las importe sin dependencia circular.
-
-EVENTOS_FEATURE_COLS: list[str] = [
-    "ev_vacaciones_escolares",
-    "ev_festivo_regional",
-    "ev_rank_deportivo",
-    "ev_rank_concierto",
-    "ev_rank_festival",
-    "ev_rank_municipal",
-    "ev_rank_total",
-]
-
 
 # ── Locations ─────────────────────────────────────────────────────────────────
 
@@ -139,92 +122,6 @@ def write_sync_marker(location_uuid: str, source_name: str) -> None:
 
 
 # ── DB writes ─────────────────────────────────────────────────────────────────
-
-
-def write_ev_features(location_uuid: str, daily: dict[date, dict]) -> None:
-    """Upsert scores diarios de eventos en valores_señales."""
-    rows = []
-    for d, scores in daily.items():
-        for key, value in scores.items():
-            if key in EVENTOS_FEATURE_COLS:
-                rows.append((str(d), location_uuid, key, float(value)))
-    if not rows:
-        return
-    try:
-        get_conn().executemany(
-            "INSERT INTO valores_señales (fecha, ubicacion_id, señal_id, valor) "
-            "VALUES (?,?,?,?) ON CONFLICT (fecha, ubicacion_id, señal_id) "
-            "DO UPDATE SET valor = GREATEST(valores_señales.valor, excluded.valor), ingerido_en = NOW()",
-            rows,
-        )
-    except Exception:
-        pass
-
-
-def write_calendario_org(location_uuid: str, events: list[dict], pais_codigo: str) -> None:
-    """Upsert eventos crudos en eventos."""
-    rows = [
-        (
-            None,
-            location_uuid,
-            pais_codigo,
-            ev["evento_key"],
-            str(ev["fecha_inicio"]),
-            str(ev.get("fecha_fin", ev["fecha_inicio"])),
-            json.dumps(ev.get("metadata", {}), ensure_ascii=False),
-            ev.get("fuente", "desconocido"),
-            ev.get("source_key"),
-        )
-        for ev in events
-        if ev.get("source_key")
-    ]
-    if not rows:
-        return
-    try:
-        get_conn().executemany(
-            """INSERT INTO eventos
-               (org_id, ubicacion_id, pais_codigo, evento_key,
-                fecha_inicio, fecha_fin, metadata, fuente, clave_fuente)
-               VALUES (?,?,?,?,?,?,?,?,?)
-               ON CONFLICT (clave_fuente) DO NOTHING""",
-            rows,
-        )
-    except Exception:
-        pass
-
-
-def update_ev_rank_total(location_uuid: str, date_from: date, date_to: date) -> None:
-    """
-    Recalcula ev_rank_total = max(deportivo, concierto, festival, municipal) por dia.
-    Debe llamarse despues de que todos los sources de eventos hayan escrito sus datos.
-    """
-    try:
-        get_conn().execute(
-            """
-            INSERT INTO valores_señales (fecha, ubicacion_id, señal_id, valor)
-            SELECT
-                fecha,
-                ?,
-                'ev_rank_total',
-                LEAST(100, GREATEST(
-                    COALESCE(MAX(CASE WHEN señal_id = 'ev_rank_deportivo'  THEN valor END), 0),
-                    COALESCE(MAX(CASE WHEN señal_id = 'ev_rank_concierto'  THEN valor END), 0),
-                    COALESCE(MAX(CASE WHEN señal_id = 'ev_rank_festival'   THEN valor END), 0),
-                    COALESCE(MAX(CASE WHEN señal_id = 'ev_rank_municipal'  THEN valor END), 0),
-                ))
-            FROM   valores_señales
-            WHERE  ubicacion_id = ?
-              AND  señal_id IN ('ev_rank_deportivo','ev_rank_concierto','ev_rank_festival','ev_rank_municipal')
-              AND  fecha BETWEEN ? AND ?
-            GROUP  BY fecha
-            ON CONFLICT (fecha, ubicacion_id, señal_id)
-            DO UPDATE SET valor = excluded.valor, ingerido_en = NOW()
-            """,
-            [location_uuid, location_uuid, str(date_from), str(date_to)],
-        )
-    except Exception:
-        pass
-
 
 # ── Mensual helpers ───────────────────────────────────────────────────────────
 

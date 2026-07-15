@@ -27,9 +27,7 @@ from src.chatbot.tools import (  # noqa: E402
     compare_locations,
     get_active_features,
     get_anomalies,
-    get_calendar_events,
     get_cruise_calls,
-    get_ev_ranks,
     get_external_features,
     get_forecast,
     get_gis_data,
@@ -54,10 +52,8 @@ _TOOL_LABELS = {
     "get_location_info": "Consultando datos de la ubicación…",
     "get_active_features": "Consultando features externas activas…",
     "get_external_features": "Consultando series externas…",
-    "get_calendar_events": "Consultando calendario de eventos…",
     "get_cruise_calls": "Consultando escalas de cruceros…",
     "get_model_metrics": "Consultando métricas del modelo…",
-    "get_ev_ranks": "Consultando scores de eventos…",
 }
 
 _TOOL_FN = {
@@ -71,10 +67,8 @@ _TOOL_FN = {
     "get_location_info": lambda args: get_location_info(**args),
     "get_active_features": lambda args: get_active_features(**args),
     "get_external_features": lambda args: get_external_features(**args),
-    "get_calendar_events": lambda args: get_calendar_events(**args),
     "get_cruise_calls": lambda args: get_cruise_calls(**args),
     "get_model_metrics": lambda args: get_model_metrics(**args),
-    "get_ev_ranks": lambda args: get_ev_ranks(**args),
 }
 
 
@@ -106,10 +100,8 @@ _TOOLS_UUID_PARAM = {
     "get_location_info",
     "get_active_features",
     "get_external_features",
-    "get_calendar_events",
     "get_cruise_calls",
     "get_model_metrics",
-    "get_ev_ranks",
 }
 _TOOLS_ID_PARAM = {"get_pm_data", "get_weather_holidays"}
 _TOOLS_SESSION = {

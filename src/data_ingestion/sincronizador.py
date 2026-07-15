@@ -148,6 +148,7 @@ def actualizar_datos(
 
         filas_buffer = []
         errores_api: list[str] = []
+        zone_enum_map: dict[str, int] = {}  # zone_uuid → zone enum from API
         org_uuid = org_map.get(loc_id, "")
 
         with ThreadPoolExecutor(max_workers=5) as executor:
@@ -159,6 +160,10 @@ def actualizar_datos(
                         errores_api.append(f"{fecha_str}:{status}")
                     continue
                 for zona in datos:
+                    z_uuid = zona.get("zoneUUID", "")
+                    z_enum = zona.get("zone")
+                    if z_uuid and z_enum is not None:
+                        zone_enum_map[z_uuid] = int(z_enum)
                     hours_data = zona.get("visitorsHour", [])
                     hourly_array = (
                         [
@@ -205,6 +210,16 @@ def actualizar_datos(
                 len(errores_api),
                 ", ".join(errores_api[:10]) + ("..." if len(errores_api) > 10 else ""),
             )
+
+        if zone_enum_map:
+            from src.db.store import get_conn as _gc
+
+            _conn = _gc()
+            for z_uuid, z_enum in zone_enum_map.items():
+                _conn.execute(
+                    "UPDATE zonas SET zone_enum = %s WHERE zona_id = %s AND (zone_enum IS NULL OR zone_enum != %s)",
+                    [z_enum, z_uuid, z_enum],
+                )
 
         if filas_buffer:
             _upsert_visitas(filas_buffer)

@@ -2,7 +2,6 @@
 Conector para fuentes de datos mensuales distribuidas en Excel.
 
 cfg["modo"] determina cómo se obtiene el fichero:
-  "url"      → URL directa con patrón {year}  (ej. Metro Madrid)
   "listado"  → scraping de página de listado para extraer file IDs (ej. Puertos del Estado)
 
 Interfaz pública:
@@ -18,172 +17,11 @@ from datetime import date
 
 import requests
 
-from src.data_ingestion._common import ensure_feature_registry, write_month_uniform
+from src.data_ingestion._common import write_month_uniform
 
 TIPO = "excel_mensual"
 
-_MESES_COL = [
-    "enero",
-    "febrero",
-    "marzo",
-    "abril",
-    "mayo",
-    "junio",
-    "julio",
-    "agosto",
-    "septiembre",
-    "octubre",
-    "noviembre",
-    "diciembre",
-]
 _TIMEOUT = 30
-
-
-# ── Modo "url" — Metro Madrid ─────────────────────────────────────────────────
-
-
-def _download_excel_url(url_pattern: str, year: int) -> bytes | None:
-    url = url_pattern.format(year=year)
-    try:
-        r = requests.get(url, timeout=_TIMEOUT)
-        if r.status_code in (404, 403):
-            return None
-        r.raise_for_status()
-        return r.content
-    except Exception:
-        return None
-
-
-def _parse_metro_excel(
-    xlsx_bytes: bytes, year: int, estaciones: list[dict]
-) -> dict[str, dict[int, int]]:
-    try:
-        import openpyxl
-    except ImportError as exc:
-        raise ImportError("openpyxl es necesario: pip install openpyxl") from exc
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        wb = openpyxl.load_workbook(io.BytesIO(xlsx_bytes), data_only=True)
-
-    target_sheet = None
-    for sh_name in wb.sheetnames:
-        if str(year) in sh_name:
-            target_sheet = wb[sh_name]
-            break
-    if target_sheet is None:
-        target_sheet = wb.active
-
-    ws = target_sheet
-    header_row: int | None = None
-    for r in range(1, min(10, ws.max_row + 1)):
-        vals_b_m = [ws.cell(r, c).value for c in range(2, 14)]
-        non_null = [v for v in vals_b_m if v is not None]
-        if len(non_null) >= 6:
-            first = non_null[0]
-            if isinstance(first, str) and any(m in str(first).lower() for m in _MESES_COL):
-                header_row = r
-                break
-            if isinstance(first, (int, float)) and 1 <= int(first) <= 12:
-                header_row = r
-                break
-
-    if header_row is not None:
-        col_mes: dict[int, int] = {}
-        for c in range(2, 14):
-            v = ws.cell(header_row, c).value
-            if v is None:
-                continue
-            if isinstance(v, str):
-                for i, mn in enumerate(_MESES_COL, 1):
-                    if mn in v.lower():
-                        col_mes[i] = c
-                        break
-            elif isinstance(v, (int, float)) and 1 <= int(v) <= 12:
-                col_mes[int(v)] = c
-    else:
-        col_mes = {m: m + 1 for m in range(1, 13)}
-        header_row = 1
-
-    nombre_to_slug = {e["nombre"].strip().lower(): e["slug"] for e in estaciones}
-    result: dict[str, dict[int, int]] = {}
-
-    for r in range(header_row + 1, ws.max_row + 1):
-        cell_a = ws.cell(r, 1).value
-        if cell_a is None:
-            continue
-        nombre_celda = str(cell_a).strip().lower()
-        for nombre_cfg, slug in nombre_to_slug.items():
-            if nombre_cfg in nombre_celda or nombre_celda in nombre_cfg:
-                mes_vals: dict[int, int] = {}
-                for mes, col in col_mes.items():
-                    v = ws.cell(r, col).value
-                    try:
-                        mes_vals[mes] = int(float(str(v).replace(",", "").strip()))
-                    except (TypeError, ValueError):
-                        pass
-                if mes_vals:
-                    result[slug] = mes_vals
-                break
-
-    return result
-
-
-def _sync_metro_madrid(ubicacion_id: str, cfg: dict, verbose: bool) -> int:
-    feature_key_prefix = cfg.get("feature_key_prefix", "afluencia_metro_")
-    estaciones = cfg.get("estaciones", [])
-    url_pattern = cfg.get("anyo_url")
-    if not estaciones or not url_pattern:
-        if verbose:
-            print(f"  [excel_mensual/metro] {ubicacion_id}: sin estaciones o anyo_url — omitido")
-        return 0
-
-    from src.db.store import get_conn
-
-    def _ensure_registry(slug: str) -> None:
-        fk = f"{feature_key_prefix}{slug}"
-        ensure_feature_registry(
-            fk,
-            "metro_madrid",
-            "movilidad",
-            f"Validaciones mensuales estacion de metro — {slug.replace('_', ' ').title()}",
-        )
-        get_conn().execute(
-            "INSERT INTO activacion_señales (señal_id, ubicacion_id, status, periodicidad) "
-            "VALUES (?,?,'contexto','mensual') "
-            "ON CONFLICT (señal_id, ubicacion_id) DO NOTHING",
-            [fk, ubicacion_id],
-        )
-
-    def _sync_year(year: int) -> int:
-        raw = _download_excel_url(url_pattern, year)
-        if raw is None:
-            if verbose:
-                print(f"  [excel_mensual/metro] {year}: descarga fallida o no disponible")
-            return 0
-        parsed = _parse_metro_excel(raw, year, estaciones)
-        if not parsed:
-            if verbose:
-                print(f"  [excel_mensual/metro] {year}: ninguna estacion encontrada en el Excel")
-            return 0
-        total = 0
-        for slug, mes_vals in parsed.items():
-            _ensure_registry(slug)
-            fk = f"{feature_key_prefix}{slug}"
-            for mes, validaciones in mes_vals.items():
-                n = write_month_uniform(year, mes, validaciones, ubicacion_id, fk, verbose)
-                if verbose and n > 0:
-                    print(
-                        f"  [excel_mensual/metro] {slug} {mes:02d}/{year}: "
-                        f"{validaciones:,} validaciones → {validaciones/n:.0f}/dia"
-                    )
-                total += n
-        return total
-
-    today = date.today()
-    n = _sync_year(today.year - 1)
-    n += _sync_year(today.year)
-    return n
 
 
 # ── Modo "listado" — Puertos del Estado ──────────────────────────────────────
@@ -385,14 +223,7 @@ def sync(ubicacion_id: str, cfg: dict, verbose: bool = True) -> int:
     Devuelve el número de filas escritas.
     """
     modo = cfg.get("modo")
-    if modo == "url":
-        try:
-            return _sync_metro_madrid(ubicacion_id, cfg, verbose)
-        except Exception as e:
-            if verbose:
-                print(f"  [excel_mensual/metro] {ubicacion_id} ERROR — {e}")
-            return 0
-    elif modo == "listado":
+    if modo == "listado":
         try:
             return _sync_puertos_estado(ubicacion_id, cfg, verbose)
         except Exception as e:

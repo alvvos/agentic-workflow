@@ -315,11 +315,8 @@ _CATALOG_PENDIENTE: dict[str, list[dict]] = {
 # ── Sources ya cubiertas por el sistema — el Scout nunca las duplica ───────────
 _FUENTES_EXCLUIDAS = {
     "open_meteo": "clima histórico y forecast (temp_max, temp_min, llueve)",
-    "supercalendario": "festivos, calendarios escolares y laborales por org",
     "cruceros": "escalas Puerto Málaga (n_pasajeros_crucero_dia)",
-    "predicthq": "eventos Ticketmaster/PredictHQ (evaluado, sin cobertura histórica en tier gratuito)",
     "esri": "enriquecimiento geoespacial Esri (pendiente contrato)",
-    "academic_calendar": "calendario académico (incluido en supercalendario)",
 }
 
 # ── System prompt ──────────────────────────────────────────────────────────────

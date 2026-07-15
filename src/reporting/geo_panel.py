@@ -2,7 +2,7 @@
 Panel geoespacial Esri — Panel PM.
 Responde a: ¿Qué potencial tiene esta ubicación y a qué competencia se enfrenta?
 
-Secciones (todas auto-generadas desde geo_features.json):
+Secciones (auto-generadas desde snapshots_geo en PostgreSQL):
   A. Alcance peatonal  — captación isócrona, mapa, pirámide de edad, estructura de hogar
   B. Capacidad económica — renta, salud financiera, gasto por categoría
   C. Comportamiento digital — canal online, presión omnicanal

@@ -19,19 +19,15 @@ import time
 from datetime import date, timedelta
 
 from src.data_ingestion._common import (
-    EVENTS_DATE_FROM,
-    EVENTS_HORIZON,
     get_active_locations,
     get_configured_locations,
     is_fresh,
-    update_ev_rank_total,
     write_sync_marker,
 )
 from src.pipeline.config import make_pipeline
 from src.pipeline.resources import get_source_fn
 
-# Tipos que generan datos en la tabla eventos (necesitan recalcular ev_rank_total)
-_EVENT_TIPOS = {"festivos_calendario", "eventos", "agenda_opendata"}
+# Event connector types removed — no external event sources active
 
 
 def _read_fuentes(periodicidad: str | None = None) -> list[tuple[str, dict]]:
@@ -105,11 +101,10 @@ def run(
         return {}
 
     configured = _configured_sources()
-    d_from = date_from or EVENTS_DATE_FROM
-    d_to = date_to or (date.today() + timedelta(days=EVENTS_HORIZON))
+    d_from = date_from or date.today()
+    d_to = date_to or (date.today() + timedelta(days=16))
 
     results: dict[str, int] = {}
-    event_tipos_ran: set[str] = set()
 
     for fuente, cfg in fuentes:
         tipo = cfg.get("tipo_conector")
@@ -149,17 +144,10 @@ def run(
             if verbose:
                 print(f"  [{fuente}] completado en {time.time() - t0:.0f}s")
 
-            if tipo in _EVENT_TIPOS:
-                event_tipos_ran.add(tipo)
-
         except Exception as e:
             if verbose:
                 print(f"  [{fuente}] ERROR — {e}")
             results[fuente] = 0
-
-    if event_tipos_ran:
-        for loc in all_locations:
-            update_ev_rank_total(loc["ubicacion_id"], d_from, d_to)
 
     return results
 

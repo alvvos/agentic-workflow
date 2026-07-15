@@ -58,8 +58,6 @@ class SeñalesDestino:
             self._upsert_señales(rows)
         elif name == "evento":
             self._upsert_eventos(rows)
-        elif name == "noticia":
-            self._upsert_noticias(rows)
 
     def complete_load(self, load_id: str) -> None:  # noqa: ARG002
         pass
@@ -110,37 +108,6 @@ class SeñalesDestino:
                  fecha_inicio, fecha_fin, metadata, fuente, clave_fuente)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (clave_fuente) DO NOTHING
-            """,
-            datos,
-        )
-
-    def _upsert_noticias(self, rows: list[dict]) -> None:
-        datos = [
-            (
-                r["article_id"],
-                r["ubicacion_id"],
-                r.get("titulo"),
-                r.get("descripcion"),
-                r.get("url"),
-                r.get("publicada_en"),
-                r.get("fuente_id"),
-                r.get("fuente_nombre"),
-                r.get("categorias"),
-                r.get("idioma"),
-                r.get("contenido"),
-            )
-            for r in rows
-            if r.get("article_id") and r.get("ubicacion_id")
-        ]
-        if not datos:
-            return
-        self._conn.executemany(
-            """
-            INSERT INTO noticias
-                (article_id, ubicacion_id, titulo, descripcion, url,
-                 publicada_en, fuente_id, fuente_nombre, categorias, idioma, contenido)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (article_id, ubicacion_id) DO NOTHING
             """,
             datos,
         )

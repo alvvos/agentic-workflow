@@ -8,7 +8,7 @@ y ejecuta sync() por cada ubicación configurada en config_fuentes.
 CLI:
   python -m src.data_ingestion.sync_mensual
   python -m src.data_ingestion.sync_mensual --location <uuid>
-  python -m src.data_ingestion.sync_mensual --solo metro_madrid
+  python -m src.data_ingestion.sync_mensual --solo cruceros
   python -m src.data_ingestion.sync_mensual --force
 """
 
@@ -167,7 +167,7 @@ if __name__ == "__main__":
         "--solo",
         default=None,
         metavar="SOURCE[,SOURCE]",
-        help="Ejecutar solo este source (ej: metro_madrid)",
+        help="Ejecutar solo este source (ej: cruceros)",
     )
     parser.add_argument("--max-age", type=float, default=168, metavar="HORAS")
     parser.add_argument("--force", action="store_true")

@@ -370,48 +370,31 @@ def get_ultima_fecha_por_location() -> dict:
     return {r[0]: r[1] for r in rows}
 
 
-# ── Geo feature temporal join ─────────────────────────────────────────────────
+# ── Geo features ─────────────────────────────────────────────────────────────
 
 
 def get_geo_snapshot_df(ubicacion_id: str, fechas: pd.Series) -> pd.DataFrame:
     """
     Returns a DataFrame with one row per date in fechas, columns = geo feature keys.
-    Each row gets the Esri snapshot that was valid at that date.
-    Returns an empty DataFrame (no rows, no columns) if no geo data exists.
-
-    Used by ml_predictivo.py to add geo context to the training set.
+    All rows get the same (current) snapshot — monthly cadence, no temporal history.
+    Returns an empty DataFrame if no geo data exists.
     """
-    conn = get_conn()
-
-    # Load all snapshots for this location
-    snaps = conn.execute(
-        """
-        SELECT señal_id, valor, vigente_desde, vigente_hasta
-        FROM snapshots_geo
-        WHERE ubicacion_id = ?
-        ORDER BY señal_id, vigente_desde
-    """,
-        [ubicacion_id],
-    ).df()
-
-    if snaps.empty:
-        return pd.DataFrame()
-
-    snaps["vigente_desde"] = pd.to_datetime(snaps["vigente_desde"])
-    snaps["vigente_hasta"] = pd.to_datetime(snaps["vigente_hasta"]).fillna(
-        pd.Timestamp("2099-12-31")
+    snaps = (
+        get_conn()
+        .execute(
+            "SELECT señal_id, valor FROM snapshots_geo WHERE ubicacion_id = ?",
+            [ubicacion_id],
+        )
+        .fetchall()
     )
 
-    dates = pd.to_datetime(fechas).rename("fecha")
-    geo_cols = snaps["señal_id"].unique()
-    result = pd.DataFrame({"fecha": dates})
+    if not snaps:
+        return pd.DataFrame()
 
-    for col in geo_cols:
-        col_snaps = snaps[snaps["señal_id"] == col].sort_values("vigente_desde")
-        # For each date, find the snapshot valid at that date
-        result[col] = result["fecha"].apply(lambda d: _snap_value(col_snaps, d))
-
-    result = result.drop(columns=["fecha"])
+    geo_vals = {k: v for k, v in snaps}
+    result = pd.DataFrame(index=range(len(fechas)))
+    for col, val in geo_vals.items():
+        result[col] = val
     return result
 
 
@@ -442,7 +425,7 @@ def get_locs_for_org(org_id: str) -> list[dict]:
 
 
 def get_zones_for_loc(ubicacion_id: str) -> list[dict]:
-    """[{zona_id, nombre, tipo_zona, oculta, parent_zona_id}, ...] para una ubicación."""
+    """[{zona_id, nombre, tipo_zona, oculta, parent_zona_id, es_top_parent, es_ultima_zona}, ...] para una ubicación."""
     return [
         {
             "zona_id": r[0],
@@ -450,11 +433,15 @@ def get_zones_for_loc(ubicacion_id: str) -> list[dict]:
             "tipo_zona": r[2] or "",
             "oculta": r[3],
             "parent_zona_id": r[4],
+            "es_top_parent": bool(r[5]) if r[5] is not None else None,
+            "es_ultima_zona": bool(r[6]) if r[6] is not None else None,
         }
         for r in get_conn()
         .execute(
-            "SELECT zona_id, nombre, tipo_zona, oculta, parent_zona_id"
-            " FROM zonas WHERE ubicacion_id = ? ORDER BY nombre",
+            "SELECT zona_id, nombre, tipo_zona, oculta, parent_zona_id, "
+            "es_top_parent, es_ultima_zona "
+            "FROM zonas WHERE ubicacion_id = %s "
+            "ORDER BY es_top_parent DESC NULLS LAST, funnel_step NULLS LAST, nombre",
             [ubicacion_id],
         )
         .fetchall()
@@ -524,17 +511,21 @@ def get_locations_with_coords() -> list[str]:
 
 
 def get_all_zones_flat() -> list[dict]:
-    """[{zona_id, ubicacion_id, nombre, tipo_zona}, ...] para todas las zonas visibles."""
+    """[{zona_id, ubicacion_id, nombre, tipo_zona, es_top_parent, es_ultima_zona}, ...] para todas las zonas visibles."""
     return [
         {
             "zona_id": r[0],
             "ubicacion_id": r[1],
             "nombre": r[2],
             "tipo_zona": r[3] or "",
+            "es_top_parent": bool(r[4]) if r[4] is not None else None,
+            "es_ultima_zona": bool(r[5]) if r[5] is not None else None,
         }
         for r in get_conn()
         .execute(
-            "SELECT zona_id, ubicacion_id, nombre, tipo_zona FROM zonas WHERE oculta = FALSE ORDER BY nombre"
+            "SELECT zona_id, ubicacion_id, nombre, tipo_zona, es_top_parent, es_ultima_zona "
+            "FROM zonas WHERE oculta = FALSE "
+            "ORDER BY es_top_parent DESC NULLS LAST, nombre"
         )
         .fetchall()
     ]
@@ -744,11 +735,3 @@ def upsert_poi(
             fuente,
         ],
     )
-
-
-def _snap_value(col_snaps: pd.DataFrame, fecha: pd.Timestamp) -> Optional[float]:
-    mask = (col_snaps["vigente_desde"] <= fecha) & (col_snaps["vigente_hasta"] >= fecha)
-    rows = col_snaps[mask]
-    if rows.empty:
-        return None
-    return rows.iloc[-1]["valor"]  # latest valid snapshot if overlapping

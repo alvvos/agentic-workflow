@@ -45,7 +45,7 @@ GEO_FEATURE_COLS = [
     "hogares_parejas_jovenes",
     "hogares_familias_hijos",
     "en_riesgo_pobreza_pct",
-    # Gasto de consumidor (sin ropa/calzado — sin tipología de producto por ubicación)
+    # Gasto de consumidor
     "gasto_cuidado_personal",
     "gasto_ocio_cultura",
     "gasto_vacaciones",
@@ -69,7 +69,7 @@ GEO_FEATURE_COLS = [
 
 # ── Esri variable mapping ─────────────────────────────────────────────────────
 # {feature_col: (collection.variable, radio)} — solo las señales de GeoEnrichment
-# None → calculada desde puntos_interes, no viene de GeoEnrichment
+# None → calculada desde puntos_interes
 ESRI_VAR_MAP: dict = {
     "poblacion_5min": ("KeyFacts.TOTPOP_CY", "ring_400m"),
     "poblacion_10min": ("KeyFacts.TOTPOP_CY", "ring_800m"),
@@ -123,190 +123,98 @@ ESRI_VAR_MAP: dict = {
     "n_anclas": None,
 }
 
-# ── Clasificación backdatable / dinámica ──────────────────────────────────────
-# Backdatable: cambio muy lento; el valor de 2026 aproxima honestamente 2024.
-GEO_FEATURES_BACKDATABLE = [
-    "poblacion_5min",
-    "poblacion_10min",
-    "poblacion_15min",
-    "densidad_poblacion",
-    "trabajadores_zona",
-    "indice_poder_compra",
-    "pob_15_29",
-    "pob_0_4",
-    "pob_5_9",
-    "pob_10_14",
-    "pob_15_19",
-    "pob_20_24",
-    "pob_25_29",
-    "pob_30_34",
-    "pob_35_39",
-    "pob_40_44",
-    "pob_45_49",
-    "pob_50_54",
-    "pob_55_59",
-    "pob_60_64",
-    "pob_65_69",
-    "pob_70_74",
-    "pob_75_79",
-    "pob_80_84",
-    "pob_85_plus",
-    "renta_hogar_anual",
-    "renta_per_capita",
-    "n_hogares_total",
-    "hogares_renta_alta",
-    "hogares_renta_media_alta",
-    "hogares_jovenes_solos",
-    "hogares_parejas_jovenes",
-    "hogares_familias_hijos",
-    "en_riesgo_pobreza_pct",
-    "gasto_cuidado_personal",
-    "gasto_ocio_cultura",
-    "gasto_vacaciones",
-    "gasto_restaurantes",
-    "gasto_alimentacion",
-    "gasto_transporte",
-    "tasa_desempleo",
-    "tasa_desempleo_jovenes",
-    "pct_compras_online",
-    "online_ropa_deporte_pct",
-    "online_ultimo_mes_pct",
-    "n_nodos_transporte",
-    "n_atracciones",
-]
-
-# Dinámicas: entorno competitivo y de restauración (apertura/cierre frecuente).
-GEO_FEATURES_DINAMICAS = [
-    "n_restauracion",
-    "n_competidores",
-    "n_anclas",
-]
-
-# Cache en memoria invalidado por ubicación en cada ingesta Esri.
-# Clave: (location_uuid, fecha_str | None)  →  {col: value}
-_geo_cache: dict = {}
+# Cache en memoria por ubicacion_id (se invalida en cada ingesta)
+_geo_cache: dict[str, dict] = {}
 
 
-def invalidate_geo_cache(location_uuid: str = None) -> None:
-    """Elimina entradas de caché. Sin argumento limpia todo."""
+def invalidate_geo_cache(location_uuid: str | None = None) -> None:
     if location_uuid is None:
         _geo_cache.clear()
     else:
-        for k in [k for k in _geo_cache if k[0] == location_uuid]:
-            del _geo_cache[k]
+        _geo_cache.pop(location_uuid, None)
 
 
-def _fetch_snapshot_features(location_uuid: str, fecha=None) -> dict:
+def get_geo_vals(location_uuid: str, fecha=None) -> dict:  # fecha ignorado — modelo plano
     """
-    Consulta snapshots_geo y devuelve {feature_key: value} del snapshot aplicable.
-    Retorna dict vacío si no hay datos para esta ubicación.
+    Devuelve el snapshot geoespacial actual de una ubicación.
+    Si no hay datos devuelve None en todos los campos (graceful degradation).
     """
+    if location_uuid in _geo_cache:
+        return _geo_cache[location_uuid]
+
     from src.db.store import get_conn
 
-    conn = get_conn()
-
-    if fecha is None:
-        row = conn.execute(
-            """
-            SELECT DISTINCT vigente_desde FROM snapshots_geo
-            WHERE ubicacion_id = ? AND vigente_hasta IS NULL
-            ORDER BY vigente_desde DESC LIMIT 1
-        """,
+    rows = (
+        get_conn()
+        .execute(
+            "SELECT señal_id, valor FROM snapshots_geo WHERE ubicacion_id = ?",
             [location_uuid],
-        ).fetchone()
-        if not row:
-            row = conn.execute(
-                """
-                SELECT DISTINCT vigente_desde FROM snapshots_geo
-                WHERE ubicacion_id = ? ORDER BY vigente_desde DESC LIMIT 1
-            """,
-                [location_uuid],
-            ).fetchone()
-    else:
-        fecha_str = str(fecha)[:10]
-        row = conn.execute(
-            """
-            SELECT DISTINCT vigente_desde FROM snapshots_geo
-            WHERE ubicacion_id = ?
-              AND vigente_desde <= ?
-              AND (vigente_hasta IS NULL OR vigente_hasta >= ?)
-            ORDER BY vigente_desde DESC LIMIT 1
-        """,
-            [location_uuid, fecha_str, fecha_str],
-        ).fetchone()
+        )
+        .fetchall()
+    )
 
-    if not row:
-        return {}
-
-    vigente_desde = row[0]
-    rows = conn.execute(
-        """
-        SELECT señal_id, valor FROM snapshots_geo
-        WHERE ubicacion_id = ? AND vigente_desde = ?
-    """,
-        [location_uuid, vigente_desde],
-    ).fetchall()
-    return {k: v for k, v in rows}
-
-
-def get_geo_vals(location_uuid: str, fecha=None) -> dict:
-    """
-    Devuelve el snapshot geoespacial de una ubicación en un momento dado.
-
-    - fecha=None → snapshot activo más reciente (para predicción de fechas futuras).
-    - fecha=<date> → snapshot cuyo intervalo [vigente_desde, vigente_hasta] contiene esa fecha
-      (para training: evita data leakage de datos futuros en filas históricas).
-
-    Si no hay snapshot aplicable devuelve None en todos los campos, lo que hace que
-    get_geo_features_activos() devuelva lista vacía y el modelo ignore las geo features.
-    """
-    cache_key = (location_uuid, str(fecha)[:10] if fecha is not None else None)
-    if cache_key in _geo_cache:
-        return _geo_cache[cache_key]
-
-    raw = _fetch_snapshot_features(location_uuid, fecha)
+    raw = {k: v for k, v in rows}
     result = {col: raw.get(col) for col in GEO_FEATURE_COLS}
-    _geo_cache[cache_key] = result
+    _geo_cache[location_uuid] = result
     return result
 
 
 def get_geo_features_activos(location_uuid: str, fecha=None) -> list:
-    """Devuelve los nombres de features con valor no nulo en el snapshot aplicable."""
-    vals = get_geo_vals(location_uuid, fecha)
-    return [col for col, v in vals.items() if v is not None]
+    """Devuelve los nombres de features con valor no nulo en el snapshot actual."""
+    return [col for col, v in get_geo_vals(location_uuid).items() if v is not None]
+
+
+def ingestar_snapshot(location_uuid: str, valores: dict) -> int:
+    """
+    Reemplaza el snapshot geo de una ubicación. Borra lo anterior y escribe lo nuevo.
+    valores: {señal_id: valor_numérico}
+    Devuelve el número de features insertadas.
+    """
+    from src.db.store import get_conn
+
+    conn = get_conn()
+    conn.execute("DELETE FROM snapshots_geo WHERE ubicacion_id = ?", [location_uuid])
+    datos = [
+        (location_uuid, k, float(v))
+        for k, v in valores.items()
+        if v is not None and k in GEO_FEATURE_COLS
+    ]
+    if datos:
+        conn.executemany(
+            "INSERT INTO snapshots_geo (ubicacion_id, señal_id, valor) VALUES (?, ?, ?)",
+            datos,
+        )
+    invalidate_geo_cache(location_uuid)
+    return len(datos)
 
 
 def enriquecer_con_geo(
     df: pd.DataFrame, col_location_id: str = "location_id", col_fecha: str = "fecha"
 ) -> pd.DataFrame:
     """
-    Join temporal geoespacial sobre un DataFrame multi-ubicación.
-
-    Para cada fila, busca el snapshot válido en su fecha (o el activo si no hay col_fecha).
-    Solo añade columnas que tengan al menos un valor no nulo en el resultado.
+    Añade columnas geo al DataFrame. Un snapshot por ubicación (sin join temporal).
     No-op si el store está vacío o todos los valores son null.
     """
     if col_location_id not in df.columns:
         return df
 
-    usa_fecha = col_fecha in df.columns
+    geo_rows = []
+    for loc_id in df[col_location_id].unique():
+        vals = get_geo_vals(loc_id)
+        vals[col_location_id] = loc_id
+        geo_rows.append(vals)
 
-    def _lookup(row):
-        fecha = row[col_fecha] if usa_fecha else None
-        return get_geo_vals(row[col_location_id], fecha)
+    if not geo_rows:
+        return df
 
-    geo_df = df[[col_location_id] + ([col_fecha] if usa_fecha else [])].apply(
-        _lookup, axis=1, result_type="expand"
-    )
-
+    geo_df = pd.DataFrame(geo_rows).set_index(col_location_id)
     cols_con_dato = [c for c in GEO_FEATURE_COLS if c in geo_df.columns and geo_df[c].notna().any()]
     if not cols_con_dato:
         return df
 
+    df = df.copy()
     for col in cols_con_dato:
-        df = df.copy()
-        df[col] = geo_df[col].values
-
+        df[col] = df[col_location_id].map(geo_df[col])
     return df
 
 
@@ -333,32 +241,15 @@ def get_catchment_rings(location_uuid: str):
 
 
 def get_geo_snapshot_date(location_uuid: str) -> str | None:
-    """Returns the vigente_desde date of the active geo snapshot, or None if no data."""
+    """Fecha de la última actualización del snapshot geo, o None si no hay datos."""
     from src.db.store import get_conn
 
     row = (
         get_conn()
         .execute(
-            """
-        SELECT vigente_desde FROM snapshots_geo
-        WHERE ubicacion_id = ? AND vigente_hasta IS NULL
-        ORDER BY vigente_desde DESC LIMIT 1
-    """,
+            "SELECT MAX(actualizado_en) FROM snapshots_geo WHERE ubicacion_id = ?",
             [location_uuid],
         )
         .fetchone()
     )
-    if row:
-        return str(row[0])
-    row = (
-        get_conn()
-        .execute(
-            """
-        SELECT vigente_desde FROM snapshots_geo
-        WHERE ubicacion_id = ? ORDER BY vigente_desde DESC LIMIT 1
-    """,
-            [location_uuid],
-        )
-        .fetchone()
-    )
-    return str(row[0]) if row else None
+    return str(row[0])[:10] if row and row[0] else None

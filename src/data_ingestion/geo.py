@@ -12,7 +12,7 @@ log = logging.getLogger("geo")
 def listar_estado(verbose: bool = True) -> list[dict]:
     """
     Devuelve una lista de dicts por ubicacion activa:
-      ubicacion_id, nombre, tiene_datos (bool), n_snapshots (int)
+      ubicacion_id, nombre, tiene_datos (bool), n_features (int), actualizado_en
     """
     from src.db.store import get_conn
 
@@ -21,7 +21,8 @@ def listar_estado(verbose: bool = True) -> list[dict]:
         .execute(
             """
         SELECT u.ubicacion_id, u.nombre,
-               COUNT(s.ubicacion_id) AS n_snapshots
+               COUNT(s.señal_id)      AS n_features,
+               MAX(s.actualizado_en)  AS actualizado_en
           FROM ubicaciones u
           LEFT JOIN snapshots_geo s ON s.ubicacion_id = u.ubicacion_id
          WHERE u.activa = TRUE
@@ -33,16 +34,18 @@ def listar_estado(verbose: bool = True) -> list[dict]:
     )
 
     estado = []
-    for ubicacion_id, nombre, n in rows:
+    for ubicacion_id, nombre, n, actualizado_en in rows:
         entry = {
             "ubicacion_id": ubicacion_id,
             "nombre": nombre,
             "tiene_datos": n > 0,
-            "n_snapshots": n,
+            "n_features": n,
+            "actualizado_en": str(actualizado_en)[:10] if actualizado_en else None,
         }
         if verbose:
             mark = "✓" if n > 0 else "✗"
-            print(f"  {mark} {nombre} ({n} snapshot(s))")
+            ts = f" · {entry['actualizado_en']}" if entry["actualizado_en"] else ""
+            print(f"  {mark} {nombre} ({n} features{ts})")
         estado.append(entry)
 
     return estado
@@ -83,74 +86,19 @@ def calcular_scores_poi(ubicacion_id: str) -> dict[str, float]:
 def ingestar_snapshot_esri(
     ubicacion_id: str,
     valores: dict[str, float | None],
-    fecha_entrega: str | None = None,
-) -> dict:
+) -> int:
     """
-    Persiste un snapshot de GeoEnrichment en snapshots_geo con política temporal.
+    Reemplaza el snapshot geo de la ubicación con los valores de GeoEnrichment.
+    Borra lo anterior y escribe lo nuevo. Cadencia mensual.
 
-    Primera entrega (sin snapshot previo):
-      Crea un único snapshot [2024-01-01 → open] backdatado al inicio del histórico.
-
-    Actualizaciones posteriores:
-      Cierra el snapshot vigente (vigente_hasta = fecha_entrega - 1 día) y crea
-      un nuevo snapshot [fecha_entrega → open] con los valores actualizados.
-
-    Devuelve {"primera_entrega": bool, "n_features": int}.
+    valores: {señal_id: valor_numérico | None}  — claves según GEO_FEATURE_COLS.
+    Devuelve el número de features insertadas.
     """
-    from datetime import date, timedelta
+    from src.data_processing.geo_enrichment import ingestar_snapshot
 
-    from src.db.store import get_conn
+    poi_scores = calcular_scores_poi(ubicacion_id)
+    todos = {**valores, **poi_scores}
 
-    conn = get_conn()
-    hoy = str(date.today())
-    fecha = fecha_entrega or hoy
-
-    existing = conn.execute(
-        """
-        SELECT vigente_desde FROM snapshots_geo
-        WHERE ubicacion_id = ? AND vigente_hasta IS NULL
-        LIMIT 1
-        """,
-        [ubicacion_id],
-    ).fetchone()
-
-    primera_entrega = existing is None
-
-    if not primera_entrega:
-        ayer = str(date.fromisoformat(fecha) - timedelta(days=1))
-        conn.execute(
-            """
-            UPDATE snapshots_geo SET vigente_hasta = ?
-            WHERE ubicacion_id = ? AND vigente_hasta IS NULL AND vigente_desde < ?
-            """,
-            [ayer, ubicacion_id, fecha],
-        )
-
-    vigente_desde = "2024-01-01" if primera_entrega else fecha
-
-    filas = [
-        (ubicacion_id, señal_id, vigente_desde, valor)
-        for señal_id, valor in valores.items()
-        if valor is not None
-    ]
-
-    conn.executemany(
-        """
-        INSERT INTO snapshots_geo (ubicacion_id, señal_id, vigente_desde, valor)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT (ubicacion_id, señal_id, vigente_desde) DO UPDATE SET
-            valor = excluded.valor,
-            vigente_hasta = NULL,
-            ingerido_en = CURRENT_TIMESTAMP
-        """,
-        filas,
-    )
-
-    log.info(
-        "[%s] geo snapshot %s — %d features (primera_entrega=%s)",
-        ubicacion_id,
-        vigente_desde,
-        len(filas),
-        primera_entrega,
-    )
-    return {"primera_entrega": primera_entrega, "n_features": len(filas)}
+    n = ingestar_snapshot(ubicacion_id, todos)
+    log.info("[%s] geo snapshot actualizado — %d features", ubicacion_id, n)
+    return n

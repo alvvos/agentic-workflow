@@ -100,14 +100,32 @@ def _sync_arbol_aitanna() -> int:
                 parent_uuid = fathers[0] if fathers else None
                 zona_parents.append((zone_uuid, parent_uuid))
 
+                zone_type = zone.get("type") or ""
+                es_ultima = zone.get("lastZone")  # None si el campo no viene
+                es_top = zone.get("isTopParent")
+
                 conn.execute(
-                    """INSERT INTO zonas (zona_id, ubicacion_id, nombre, oculta, parent_zona_id)
-                       VALUES (%s, %s, %s, %s, NULL)
+                    """INSERT INTO zonas
+                           (zona_id, ubicacion_id, nombre, oculta, parent_zona_id,
+                            tipo_zona, es_ultima_zona, es_top_parent)
+                       VALUES (%s, %s, %s, %s, NULL, %s, %s, %s)
                        ON CONFLICT (zona_id) DO UPDATE
-                       SET nombre = EXCLUDED.nombre,
-                           oculta = EXCLUDED.oculta
+                       SET nombre         = EXCLUDED.nombre,
+                           oculta         = EXCLUDED.oculta,
+                           tipo_zona      = CASE WHEN EXCLUDED.tipo_zona <> '' THEN EXCLUDED.tipo_zona
+                                                 ELSE zonas.tipo_zona END,
+                           es_ultima_zona = COALESCE(EXCLUDED.es_ultima_zona, zonas.es_ultima_zona),
+                           es_top_parent  = COALESCE(EXCLUDED.es_top_parent,  zonas.es_top_parent)
                     """,
-                    [zone_uuid, loc_uuid, zone_name, oculta],
+                    [
+                        zone_uuid,
+                        loc_uuid,
+                        zone_name,
+                        oculta,
+                        zone_type,
+                        bool(es_ultima) if es_ultima is not None else None,
+                        bool(es_top) if es_top is not None else None,
+                    ],
                 )
 
             # Pasada 2: actualiza parent_zona_id una vez todas las zonas existen

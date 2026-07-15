@@ -29,6 +29,19 @@ Panel de analítica retail multi-tenant en tiempo real. Ingiere datos de flujo d
 | Deploy | `~/deploy.sh <versión>` vía SSH · git tags semver |
 | Timers nocturnos | `agentic-sync-noche` (02:00 diario) · `agentic-sync-mensual` (día 1, 03:00) |
 
+## Flujo de desarrollo local
+
+El desarrollo se hace en local apuntando a la BD de producción vía túnel SSH:
+
+```bash
+ssh -i ~/.ssh/id_ed25519_servidor -L 5433:localhost:5433 alvaro.salis@34.175.22.17 -N &
+python app.py   # o venv/bin/python app.py
+```
+
+El túnel mapea el puerto 5433 del servidor en `localhost:5433`, que es exactamente lo que el `.env` espera (`DB_HOST=localhost`, `DB_PORT=5433`). No hace falta cambiar nada de configuración.
+
+**Consecuencia importante:** lo que se ve localmente es **código local sin desplegar + datos reales de producción**. Los cambios en la BD (inserciones, ingestas) afectan a producción directamente. No se hace deploy hasta que el código está sólido.
+
 ---
 
 ## Árbol de entrada — `app.py`

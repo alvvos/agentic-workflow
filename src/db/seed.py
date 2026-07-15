@@ -164,64 +164,23 @@ def migrate_zone_types() -> int:
     return len(rows)
 
 
-def seed_geo_snapshots() -> int:
-    conn = get_conn()
-    geo_path = _DATA / "geo_features.json"
-    if not geo_path.exists():
-        return 0
-
-    geo = json.loads(geo_path.read_text("utf-8"))
-    rows = []
-    for loc_uuid, snapshots in geo.items():
-        if not _UUID_RE.match(loc_uuid):
-            continue  # skip _metadata and other non-UUID keys
-        if not isinstance(snapshots, list):
-            continue
-        for snap in snapshots:
-            vigente_desde = snap.get("valid_from")
-            vigente_hasta = snap.get("valid_to")
-            for key, valor in snap.items():
-                if key in ("valid_from", "valid_to"):
-                    continue
-                # Skip non-scalar values (e.g. catchment_rings GeoJSON geometry)
-                if not isinstance(valor, (int, float, type(None))):
-                    continue
-                rows.append((loc_uuid, key, vigente_desde, valor, vigente_hasta))
-
-    conn.executemany(
-        """
-        INSERT INTO snapshots_geo
-            (ubicacion_id, señal_id, vigente_desde, valor, vigente_hasta)
-        VALUES (?,?,?,?,?)
-        ON CONFLICT DO NOTHING
-        """,
-        rows,
-    )
-    return len(rows)
-
-
 def seed_feature_registry() -> int:
     """
     Registers all known feature keys with their source and initial status.
     Sources:
       esri          — Geo features (active: already in training pipeline)
-      supercalendario — Commercial calendar (active)
-      eventos_externos — Event features (Open Holidays + Ticketmaster + TheSportsDB + agenda municipal)
+      open_meteo    — Climate features (temp_max, temp_min, llueve)
+      cruceros      — Cruise passenger data (Málaga Muelle 1)
+      puertos_estado — Official cruise passenger statistics
     """
     # Import here to avoid circular deps at module level
     from src.data_processing.geo_enrichment import GEO_FEATURE_COLS
-    from src.data_processing.supercalendario import CALENDARIO_FEATURE_COLS
 
     conn = get_conn()
     entries = []
 
     for key in GEO_FEATURE_COLS:
         entries.append((key, "esri", "geo", '"all"', None, "incompleto", None, None))
-
-    for key in CALENDARIO_FEATURE_COLS:
-        entries.append(
-            (key, "supercalendario", "calendario", '"all"', None, "con_cobertura", None, None)
-        )
 
     # Open-Meteo weather — stored in valores_señales, fetched on first training call
     for key, nota in [
@@ -526,10 +485,6 @@ def run_all(verbose: bool = True) -> None:
     log("── zonas: zone_type migration")
     n = migrate_zone_types()
     log(f"   {n} zonas actualizadas con zone_type")
-
-    log("── snapshots_geo (geo_features.json → EAV)")
-    n = seed_geo_snapshots()
-    log(f"   {n} filas geo")
 
     log("── señales")
     n = seed_feature_registry()
