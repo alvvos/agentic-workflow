@@ -782,7 +782,32 @@ def _build_narrative(
             )
         else:
             tail = ""
-        return s1 + s_ex + tail, color
+        # Explicar por qué no hay comparativa si hay datos previos sin variación
+        s_prev_note = ""
+        if (
+            merged_prev is not None
+            and not merged_prev.empty
+            and len(merged_prev) >= 3
+            and merged_prev["señal"].std() == 0
+        ):
+            val = merged_prev["señal"].iloc[0]
+            if señal_id in _BINARY_SIGNALS:
+                if val == 0:
+                    s_prev_note = (
+                        f" {per_prv_cap} todos los días fueron {etq_off},"
+                        " por lo que no hay punto de comparación."
+                    )
+                else:
+                    s_prev_note = (
+                        f" {per_prv_cap} se dio todos los días,"
+                        " lo que tampoco permite comparar grupos."
+                    )
+            else:
+                s_prev_note = (
+                    f" {per_prv_cap} esta señal no presentó variación,"
+                    " por lo que no permite establecer comparación."
+                )
+        return s1 + s_ex + tail + s_prev_note, color
 
     # Frases 2 y 3: período anterior + conclusión
     n_on_p, n_off_p, pct_p, sube_p, conf_p = _split(merged_prev)
