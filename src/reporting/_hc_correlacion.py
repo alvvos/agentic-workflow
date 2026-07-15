@@ -73,6 +73,30 @@ _SIGNAL_SENTIMENT: dict[str, dict] = {
                 "tuvieron más peso en el comportamiento de la afluencia."
             ),
         },
+        "frases_semana": {
+            "fuerte_confirma": (
+                "Al ordenar los días de la semana de mayor a menor temperatura, "
+                "los más calurosos tienden a ser los de menos tráfico. "
+                "El calor actúa como freno a la afluencia exterior, y este efecto "
+                "se aprecia con claridad incluso con solo una semana de datos."
+            ),
+            "moderado_confirma": (
+                "Esta semana los días más calurosos coincidieron en general con algo "
+                "menos de tráfico, aunque la relación no es perfecta en todos los casos. "
+                "Con 7 días de muestra es difícil confirmar si se trata de un patrón "
+                "estable o de una coincidencia puntual."
+            ),
+            "debil": (
+                "Esta semana la temperatura máxima no guardó una relación clara con "
+                "la afluencia. Los días más calurosos no fueron ni los de más ni los "
+                "de menos tráfico de forma consistente."
+            ),
+            "contradice": (
+                "Esta semana los días de mayor temperatura no coincidieron con menos "
+                "afluencia, al contrario de lo esperado. Puede que la semana haya sido "
+                "especialmente activa por otros motivos que compensaron el efecto del calor."
+            ),
+        },
     },
     "temp_min": {
         "direccion": "negativo",
@@ -99,6 +123,29 @@ _SIGNAL_SENTIMENT: dict[str, dict] = {
                 "el tráfico no bajó de forma consistente en los días más fríos. "
                 "Es posible que otros factores, como campañas específicas o "
                 "temporadas de alta demanda, hayan sostenido la afluencia."
+            ),
+        },
+        "frases_semana": {
+            "fuerte_confirma": (
+                "Las noches más frías de la semana se corresponden claramente con "
+                "los días de menor afluencia. El frío nocturno anticipa un día de "
+                "menos tráfico exterior, y ese patrón se mantiene de forma consistente "
+                "a lo largo de los 7 días analizados."
+            ),
+            "moderado_confirma": (
+                "Se aprecia una tendencia semanal: los días precedidos de noches más "
+                "frías tienden a tener algo menos de tráfico, aunque no en todos los casos. "
+                "Con 7 días de muestra la señal es orientativa, no concluyente."
+            ),
+            "debil": (
+                "Esta semana las temperaturas nocturnas no guardaron relación clara "
+                "con la afluencia del día siguiente. El rango de variación térmica "
+                "puede no haber sido suficiente para marcar diferencias visibles en el tráfico."
+            ),
+            "contradice": (
+                "A pesar del frío, el tráfico no bajó los días de menor temperatura "
+                "mínima esta semana. Otros factores como eventos, festivos o campañas "
+                "pueden haberlo compensado."
             ),
         },
     },
@@ -131,6 +178,31 @@ _SIGNAL_SENTIMENT: dict[str, dict] = {
                 "limitaran su desplazamiento hasta esta ubicación."
             ),
         },
+        "frases_semana": {
+            "fuerte_confirma": (
+                "Al ordenar los días de la semana por número de pasajeros en el puerto, "
+                "los de mayor actividad portuaria son también los de mayor tráfico exterior. "
+                "El impacto de los cruceros sobre esta ubicación es claro y medible "
+                "incluso en una sola semana."
+            ),
+            "moderado_confirma": (
+                "Esta semana los días con más pasajeros de crucero en el puerto tendieron "
+                "a coincidir con más afluencia en la zona, aunque el efecto no fue igual "
+                "de intenso cada día. El tamaño del barco y las horas en tierra "
+                "influyen en cuánto se traslada ese tráfico a la ubicación."
+            ),
+            "debil": (
+                "Esta semana el volumen de pasajeros de crucero no siguió el mismo "
+                "patrón que el tráfico exterior. Con 7 días de datos es difícil detectar "
+                "el patrón si la variación entre días es pequeña o si los cruceristas "
+                "se distribuyeron por otras zonas de la ciudad."
+            ),
+            "contradice": (
+                "Esta semana el tráfico no subió los días con más pasajeros en el puerto, "
+                "al contrario de lo esperado. El clima, el día de la semana o la "
+                "distribución de los turistas por otras zonas pueden explicar este resultado."
+            ),
+        },
     },
     "n_pasajeros_crucero_oficial": {
         "direccion": "positivo",
@@ -158,6 +230,33 @@ _SIGNAL_SENTIMENT: dict[str, dict] = {
                 "no respondió de forma consistente en los períodos de mayor actividad portuaria. "
                 "Vale tener en cuenta que estos datos tienen una latencia de unos 25 días, "
                 "lo que puede desplazar temporalmente la señal respecto al impacto real."
+            ),
+        },
+        "frases_semana": {
+            "fuerte_confirma": (
+                "Los datos oficiales de pasajeros portuarios muestran una relación notable "
+                "con el tráfico exterior incluso en esta semana. Los días de mayor "
+                "actividad oficial en el puerto son también los de mayor afluencia. "
+                "Ten en cuenta que estos datos tienen una latencia de unos 25 días, "
+                "por lo que la señal puede estar ligeramente desplazada en el tiempo."
+            ),
+            "moderado_confirma": (
+                "Esta semana los días con mayor actividad portuaria oficial tendieron "
+                "a coincidir con más tráfico exterior, aunque la relación no es perfecta. "
+                "La latencia de 25 días de estos datos puede hacer que el efecto real "
+                "se observe un poco antes o después de lo que indica la señal."
+            ),
+            "debil": (
+                "Esta semana los datos oficiales de pasajeros no guardaron relación "
+                "clara con la afluencia exterior. Es habitual en ventanas cortas: "
+                "estos datos tienen una latencia de unos 25 días, lo que puede "
+                "desincronizar la señal respecto al impacto real en el tráfico."
+            ),
+            "contradice": (
+                "Esta semana el tráfico no respondió a los datos oficiales de actividad "
+                "portuaria de la forma esperada. La latencia de 25 días de estos datos "
+                "puede estar desplazando la señal, o los pasajeros pueden haber "
+                "concentrado su visita en otras zonas de la ciudad."
             ),
         },
     },
@@ -420,7 +519,7 @@ def _interpret_kendall(
     abs_tau = abs(tau)
     sent = _SIGNAL_SENTIMENT.get(señal_id, {})
     direccion = sent.get("direccion", "positivo")
-    frases = sent.get("frases", {})
+    frases = sent.get("frases_semana") or sent.get("frases", {})
 
     if direccion == "negativo":
         confirma = tau <= 0
