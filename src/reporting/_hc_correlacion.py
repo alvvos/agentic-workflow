@@ -756,11 +756,6 @@ def _build_narrative(
         ex.append("Ten en cuenta que estos datos tienen una latencia de unos 25 días.")
     if n_on_c < 3 or n_off_c < 2:
         ex.append(f"Muestra reducida ({n_on_c} frente a {n_off_c} días): interpreta con cautela.")
-    if lag_dias > 0:
-        ex.append(
-            f"El mejor ajuste se obtiene mirando {lag_dias} día{'s' if lag_dias != 1 else ''} antes, "
-            "lo que sugiere que esta señal anticipa el tráfico con algo de adelanto."
-        )
     s_ex = (" " + " ".join(ex)) if ex else ""
 
     has_prev = (
@@ -771,15 +766,15 @@ def _build_narrative(
     )
     if not has_prev:
         if abs_c >= 15:
-            tail = (
-                " El efecto es notable y va en la dirección esperada."
-                if conf_c
-                else " Llama la atención porque va en sentido contrario al patrón habitual."
-            )
+            if conf_c:
+                tail = " El efecto es notable y va en la dirección esperada."
+            else:
+                tail = " Aunque el efecto esperado es el contrario, la diferencia observada es considerable."
         elif abs_c >= 5:
-            tail = (
-                " La diferencia es pequeña y puede deberse al azar con tan pocos días de muestra."
-            )
+            if conf_c:
+                tail = " La diferencia es pequeña y puede deberse al azar con tan pocos días de muestra."
+            else:
+                tail = " Aunque el efecto esperado es el contrario, la diferencia es pequeña y puede deberse al azar."
         else:
             tail = ""
         # Explicar por qué no hay comparativa si hay datos previos sin variación
@@ -844,16 +839,17 @@ def _build_narrative(
     if not same_dir:
         if conf_c and not conf_p:
             s3 = (
-                f" Con dos períodos de signo opuesto, es pronto para establecer un patrón; "
-                f"{per_prv} fue el que se salió de lo esperado."
+                f" Aunque el efecto esperado es el contrario, {per_prv} sí lo confirmó."
+                " Con dos períodos de signo opuesto, es pronto para establecer un patrón estable."
             )
         elif not conf_c and conf_p:
+            per_act_label = "esta semana" if ventana == "semana" else "este período"
             s3 = (
-                f" Con dos períodos de signo opuesto, es pronto para establecer un patrón; "
-                f"{'esta semana' if ventana == 'semana' else 'este período'} fue el que se salió de lo esperado."
+                f" Aunque el efecto esperado es el contrario, {per_prv} sí lo confirmó."
+                f" {per_act_label.capitalize()} el resultado fue diferente, por lo que conviene observar los próximos períodos."
             )
         else:
-            s3 = " Los dos períodos muestran resultados opuestos, y en ninguno de los dos se aprecia el efecto esperado."
+            s3 = " Aunque el efecto esperado es el contrario, ninguno de los dos períodos lo confirma. Puede que esta ubicación reaccione de forma diferente a lo habitual frente a esta señal."
     elif conf_c and conf_p:
         ratio = abs_c / abs_p if abs_p > 0 else 1.0
         if 0.7 <= ratio <= 1.4:
