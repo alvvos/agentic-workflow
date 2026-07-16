@@ -41,7 +41,7 @@ _CIUDAD_SUBDIV: dict[str, str] = {
     "Mérida": "EX",
 }
 
-_ZONE_LABEL = {0: "Caja / Checkout", 1: "Interior (tienda)", 2: "Exterior (calle)"}
+_ZONE_LABEL_FORMAL = {0: "La zona de caja", 1: "La tienda", 2: "La zona exterior"}
 _ZONE_ICON = {0: "fas fa-cash-register", 1: "fas fa-store", 2: "fas fa-street-view"}
 _ZONE_COLOR = {0: "#6c757d", 1: "#0052CC", 2: "#28A745"}
 
@@ -58,7 +58,7 @@ _SIGNAL_CFG: list[tuple[str, str, str, str]] = [
 _DIA_NAMES = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"]
 
 
-# ── Date helpers ─────────────────────────────────────────────────────────────
+# ── Date / location helpers ──────────────────────────────────────────────────
 
 
 def _to_date(val) -> date:
@@ -123,7 +123,7 @@ def _dias_apertura(fmin: date, fmax: date, festivos: dict[date, str]) -> int:
     return count
 
 
-# ── Value / diff formatters ───────────────────────────────────────────────────
+# ── Value formatters ─────────────────────────────────────────────────────────
 
 
 def _agg_señal(serie: pd.Series, method: str) -> float | int | None:
@@ -148,71 +148,179 @@ def _fmt_val(val: float | int | None, suffix: str, method: str) -> str:
     return f"{int(val):,}{suffix}".replace(",", ".")
 
 
-def _raw_diff(
-    val_act: float | int | None,
-    val_ref: float | int | None,
+# ── Sentence generators ──────────────────────────────────────────────────────
+
+
+def _periodo_labels(ventana: str) -> tuple[str, str, str]:
+    """(per_act, lbl_sa, lbl_msa) — lowercase, ready for sentence composition."""
+    if ventana == "mes":
+        return (
+            "en el período analizado",
+            "el período anterior",
+            "el mismo período del año pasado",
+        )
+    return "esta semana", "la semana anterior", "la misma semana del año pasado"
+
+
+def _diff_clause(
+    diff: float | int | None,
+    ref_str: str | None,
+    lbl: str,
     suffix: str = "",
     decimals: int = 0,
-    color_by_sign: bool = False,
-) -> tuple[str, str]:
-    """(diff_string, color). Uses '−' (unicode minus) for negatives."""
-    if val_act is None or val_ref is None:
-        return "—", "#adb5bd"
-    diff = val_act - val_ref
+) -> str | None:
+    """
+    Generates the comparison clause:
+      '184 más que la semana anterior (1.050)'
+      'igual que la semana anterior (1.050)'
+      None when there is no reference data.
+    """
+    if diff is None or ref_str is None:
+        return None
     if diff == 0:
-        return "=", "#6c757d"
-    sign = "+" if diff > 0 else "−"
+        return f"igual que {lbl} ({ref_str})"
+    more = "más" if diff > 0 else "menos"
     abs_d = abs(diff)
-    s = (
-        f"{sign}{abs_d:.{decimals}f}{suffix}"
-        if decimals > 0
-        else f"{sign}{int(round(abs_d))}{suffix}"
-    )
-    color = ("#28A745" if diff > 0 else "#DC3545") if color_by_sign else "#495057"
-    return s, color
+    d_str = f"{abs_d:.{decimals}f}{suffix}" if decimals > 0 else f"{int(round(abs_d))}{suffix}"
+    return f"{d_str} {more} que {lbl} ({ref_str})"
 
 
-# ── UI atoms ─────────────────────────────────────────────────────────────────
+def _compose(inicio: str, *clauses: str | None) -> str:
+    """Joins inicio + comparison clauses into a single formal sentence."""
+    parts = [c for c in clauses if c is not None]
+    if not parts:
+        return inicio + "."
+    return inicio + ", " + " y ".join(parts) + "."
 
 
-def _bullet(
-    label: str,
-    val_act: str,
-    ref_sa: str,
-    diff_sa: str,
-    color_sa: str,
-    ref_msa: str,
-    diff_msa: str,
-    color_msa: str,
-) -> html.P:
-    """One paragraph line: • Label: val  ·  SA ref (diff)  ·  MSA ref (diff)"""
+def _p(text: str) -> html.P:
     return html.P(
-        [
-            html.Span("• ", style={"color": "#adb5bd"}),
-            html.Span(f"{label}: ", style={"fontWeight": "600", "color": "#343a40"}),
-            html.Span(val_act, style={"color": "#212529"}),
-            html.Span("  ·  SA ", style={"color": "#adb5bd", "fontSize": "0.74rem"}),
-            html.Span(ref_sa, style={"color": "#495057"}),
-            html.Span(
-                f" ({diff_sa})",
-                style={"color": color_sa, "fontWeight": "600"},
-            ),
-            html.Span("  ·  MSA ", style={"color": "#adb5bd", "fontSize": "0.74rem"}),
-            html.Span(ref_msa, style={"color": "#495057"}),
-            html.Span(
-                f" ({diff_msa})",
-                style={"color": color_msa, "fontWeight": "600"},
-            ),
-        ],
-        style={"fontSize": "0.83rem", "marginBottom": "4px", "lineHeight": "1.6"},
+        text,
+        style={
+            "fontSize": "0.83rem",
+            "marginBottom": "6px",
+            "lineHeight": "1.65",
+            "color": "#343a40",
+        },
     )
+
+
+def _sentence_visitantes(
+    zone_enum: int,
+    vis: int,
+    vis_sa: int | None,
+    vis_msa: int | None,
+    ventana: str,
+) -> html.P:
+    per, lbl_sa, lbl_msa = _periodo_labels(ventana)
+    sujeto = _ZONE_LABEL_FORMAL.get(zone_enum, "La zona")
+    vis_str = f"{vis:,}".replace(",", ".")
+    inicio = f"{sujeto} registró {vis_str} visitantes {per}"
+    ref_sa = f"{vis_sa:,}".replace(",", ".") if vis_sa is not None else None
+    ref_msa = f"{vis_msa:,}".replace(",", ".") if vis_msa is not None else None
+    diff_sa = vis - vis_sa if vis_sa is not None else None
+    diff_msa = vis - vis_msa if vis_msa is not None else None
+    return _p(
+        _compose(
+            inicio, _diff_clause(diff_sa, ref_sa, lbl_sa), _diff_clause(diff_msa, ref_msa, lbl_msa)
+        )
+    )
+
+
+def _sentence_dias_apertura(
+    ap_act: int,
+    dias_v: int,
+    ap_sa: int,
+    ap_msa: int,
+    ventana: str,
+) -> html.P:
+    per, lbl_sa, lbl_msa = _periodo_labels(ventana)
+    per_cap = per[0].upper() + per[1:]
+    inicio = f"{per_cap} hubo {ap_act} de {dias_v} días de apertura posibles"
+    diff_sa = ap_act - ap_sa
+    diff_msa = ap_act - ap_msa
+    return _p(
+        _compose(
+            inicio,
+            _diff_clause(diff_sa, str(ap_sa), lbl_sa),
+            _diff_clause(diff_msa, str(ap_msa), lbl_msa),
+        )
+    )
+
+
+def _inicio_señal(señal_id: str, val_act: float | int, val_str: str, ventana: str) -> str:
+    per, _, _ = _periodo_labels(ventana)
+    per_cap = per[0].upper() + per[1:]
+
+    if señal_id == "llueve":
+        if val_act == 0:
+            return f"{per_cap} no llovió"
+        if val_act == 1:
+            return f"{per_cap} llovió un día"
+        return f"{per_cap} llovió {int(val_act)} días"
+
+    if señal_id == "temp_max":
+        return f"La temperatura máxima media fue de {val_str} {per}"
+
+    if señal_id == "temp_min":
+        return f"La temperatura mínima media fue de {val_str} {per}"
+
+    if señal_id == "escala_crucero":
+        if val_act == 0:
+            return f"{per_cap} no hubo escalas de crucero"
+        if val_act == 1:
+            return f"{per_cap} se registró una escala de crucero"
+        return f"{per_cap} se registraron {int(val_act)} escalas de crucero"
+
+    if señal_id == "n_pasajeros_crucero_dia":
+        return f"El volumen estimado de pasajeros de crucero fue de {val_str} {per}"
+
+    if señal_id == "n_pasajeros_crucero_oficial":
+        return f"El volumen oficial de pasajeros de crucero fue de {val_str} {per}"
+
+    return f"{val_str} {per}"
+
+
+def _sentence_señal(
+    señal_id: str,
+    val_act: float | int,
+    suffix: str,
+    method: str,
+    val_sa: float | int | None,
+    val_msa: float | int | None,
+    ventana: str,
+) -> html.P:
+    _, lbl_sa, lbl_msa = _periodo_labels(ventana)
+    val_str = _fmt_val(val_act, suffix, method)
+    decimals = 1 if method == "mean" else 0
+    diff_suffix = suffix if method == "mean" else ""
+
+    inicio = _inicio_señal(señal_id, val_act, val_str, ventana)
+    ref_sa = _fmt_val(val_sa, suffix, method) if val_sa is not None else None
+    ref_msa = _fmt_val(val_msa, suffix, method) if val_msa is not None else None
+    diff_sa = float(val_act) - float(val_sa) if val_sa is not None else None
+    diff_msa = float(val_act) - float(val_msa) if val_msa is not None else None
+
+    return _p(
+        _compose(
+            inicio,
+            _diff_clause(diff_sa, ref_sa, lbl_sa, suffix=diff_suffix, decimals=decimals),
+            _diff_clause(diff_msa, ref_msa, lbl_msa, suffix=diff_suffix, decimals=decimals),
+        )
+    )
+
+
+# ── Sub-section header ───────────────────────────────────────────────────────
 
 
 def _sub_header(icon_cls: str, text: str, color: str) -> html.Div:
     return html.Div(
         [
             html.I(className=f"{icon_cls} me-2", style={"color": color, "fontSize": "0.78rem"}),
-            html.Span(text, style={"fontWeight": "600", "fontSize": "0.83rem", "color": "#343a40"}),
+            html.Span(
+                text,
+                style={"fontWeight": "600", "fontSize": "0.83rem", "color": "#343a40"},
+            ),
         ],
         className="mb-2 mt-3",
     )
@@ -350,25 +458,13 @@ def _tab_resumen(
     if not by_enum:
         return html.P("Sin datos de zona disponibles.", className="text-muted small")
 
-    def _fmt_vis(v: int) -> str:
-        return f"{v:,} vis.".replace(",", ".")
-
-    lines = []
+    sentences = []
     for ze in sorted(by_enum.keys(), reverse=True):  # exterior (2) first
         grp = by_enum[ze]
-        label = _ZONE_LABEL.get(ze, f"Zona {ze}")
         vis = grp["vis_act"]
-        sama = grp["vis_sama"] if grp["vis_sama"] > 0 else None
-        msaa = grp["vis_msaa"] if grp["vis_msaa"] > 0 else None
-
-        ref_sa = _fmt_vis(sama) if sama else "—"
-        ref_msa = _fmt_vis(msaa) if msaa else "—"
-        diff_sa, color_sa = _raw_diff(vis, sama, color_by_sign=True)
-        diff_msa, color_msa = _raw_diff(vis, msaa, color_by_sign=True)
-
-        lines.append(
-            _bullet(label, _fmt_vis(vis), ref_sa, diff_sa, color_sa, ref_msa, diff_msa, color_msa)
-        )
+        vis_sa = grp["vis_sama"] if grp["vis_sama"] > 0 else None
+        vis_msa = grp["vis_msaa"] if grp["vis_msaa"] > 0 else None
+        sentences.append(_sentence_visitantes(ze, vis, vis_sa, vis_msa, ventana))
 
     lbl_sa = "período anterior" if ventana == "mes" else "semana anterior"
     lbl_msa = "mismo período año anterior" if ventana == "mes" else "misma semana año anterior"
@@ -382,7 +478,7 @@ def _tab_resumen(
         className="text-muted mb-0 mt-2",
         style={"fontSize": "0.68rem"},
     )
-    return html.Div(lines + [footer])
+    return html.Div(sentences + [footer])
 
 
 def _tab_contexto_exterior(
@@ -399,23 +495,10 @@ def _tab_contexto_exterior(
     dias_v = 28 if ventana == "mes" else 7
 
     ap_act = _dias_apertura(fmin_p, fecha_max, festivos)
-    ap_sama = _dias_apertura(fmin_sama, fmax_sama, festivos)
-    ap_msaa = _dias_apertura(fmin_msaa, fmax_msaa, festivos)
-    diff_ap_sa, color_ap_sa = _raw_diff(ap_act, ap_sama)
-    diff_ap_msa, color_ap_msa = _raw_diff(ap_act, ap_msaa)
+    ap_sa = _dias_apertura(fmin_sama, fmax_sama, festivos)
+    ap_msa = _dias_apertura(fmin_msaa, fmax_msaa, festivos)
 
-    lines = [
-        _bullet(
-            "Días de apertura",
-            f"{ap_act} / {dias_v}",
-            f"{ap_sama} / {dias_v}",
-            diff_ap_sa,
-            color_ap_sa,
-            f"{ap_msaa} / {dias_v}",
-            diff_ap_msa,
-            color_ap_msa,
-        )
-    ]
+    sentences = [_sentence_dias_apertura(ap_act, dias_v, ap_sa, ap_msa, ventana)]
 
     if location_uuid:
         try:
@@ -432,7 +515,7 @@ def _tab_contexto_exterior(
                 .fetchall()
             }
 
-            for señal_id, label, suffix, method in _SIGNAL_CFG:
+            for señal_id, _label, suffix, method in _SIGNAL_CFG:
                 if señal_id not in available:
                     continue
                 try:
@@ -440,7 +523,10 @@ def _tab_contexto_exterior(
                         location_uuid, señal_id, pd.Timestamp(fmin_p), pd.Timestamp(fecha_max)
                     )
                     s_sa = get_señal_diaria(
-                        location_uuid, señal_id, pd.Timestamp(fmin_sama), pd.Timestamp(fmax_sama)
+                        location_uuid,
+                        señal_id,
+                        pd.Timestamp(fmin_sama),
+                        pd.Timestamp(fmax_sama),
                     )
                     s_msa = get_señal_diaria(
                         location_uuid,
@@ -457,29 +543,13 @@ def _tab_contexto_exterior(
                 if v_act is None:
                     continue
 
-                decimals = 1 if method == "mean" else 0
-                diff_suffix = suffix if method == "mean" else ""
-                ref_sa = _fmt_val(v_sa, suffix, method)
-                ref_msa = _fmt_val(v_msa, suffix, method)
-                diff_sa, color_sa = _raw_diff(v_act, v_sa, suffix=diff_suffix, decimals=decimals)
-                diff_msa, color_msa = _raw_diff(v_act, v_msa, suffix=diff_suffix, decimals=decimals)
-
-                lines.append(
-                    _bullet(
-                        label,
-                        _fmt_val(v_act, suffix, method),
-                        ref_sa,
-                        diff_sa,
-                        color_sa,
-                        ref_msa,
-                        diff_msa,
-                        color_msa,
-                    )
+                sentences.append(
+                    _sentence_señal(señal_id, v_act, suffix, method, v_sa, v_msa, ventana)
                 )
         except Exception:
             pass
 
-    # Calendar section
+    # Calendar
     festivos_en_periodo = {d: n for d, n in festivos.items() if fmin_p <= d <= fecha_max}
     legend = html.Div(
         [
@@ -511,7 +581,7 @@ def _tab_contexto_exterior(
 
     return html.Div(
         [
-            html.Div(lines),
+            html.Div(sentences),
             _sub_header("fas fa-calendar-alt", "Calendario del período", "#E67E22"),
             legend,
             _build_calendar(fmin_p, fecha_max, festivos),
@@ -533,21 +603,8 @@ def _tab_contexto_interior(
     dias_v = 28 if ventana == "mes" else 7
 
     ap_act = _dias_apertura(fmin_p, fecha_max, festivos)
-    ap_sama = _dias_apertura(fmin_sama, fmax_sama, festivos)
-    ap_msaa = _dias_apertura(fmin_msaa, fmax_msaa, festivos)
-    diff_sa, color_sa = _raw_diff(ap_act, ap_sama)
-    diff_msa, color_msa = _raw_diff(ap_act, ap_msaa)
-
-    line = _bullet(
-        "Días de apertura",
-        f"{ap_act} / {dias_v}",
-        f"{ap_sama} / {dias_v}",
-        diff_sa,
-        color_sa,
-        f"{ap_msaa} / {dias_v}",
-        diff_msa,
-        color_msa,
-    )
+    ap_sa = _dias_apertura(fmin_sama, fmax_sama, festivos)
+    ap_msa = _dias_apertura(fmin_msaa, fmax_msaa, festivos)
 
     placeholder = html.Div(
         html.P(
@@ -559,7 +616,7 @@ def _tab_contexto_interior(
         style={"backgroundColor": "#f8f9fa", "border": "1px dashed #dee2e6"},
     )
 
-    return html.Div([line, placeholder])
+    return html.Div([_sentence_dias_apertura(ap_act, dias_v, ap_sa, ap_msa, ventana), placeholder])
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
