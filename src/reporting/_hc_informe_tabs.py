@@ -562,19 +562,7 @@ def _tab_resumen(
         blocks.append(_zone_header(ze))
         blocks.append(_sentence_visitantes(ze, vis, vis_sa, vis_msa, ventana))
 
-    lbl_sa = "período anterior" if ventana == "mes" else "semana anterior"
-    lbl_msa = "mismo período año anterior" if ventana == "mes" else "misma semana año anterior"
-    footer = html.P(
-        [
-            html.Span("SA = ", style={"fontWeight": "600"}),
-            f"{lbl_sa}  ·  ",
-            html.Span("MSA = ", style={"fontWeight": "600"}),
-            lbl_msa,
-        ],
-        className="text-muted mb-0 mt-3",
-        style={"fontSize": "0.70rem"},
-    )
-    return html.Div(blocks + [footer])
+    return html.Div(blocks)
 
 
 def _tab_contexto_exterior(
@@ -751,6 +739,7 @@ def render_informe_tabs(
                     style={"paddingTop": "12px"},
                 ),
                 label="Resumen",
+                tab_id="resumen",
                 label_style=_lbl_style,
                 active_label_style={**_active_style, "color": "#0052CC"},
             ),
@@ -792,6 +781,7 @@ def render_informe_tabs(
                 active_label_style={**_active_style, "color": "#8E44AD"},
             ),
         ],
+        active_tab="resumen",
     )
 
     return dbc.Card(
