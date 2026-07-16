@@ -42,6 +42,7 @@ _CIUDAD_SUBDIV: dict[str, str] = {
 }
 
 _ZONE_LABEL_FORMAL = {0: "La zona de caja", 1: "La tienda", 2: "La zona exterior"}
+_ZONE_LABEL_SHORT = {0: "Caja / Checkout", 1: "Interior (tienda)", 2: "Exterior (calle)"}
 _ZONE_ICON = {0: "fas fa-cash-register", 1: "fas fa-store", 2: "fas fa-street-view"}
 _ZONE_COLOR = {0: "#6c757d", 1: "#0052CC", 2: "#28A745"}
 
@@ -56,6 +57,18 @@ _SIGNAL_CFG: list[tuple[str, str, str, str]] = [
 ]
 
 _DIA_NAMES = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"]
+
+# ── Typography & color tokens ────────────────────────────────────────────────
+_C_PROSE = "#495057"
+_C_VAL = "#1e293b"  # bold KPI values
+_C_REF = "#9ca3af"  # small reference values in parentheses
+_C_POS = "#16a34a"  # positive diff
+_C_NEG = "#dc2626"  # negative diff
+_C_NEU = "#6b7280"  # neutral / equal
+
+_SZ_PROSE = "0.88rem"
+_SZ_VAL = "1.08rem"
+_SZ_REF = "0.78rem"
 
 
 # ── Date / location helpers ──────────────────────────────────────────────────
@@ -148,11 +161,43 @@ def _fmt_val(val: float | int | None, suffix: str, method: str) -> str:
     return f"{int(val):,}{suffix}".replace(",", ".")
 
 
-# ── Sentence generators ──────────────────────────────────────────────────────
+# ── Span builders ────────────────────────────────────────────────────────────
+
+
+def _t(text: str) -> html.Span:
+    return html.Span(text, style={"color": _C_PROSE})
+
+
+def _bold(text: str, color: str = _C_VAL, size: str = _SZ_VAL) -> html.Span:
+    return html.Span(text, style={"fontWeight": "700", "fontSize": size, "color": color})
+
+
+def _diff_span(text: str, positive: bool | None) -> html.Span:
+    color = _C_POS if positive is True else _C_NEG if positive is False else _C_NEU
+    return html.Span(text, style={"fontWeight": "700", "color": color})
+
+
+def _ref(text: str) -> html.Span:
+    return html.Span(text, style={"color": _C_REF, "fontSize": _SZ_REF})
+
+
+def _sp(children: list) -> html.P:
+    return html.P(
+        children,
+        style={
+            "fontSize": _SZ_PROSE,
+            "marginBottom": "10px",
+            "lineHeight": "1.75",
+            "color": _C_PROSE,
+        },
+    )
+
+
+# ── Sentence composition ─────────────────────────────────────────────────────
 
 
 def _periodo_labels(ventana: str) -> tuple[str, str, str]:
-    """(per_act, lbl_sa, lbl_msa) — lowercase, ready for sentence composition."""
+    """(per_act_lower, lbl_sa, lbl_msa) — lowercase, ready for composition."""
     if ventana == "mes":
         return (
             "en el período analizado",
@@ -162,47 +207,44 @@ def _periodo_labels(ventana: str) -> tuple[str, str, str]:
     return "esta semana", "la semana anterior", "la misma semana del año pasado"
 
 
-def _diff_clause(
+def _diff_spans(
     diff: float | int | None,
     ref_str: str | None,
     lbl: str,
     suffix: str = "",
     decimals: int = 0,
-) -> str | None:
-    """
-    Generates the comparison clause:
-      '184 más que la semana anterior (1.050)'
-      'igual que la semana anterior (1.050)'
-      None when there is no reference data.
-    """
+) -> list:
+    """Span list for one comparison clause, empty if no data."""
     if diff is None or ref_str is None:
-        return None
+        return []
     if diff == 0:
-        return f"igual que {lbl} ({ref_str})"
-    more = "más" if diff > 0 else "menos"
+        return [_t(f"igual que {lbl} "), _ref(f"({ref_str})")]
+    is_pos = diff > 0
+    more = "más" if is_pos else "menos"
     abs_d = abs(diff)
     d_str = f"{abs_d:.{decimals}f}{suffix}" if decimals > 0 else f"{int(round(abs_d))}{suffix}"
-    return f"{d_str} {more} que {lbl} ({ref_str})"
+    return [
+        _diff_span(f"{d_str} {more}", positive=is_pos),
+        _t(f" que {lbl} "),
+        _ref(f"({ref_str})"),
+    ]
 
 
-def _compose(inicio: str, *clauses: str | None) -> str:
-    """Joins inicio + comparison clauses into a single formal sentence."""
-    parts = [c for c in clauses if c is not None]
-    if not parts:
-        return inicio + "."
-    return inicio + ", " + " y ".join(parts) + "."
+def _assemble(inicio: list, sa: list, msa: list) -> list:
+    """Combine inicio spans with up to two comparison clauses."""
+    children = list(inicio)
+    clauses = [c for c in [sa, msa] if c]
+    if clauses:
+        children.append(_t(", "))
+        children.extend(clauses[0])
+        if len(clauses) > 1:
+            children.append(_t(" y "))
+            children.extend(clauses[1])
+    children.append(_t("."))
+    return children
 
 
-def _p(text: str) -> html.P:
-    return html.P(
-        text,
-        style={
-            "fontSize": "0.83rem",
-            "marginBottom": "6px",
-            "lineHeight": "1.65",
-            "color": "#343a40",
-        },
-    )
+# ── Per-signal sentence builders ─────────────────────────────────────────────
 
 
 def _sentence_visitantes(
@@ -214,15 +256,17 @@ def _sentence_visitantes(
 ) -> html.P:
     per, lbl_sa, lbl_msa = _periodo_labels(ventana)
     sujeto = _ZONE_LABEL_FORMAL.get(zone_enum, "La zona")
+    color = _ZONE_COLOR.get(zone_enum, _C_VAL)
     vis_str = f"{vis:,}".replace(",", ".")
-    inicio = f"{sujeto} registró {vis_str} visitantes {per}"
     ref_sa = f"{vis_sa:,}".replace(",", ".") if vis_sa is not None else None
     ref_msa = f"{vis_msa:,}".replace(",", ".") if vis_msa is not None else None
     diff_sa = vis - vis_sa if vis_sa is not None else None
     diff_msa = vis - vis_msa if vis_msa is not None else None
-    return _p(
-        _compose(
-            inicio, _diff_clause(diff_sa, ref_sa, lbl_sa), _diff_clause(diff_msa, ref_msa, lbl_msa)
+
+    inicio = [_t(f"{sujeto} registró "), _bold(vis_str, color=color), _t(f" visitantes {per}")]
+    return _sp(
+        _assemble(
+            inicio, _diff_spans(diff_sa, ref_sa, lbl_sa), _diff_spans(diff_msa, ref_msa, lbl_msa)
         )
     )
 
@@ -236,49 +280,21 @@ def _sentence_dias_apertura(
 ) -> html.P:
     per, lbl_sa, lbl_msa = _periodo_labels(ventana)
     per_cap = per[0].upper() + per[1:]
-    inicio = f"{per_cap} hubo {ap_act} de {dias_v} días de apertura posibles"
     diff_sa = ap_act - ap_sa
     diff_msa = ap_act - ap_msa
-    return _p(
-        _compose(
+
+    inicio = [
+        _t(f"{per_cap} hubo "),
+        _bold(f"{ap_act} de {dias_v}"),
+        _t(" días de apertura posibles"),
+    ]
+    return _sp(
+        _assemble(
             inicio,
-            _diff_clause(diff_sa, str(ap_sa), lbl_sa),
-            _diff_clause(diff_msa, str(ap_msa), lbl_msa),
+            _diff_spans(diff_sa, str(ap_sa), lbl_sa),
+            _diff_spans(diff_msa, str(ap_msa), lbl_msa),
         )
     )
-
-
-def _inicio_señal(señal_id: str, val_act: float | int, val_str: str, ventana: str) -> str:
-    per, _, _ = _periodo_labels(ventana)
-    per_cap = per[0].upper() + per[1:]
-
-    if señal_id == "llueve":
-        if val_act == 0:
-            return f"{per_cap} no llovió"
-        if val_act == 1:
-            return f"{per_cap} llovió un día"
-        return f"{per_cap} llovió {int(val_act)} días"
-
-    if señal_id == "temp_max":
-        return f"La temperatura máxima media fue de {val_str} {per}"
-
-    if señal_id == "temp_min":
-        return f"La temperatura mínima media fue de {val_str} {per}"
-
-    if señal_id == "escala_crucero":
-        if val_act == 0:
-            return f"{per_cap} no hubo escalas de crucero"
-        if val_act == 1:
-            return f"{per_cap} se registró una escala de crucero"
-        return f"{per_cap} se registraron {int(val_act)} escalas de crucero"
-
-    if señal_id == "n_pasajeros_crucero_dia":
-        return f"El volumen estimado de pasajeros de crucero fue de {val_str} {per}"
-
-    if señal_id == "n_pasajeros_crucero_oficial":
-        return f"El volumen oficial de pasajeros de crucero fue de {val_str} {per}"
-
-    return f"{val_str} {per}"
 
 
 def _sentence_señal(
@@ -290,23 +306,99 @@ def _sentence_señal(
     val_msa: float | int | None,
     ventana: str,
 ) -> html.P:
-    _, lbl_sa, lbl_msa = _periodo_labels(ventana)
-    val_str = _fmt_val(val_act, suffix, method)
+    per, lbl_sa, lbl_msa = _periodo_labels(ventana)
+    per_cap = per[0].upper() + per[1:]
     decimals = 1 if method == "mean" else 0
     diff_suffix = suffix if method == "mean" else ""
+    ref_suffix = suffix if method == "mean" else ""
 
-    inicio = _inicio_señal(señal_id, val_act, val_str, ventana)
-    ref_sa = _fmt_val(val_sa, suffix, method) if val_sa is not None else None
-    ref_msa = _fmt_val(val_msa, suffix, method) if val_msa is not None else None
+    # Build inicio spans (varies per signal)
+    if señal_id == "llueve":
+        if val_act == 0:
+            inicio: list = [_t(f"{per_cap} no llovió")]
+        elif val_act == 1:
+            inicio = [_t(f"{per_cap} llovió "), _bold("un"), _t(" día")]
+        else:
+            inicio = [_t(f"{per_cap} llovió "), _bold(str(int(val_act))), _t(" días")]
+
+    elif señal_id == "temp_max":
+        inicio = [
+            _t("La temperatura máxima media fue de "),
+            _bold(_fmt_val(val_act, suffix, method)),
+            _t(f" {per}"),
+        ]
+
+    elif señal_id == "temp_min":
+        inicio = [
+            _t("La temperatura mínima media fue de "),
+            _bold(_fmt_val(val_act, suffix, method)),
+            _t(f" {per}"),
+        ]
+
+    elif señal_id == "escala_crucero":
+        if val_act == 0:
+            inicio = [_t(f"{per_cap} no hubo escalas de crucero")]
+        elif val_act == 1:
+            inicio = [_t(f"{per_cap} se registró "), _bold("una"), _t(" escala de crucero")]
+        else:
+            inicio = [
+                _t(f"{per_cap} se registraron "),
+                _bold(str(int(val_act))),
+                _t(" escalas de crucero"),
+            ]
+
+    elif señal_id == "n_pasajeros_crucero_dia":
+        inicio = [
+            _t("El volumen estimado de pasajeros de crucero fue de "),
+            _bold(_fmt_val(val_act, "", "sum_int")),
+            _t(f" {per}"),
+        ]
+
+    elif señal_id == "n_pasajeros_crucero_oficial":
+        inicio = [
+            _t("El volumen oficial de pasajeros de crucero fue de "),
+            _bold(_fmt_val(val_act, "", "sum_int")),
+            _t(f" {per}"),
+        ]
+
+    else:
+        inicio = [_bold(_fmt_val(val_act, suffix, method)), _t(f" {per}")]
+
+    ref_sa = _fmt_val(val_sa, ref_suffix, method) if val_sa is not None else None
+    ref_msa = _fmt_val(val_msa, ref_suffix, method) if val_msa is not None else None
     diff_sa = float(val_act) - float(val_sa) if val_sa is not None else None
     diff_msa = float(val_act) - float(val_msa) if val_msa is not None else None
 
-    return _p(
-        _compose(
+    return _sp(
+        _assemble(
             inicio,
-            _diff_clause(diff_sa, ref_sa, lbl_sa, suffix=diff_suffix, decimals=decimals),
-            _diff_clause(diff_msa, ref_msa, lbl_msa, suffix=diff_suffix, decimals=decimals),
+            _diff_spans(diff_sa, ref_sa, lbl_sa, suffix=diff_suffix, decimals=decimals),
+            _diff_spans(diff_msa, ref_msa, lbl_msa, suffix=diff_suffix, decimals=decimals),
         )
+    )
+
+
+# ── Zone header ──────────────────────────────────────────────────────────────
+
+
+def _zone_header(zone_enum: int) -> html.Div:
+    label = _ZONE_LABEL_SHORT.get(zone_enum, f"Zona {zone_enum}")
+    icon = _ZONE_ICON.get(zone_enum, "fas fa-layer-group")
+    color = _ZONE_COLOR.get(zone_enum, "#6c757d")
+    return html.Div(
+        [
+            html.I(className=f"{icon} me-2", style={"color": color, "fontSize": "0.75rem"}),
+            html.Span(
+                label.upper(),
+                style={
+                    "fontSize": "0.68rem",
+                    "fontWeight": "700",
+                    "color": color,
+                    "letterSpacing": "0.8px",
+                },
+            ),
+        ],
+        className="mb-1 mt-3",
     )
 
 
@@ -319,7 +411,7 @@ def _sub_header(icon_cls: str, text: str, color: str) -> html.Div:
             html.I(className=f"{icon_cls} me-2", style={"color": color, "fontSize": "0.78rem"}),
             html.Span(
                 text,
-                style={"fontWeight": "600", "fontSize": "0.83rem", "color": "#343a40"},
+                style={"fontWeight": "600", "fontSize": "0.85rem", "color": "#343a40"},
             ),
         ],
         className="mb-2 mt-3",
@@ -338,11 +430,11 @@ def _build_calendar(fmin: date, fmax: date, festivos: dict[date, str]) -> html.D
             html.Th(
                 d,
                 style={
-                    "fontSize": "0.67rem",
+                    "fontSize": "0.69rem",
                     "textAlign": "center",
                     "color": "#dc3545" if i >= 5 else "#6c757d",
                     "padding": "2px 4px",
-                    "fontWeight": "600",
+                    "fontWeight": "700",
                 },
             )
             for i, d in enumerate(_DIA_NAMES)
@@ -362,7 +454,7 @@ def _build_calendar(fmin: date, fmax: date, festivos: dict[date, str]) -> html.D
             if not in_period:
                 bg, color, fw, border = "transparent", "#dee2e6", "normal", "none"
             elif is_festivo:
-                bg, color, fw, border = "#fff3cd", "#856404", "600", "1px solid #ffc107"
+                bg, color, fw, border = "#fff3cd", "#856404", "700", "1px solid #ffc107"
             elif is_sunday:
                 bg, color, fw, border = "#f8f9fa", "#adb5bd", "normal", "1px solid #e9ecef"
             elif is_saturday:
@@ -371,7 +463,11 @@ def _build_calendar(fmin: date, fmax: date, festivos: dict[date, str]) -> html.D
                 bg, color, fw, border = "#ffffff", "#212529", "normal", "1px solid #e9ecef"
 
             festivo_name = festivos.get(d, "")
-            children: list = [html.Span(str(d.day), style={"display": "block", "fontWeight": fw})]
+            children: list = [
+                html.Span(
+                    str(d.day), style={"display": "block", "fontWeight": fw, "fontSize": "0.8rem"}
+                )
+            ]
             if festivo_name and in_period:
                 short = festivo_name.split("(")[0].strip()
                 if len(short) > 12:
@@ -380,9 +476,9 @@ def _build_calendar(fmin: date, fmax: date, festivos: dict[date, str]) -> html.D
                     html.Span(
                         short,
                         style={
-                            "fontSize": "0.50rem",
+                            "fontSize": "0.52rem",
                             "display": "block",
-                            "lineHeight": "1.1",
+                            "lineHeight": "1.15",
                             "color": "#856404",
                             "wordBreak": "break-word",
                         },
@@ -394,12 +490,11 @@ def _build_calendar(fmin: date, fmax: date, festivos: dict[date, str]) -> html.D
                     children,
                     style={
                         "textAlign": "center",
-                        "fontSize": "0.74rem",
-                        "padding": "3px 2px",
+                        "padding": "4px 2px",
                         "backgroundColor": bg,
                         "color": color,
-                        "borderRadius": "4px",
-                        "minWidth": "34px",
+                        "borderRadius": "5px",
+                        "minWidth": "36px",
                         "verticalAlign": "top",
                         "border": border,
                     },
@@ -414,11 +509,11 @@ def _build_calendar(fmin: date, fmax: date, festivos: dict[date, str]) -> html.D
             style={
                 "width": "100%",
                 "borderCollapse": "separate",
-                "borderSpacing": "2px",
+                "borderSpacing": "3px",
                 "tableLayout": "fixed",
             },
         ),
-        style={"overflowX": "auto", "marginTop": "6px"},
+        style={"overflowX": "auto", "marginTop": "8px"},
     )
 
 
@@ -458,13 +553,14 @@ def _tab_resumen(
     if not by_enum:
         return html.P("Sin datos de zona disponibles.", className="text-muted small")
 
-    sentences = []
+    blocks = []
     for ze in sorted(by_enum.keys(), reverse=True):  # exterior (2) first
         grp = by_enum[ze]
         vis = grp["vis_act"]
         vis_sa = grp["vis_sama"] if grp["vis_sama"] > 0 else None
         vis_msa = grp["vis_msaa"] if grp["vis_msaa"] > 0 else None
-        sentences.append(_sentence_visitantes(ze, vis, vis_sa, vis_msa, ventana))
+        blocks.append(_zone_header(ze))
+        blocks.append(_sentence_visitantes(ze, vis, vis_sa, vis_msa, ventana))
 
     lbl_sa = "período anterior" if ventana == "mes" else "semana anterior"
     lbl_msa = "mismo período año anterior" if ventana == "mes" else "misma semana año anterior"
@@ -475,10 +571,10 @@ def _tab_resumen(
             html.Span("MSA = ", style={"fontWeight": "600"}),
             lbl_msa,
         ],
-        className="text-muted mb-0 mt-2",
-        style={"fontSize": "0.68rem"},
+        className="text-muted mb-0 mt-3",
+        style={"fontSize": "0.70rem"},
     )
-    return html.Div(sentences + [footer])
+    return html.Div(blocks + [footer])
 
 
 def _tab_contexto_exterior(
@@ -523,10 +619,7 @@ def _tab_contexto_exterior(
                         location_uuid, señal_id, pd.Timestamp(fmin_p), pd.Timestamp(fecha_max)
                     )
                     s_sa = get_señal_diaria(
-                        location_uuid,
-                        señal_id,
-                        pd.Timestamp(fmin_sama),
-                        pd.Timestamp(fmax_sama),
+                        location_uuid, señal_id, pd.Timestamp(fmin_sama), pd.Timestamp(fmax_sama)
                     )
                     s_msa = get_señal_diaria(
                         location_uuid,
@@ -553,10 +646,10 @@ def _tab_contexto_exterior(
     festivos_en_periodo = {d: n for d, n in festivos.items() if fmin_p <= d <= fecha_max}
     legend = html.Div(
         [
-            html.Span("■ Festivo  ", style={"color": "#856404", "fontSize": "0.68rem"}),
-            html.Span("■ Sábado  ", style={"color": "#6c757d", "fontSize": "0.68rem"}),
-            html.Span("■ Domingo  ", style={"color": "#adb5bd", "fontSize": "0.68rem"}),
-            html.Span("■ Laborable", style={"color": "#212529", "fontSize": "0.68rem"}),
+            html.Span("■ Festivo  ", style={"color": "#856404", "fontSize": "0.72rem"}),
+            html.Span("■ Sábado  ", style={"color": "#6c757d", "fontSize": "0.72rem"}),
+            html.Span("■ Domingo  ", style={"color": "#adb5bd", "fontSize": "0.72rem"}),
+            html.Span("■ Laborable", style={"color": "#495057", "fontSize": "0.72rem"}),
         ]
     )
     festivos_list = (
@@ -565,7 +658,7 @@ def _tab_contexto_exterior(
                 html.Span(
                     f"{d.strftime('%d/%m')}  {name}",
                     className="d-block",
-                    style={"fontSize": "0.72rem", "color": "#856404"},
+                    style={"fontSize": "0.76rem", "color": "#856404"},
                 )
                 for d, name in sorted(festivos_en_periodo.items())
             ],
@@ -575,7 +668,7 @@ def _tab_contexto_exterior(
         else html.P(
             "Sin festivos en el período.",
             className="text-muted mt-2 mb-0",
-            style={"fontSize": "0.72rem"},
+            style={"fontSize": "0.76rem"},
         )
     )
 
@@ -610,9 +703,9 @@ def _tab_contexto_interior(
         html.P(
             "Próximamente: competencia, promociones activas, lanzamientos de producto.",
             className="text-muted fst-italic mb-0",
-            style={"fontSize": "0.79rem"},
+            style={"fontSize": "0.82rem"},
         ),
-        className="p-3 rounded-3 mt-2",
+        className="p-3 rounded-3 mt-3",
         style={"backgroundColor": "#f8f9fa", "border": "1px dashed #dee2e6"},
     )
 
@@ -647,15 +740,15 @@ def render_informe_tabs(
     pais_codigo, ciudad = _get_location_meta(location_uuid) if location_uuid else ("ES", "")
     festivos = _get_festivos(pais_codigo, ciudad, years)
 
-    _lbl_style = {"fontSize": "0.81rem", "padding": "6px 10px"}
-    _active_style = {"fontSize": "0.81rem", "padding": "6px 10px", "fontWeight": "600"}
+    _lbl_style = {"fontSize": "0.83rem", "padding": "7px 12px"}
+    _active_style = {"fontSize": "0.83rem", "padding": "7px 12px", "fontWeight": "600"}
 
     tabs = dbc.Tabs(
         [
             dbc.Tab(
                 html.Div(
                     _tab_resumen(zonas_data, df, fmin_p, fecha_max, ventana),
-                    style={"paddingTop": "10px"},
+                    style={"paddingTop": "12px"},
                 ),
                 label="Resumen",
                 label_style=_lbl_style,
@@ -674,7 +767,7 @@ def render_informe_tabs(
                         fmin_msaa,
                         fmax_msaa,
                     ),
-                    style={"paddingTop": "10px"},
+                    style={"paddingTop": "12px"},
                 ),
                 label="Contexto exterior",
                 label_style=_lbl_style,
@@ -692,7 +785,7 @@ def render_informe_tabs(
                         fmin_msaa,
                         fmax_msaa,
                     ),
-                    style={"paddingTop": "10px"},
+                    style={"paddingTop": "12px"},
                 ),
                 label="Contexto interior",
                 label_style=_lbl_style,
@@ -710,7 +803,7 @@ def render_informe_tabs(
                         "Informe de período",
                     ],
                     className="fw-bold mb-2",
-                    style={"fontSize": "0.92rem", "color": "#2c3e50"},
+                    style={"fontSize": "0.94rem", "color": "#1e293b"},
                 ),
                 tabs,
             ]
