@@ -382,7 +382,7 @@ def _sentence_señal(
 
 
 def _zone_header(zone_enum: int) -> html.Div:
-    label = _ZONE_LABEL_SHORT.get(zone_enum, f"Zona {zone_enum}")
+    label = _ZONE_LABEL_SHORT.get(zone_enum, "Subzona")
     icon = _ZONE_ICON.get(zone_enum, "fas fa-layer-group")
     color = _ZONE_COLOR.get(zone_enum, "#6c757d")
     return html.Div(
@@ -533,7 +533,7 @@ def _tab_resumen(
     by_enum: dict[int, dict] = {}
     for z in zonas_data:
         ze = z.get("zone_enum")
-        if ze is None:
+        if ze is None or ze not in (0, 1, 2):  # skip sub-zones (zone_enum=3)
             continue
         if ze not in by_enum:
             by_enum[ze] = {"zona_names": [], "vis_act": 0, "vis_sama": 0, "vis_msaa": 0}
