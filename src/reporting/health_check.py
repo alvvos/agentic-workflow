@@ -65,9 +65,7 @@ from src.reporting._hc_charts import (
 from src.reporting._hc_charts import (
     _fig_embudo_conversion as _fig_embudo_conversion_base,
 )
-from src.reporting._hc_correlacion import (  # noqa: E402
-    _render_correlacion_signals,
-)
+from src.reporting._hc_informe_tabs import render_informe_tabs
 from src.reporting.geo_panel import generar_mapa_contexto, generar_panel_geo_visual
 
 
@@ -2141,10 +2139,6 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
         html.P("Sin datos de contexto externo disponibles.", className="text-muted")
     )
 
-    sec_correlaciones = _render_correlacion_signals(
-        location_uuid, df, fmin_p, fecha_max, ventana=ventana
-    )
-
     mapa_contexto = generar_mapa_contexto(location_uuid, geo_vals_loc) if location_uuid else None
     sec_geo = (
         generar_panel_geo_visual(location_uuid, geo_vals_loc, clima, fecha_captura=fecha_captura)
@@ -2196,21 +2190,8 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
         className="pm-acordeon shadow-sm rounded-4",
     )
 
-    _correlacion_card = dbc.Card(
-        dbc.CardBody(
-            [
-                html.H6(
-                    [
-                        html.I(className="fas fa-chart-line me-2 text-primary"),
-                        "Señales externas y correlación con tráfico exterior",
-                    ],
-                    className="fw-bold mb-2",
-                    style={"fontSize": "0.92rem", "color": _C_DARK},
-                ),
-                sec_correlaciones,
-            ]
-        ),
-        className="border-0 shadow-sm rounded-4 h-100",
+    _correlacion_card = render_informe_tabs(
+        location_uuid, zonas_data, df, fmin_p, fecha_max, ventana=ventana
     )
 
     cuerpo_superior = (
