@@ -1,8 +1,8 @@
 [Unit]
-Description=Agentic Workflow — timer sync nocturno (02:00 diario)
+Description=Agentic Workflow — timer sync nocturno (10:45 UTC diario)
 
 [Timer]
-OnCalendar=*-*-* 02:00:00
+OnCalendar=*-*-* 10:45:00
 # Si el servidor estaba apagado, ejecuta al arrancar si se perdió la ventana
 Persistent=true
 
