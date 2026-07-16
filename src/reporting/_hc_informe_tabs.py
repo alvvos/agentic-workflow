@@ -58,7 +58,7 @@ _SIGNAL_CFG: list[tuple[str, str, str, str]] = [
 _DIA_NAMES = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"]
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# ── Date helpers ─────────────────────────────────────────────────────────────
 
 
 def _to_date(val) -> date:
@@ -66,7 +66,7 @@ def _to_date(val) -> date:
         return val.date()
     if hasattr(val, "date") and callable(val.date):
         return val.date()
-    return val  # already a date
+    return val
 
 
 def _get_location_meta(location_uuid: str) -> tuple[str, str]:
@@ -123,14 +123,7 @@ def _dias_apertura(fmin: date, fmax: date, festivos: dict[date, str]) -> int:
     return count
 
 
-def _delta_fmt(val_act: float | int | None, val_ref: float | int | None) -> tuple[str, str]:
-    """(formatted delta string, hex color). ref=None or 0 → ('—', gray)."""
-    if val_ref is None or val_ref == 0 or val_act is None:
-        return "—", "#adb5bd"
-    pct = (val_act - val_ref) / abs(val_ref) * 100
-    sign = "+" if pct >= 0 else ""
-    color = "#28A745" if pct >= 0.5 else "#DC3545" if pct < -0.5 else "#6c757d"
-    return f"{sign}{pct:.0f}%", color
+# ── Value / diff formatters ───────────────────────────────────────────────────
 
 
 def _agg_señal(serie: pd.Series, method: str) -> float | int | None:
@@ -155,59 +148,63 @@ def _fmt_val(val: float | int | None, suffix: str, method: str) -> str:
     return f"{int(val):,}{suffix}".replace(",", ".")
 
 
+def _raw_diff(
+    val_act: float | int | None,
+    val_ref: float | int | None,
+    suffix: str = "",
+    decimals: int = 0,
+    color_by_sign: bool = False,
+) -> tuple[str, str]:
+    """(diff_string, color). Uses '−' (unicode minus) for negatives."""
+    if val_act is None or val_ref is None:
+        return "—", "#adb5bd"
+    diff = val_act - val_ref
+    if diff == 0:
+        return "=", "#6c757d"
+    sign = "+" if diff > 0 else "−"
+    abs_d = abs(diff)
+    s = (
+        f"{sign}{abs_d:.{decimals}f}{suffix}"
+        if decimals > 0
+        else f"{sign}{int(round(abs_d))}{suffix}"
+    )
+    color = ("#28A745" if diff > 0 else "#DC3545") if color_by_sign else "#495057"
+    return s, color
+
+
 # ── UI atoms ─────────────────────────────────────────────────────────────────
 
 
-def _kpi_row(
+def _bullet(
     label: str,
-    valor: str,
-    d_sama: tuple[str, str],
-    d_msaa: tuple[str, str],
-) -> html.Tr:
-    def _badge(text: str, color: str) -> html.Span:
-        return html.Span(
-            text,
-            style={
-                "color": color,
-                "fontWeight": "600",
-                "fontSize": "0.76rem",
-                "minWidth": "38px",
-                "display": "inline-block",
-            },
-        )
-
-    return html.Tr(
+    val_act: str,
+    ref_sa: str,
+    diff_sa: str,
+    color_sa: str,
+    ref_msa: str,
+    diff_msa: str,
+    color_msa: str,
+) -> html.P:
+    """One paragraph line: • Label: val  ·  SA ref (diff)  ·  MSA ref (diff)"""
+    return html.P(
         [
-            html.Td(
-                label,
-                style={
-                    "fontSize": "0.81rem",
-                    "color": "#495057",
-                    "paddingRight": "10px",
-                    "paddingTop": "5px",
-                    "paddingBottom": "5px",
-                },
+            html.Span("• ", style={"color": "#adb5bd"}),
+            html.Span(f"{label}: ", style={"fontWeight": "600", "color": "#343a40"}),
+            html.Span(val_act, style={"color": "#212529"}),
+            html.Span("  ·  SA ", style={"color": "#adb5bd", "fontSize": "0.74rem"}),
+            html.Span(ref_sa, style={"color": "#495057"}),
+            html.Span(
+                f" ({diff_sa})",
+                style={"color": color_sa, "fontWeight": "600"},
             ),
-            html.Td(
-                html.Strong(valor, style={"fontSize": "0.87rem"}),
-                style={"whiteSpace": "nowrap", "paddingRight": "10px"},
-            ),
-            html.Td(
-                [
-                    html.Span("Vs SA  ", style={"fontSize": "0.67rem", "color": "#adb5bd"}),
-                    _badge(*d_sama),
-                ],
-                style={"whiteSpace": "nowrap", "paddingRight": "6px"},
-            ),
-            html.Td(
-                [
-                    html.Span("Vs MSA  ", style={"fontSize": "0.67rem", "color": "#adb5bd"}),
-                    _badge(*d_msaa),
-                ],
-                style={"whiteSpace": "nowrap"},
+            html.Span("  ·  MSA ", style={"color": "#adb5bd", "fontSize": "0.74rem"}),
+            html.Span(ref_msa, style={"color": "#495057"}),
+            html.Span(
+                f" ({diff_msa})",
+                style={"color": color_msa, "fontWeight": "600"},
             ),
         ],
-        className="border-bottom",
+        style={"fontSize": "0.83rem", "marginBottom": "4px", "lineHeight": "1.6"},
     )
 
 
@@ -330,7 +327,6 @@ def _tab_resumen(
     fmin_msaa = fmin_p - timedelta(days=364)
     fmax_msaa = fecha_max - timedelta(days=364)
 
-    # Aggregate current + SAMA by zone_enum
     by_enum: dict[int, dict] = {}
     for z in zonas_data:
         ze = z.get("zone_enum")
@@ -342,9 +338,8 @@ def _tab_resumen(
         by_enum[ze]["vis_act"] += z["r"].get("visitantes", 0)
         by_enum[ze]["vis_sama"] += z["a"].get("visitantes", 0)
 
-    # MSAA via df
     if not df.empty and "unique_visitors" in df.columns and "Zona" in df.columns:
-        for ze, grp in by_enum.items():
+        for grp in by_enum.values():
             mask = (
                 df["Zona"].isin(grp["zona_names"])
                 & (df["fecha_dt"] >= fmin_msaa)
@@ -355,52 +350,24 @@ def _tab_resumen(
     if not by_enum:
         return html.P("Sin datos de zona disponibles.", className="text-muted small")
 
-    rows = []
+    def _fmt_vis(v: int) -> str:
+        return f"{v:,} vis.".replace(",", ".")
+
+    lines = []
     for ze in sorted(by_enum.keys(), reverse=True):  # exterior (2) first
         grp = by_enum[ze]
         label = _ZONE_LABEL.get(ze, f"Zona {ze}")
-        icon = _ZONE_ICON.get(ze, "fas fa-layer-group")
-        color = _ZONE_COLOR.get(ze, "#6c757d")
-
         vis = grp["vis_act"]
-        sama = grp["vis_sama"]
-        msaa = grp["vis_msaa"]
+        sama = grp["vis_sama"] if grp["vis_sama"] > 0 else None
+        msaa = grp["vis_msaa"] if grp["vis_msaa"] > 0 else None
 
-        vis_str = f"{vis:,}".replace(",", ".")
-        rows.append(
-            html.Div(
-                [
-                    html.Div(
-                        [
-                            html.I(
-                                className=f"{icon} me-1",
-                                style={"color": color, "fontSize": "0.74rem"},
-                            ),
-                            html.Span(
-                                label,
-                                style={
-                                    "fontWeight": "600",
-                                    "fontSize": "0.81rem",
-                                    "color": color,
-                                },
-                            ),
-                        ],
-                        className="mb-1",
-                    ),
-                    html.Table(
-                        html.Tbody(
-                            _kpi_row(
-                                "Visitantes",
-                                vis_str,
-                                _delta_fmt(vis, sama if sama > 0 else None),
-                                _delta_fmt(vis, msaa if msaa > 0 else None),
-                            )
-                        ),
-                        style={"width": "100%"},
-                    ),
-                ],
-                className="mb-3",
-            )
+        ref_sa = _fmt_vis(sama) if sama else "—"
+        ref_msa = _fmt_vis(msaa) if msaa else "—"
+        diff_sa, color_sa = _raw_diff(vis, sama, color_by_sign=True)
+        diff_msa, color_msa = _raw_diff(vis, msaa, color_by_sign=True)
+
+        lines.append(
+            _bullet(label, _fmt_vis(vis), ref_sa, diff_sa, color_sa, ref_msa, diff_msa, color_msa)
         )
 
     lbl_sa = "período anterior" if ventana == "mes" else "semana anterior"
@@ -412,10 +379,10 @@ def _tab_resumen(
             html.Span("MSA = ", style={"fontWeight": "600"}),
             lbl_msa,
         ],
-        className="text-muted mb-0 mt-1",
+        className="text-muted mb-0 mt-2",
         style={"fontSize": "0.68rem"},
     )
-    return html.Div(rows + [footer])
+    return html.Div(lines + [footer])
 
 
 def _tab_contexto_exterior(
@@ -434,13 +401,19 @@ def _tab_contexto_exterior(
     ap_act = _dias_apertura(fmin_p, fecha_max, festivos)
     ap_sama = _dias_apertura(fmin_sama, fmax_sama, festivos)
     ap_msaa = _dias_apertura(fmin_msaa, fmax_msaa, festivos)
+    diff_ap_sa, color_ap_sa = _raw_diff(ap_act, ap_sama)
+    diff_ap_msa, color_ap_msa = _raw_diff(ap_act, ap_msaa)
 
-    signal_rows = [
-        _kpi_row(
+    lines = [
+        _bullet(
             "Días de apertura",
             f"{ap_act} / {dias_v}",
-            _delta_fmt(ap_act, ap_sama),
-            _delta_fmt(ap_act, ap_msaa),
+            f"{ap_sama} / {dias_v}",
+            diff_ap_sa,
+            color_ap_sa,
+            f"{ap_msaa} / {dias_v}",
+            diff_ap_msa,
+            color_ap_msa,
         )
     ]
 
@@ -464,18 +437,12 @@ def _tab_contexto_exterior(
                     continue
                 try:
                     s_act = get_señal_diaria(
-                        location_uuid,
-                        señal_id,
-                        pd.Timestamp(fmin_p),
-                        pd.Timestamp(fecha_max),
+                        location_uuid, señal_id, pd.Timestamp(fmin_p), pd.Timestamp(fecha_max)
                     )
-                    s_sama = get_señal_diaria(
-                        location_uuid,
-                        señal_id,
-                        pd.Timestamp(fmin_sama),
-                        pd.Timestamp(fmax_sama),
+                    s_sa = get_señal_diaria(
+                        location_uuid, señal_id, pd.Timestamp(fmin_sama), pd.Timestamp(fmax_sama)
                     )
-                    s_msaa = get_señal_diaria(
+                    s_msa = get_señal_diaria(
                         location_uuid,
                         señal_id,
                         pd.Timestamp(fmin_msaa),
@@ -485,31 +452,35 @@ def _tab_contexto_exterior(
                     continue
 
                 v_act = _agg_señal(s_act, method)
-                v_sama = _agg_señal(s_sama, method)
-                v_msaa = _agg_señal(s_msaa, method)
+                v_sa = _agg_señal(s_sa, method)
+                v_msa = _agg_señal(s_msa, method)
                 if v_act is None:
                     continue
 
-                signal_rows.append(
-                    _kpi_row(
+                decimals = 1 if method == "mean" else 0
+                diff_suffix = suffix if method == "mean" else ""
+                ref_sa = _fmt_val(v_sa, suffix, method)
+                ref_msa = _fmt_val(v_msa, suffix, method)
+                diff_sa, color_sa = _raw_diff(v_act, v_sa, suffix=diff_suffix, decimals=decimals)
+                diff_msa, color_msa = _raw_diff(v_act, v_msa, suffix=diff_suffix, decimals=decimals)
+
+                lines.append(
+                    _bullet(
                         label,
                         _fmt_val(v_act, suffix, method),
-                        _delta_fmt(v_act, v_sama),
-                        _delta_fmt(v_act, v_msaa),
+                        ref_sa,
+                        diff_sa,
+                        color_sa,
+                        ref_msa,
+                        diff_msa,
+                        color_msa,
                     )
                 )
         except Exception:
             pass
 
-    table = html.Table(
-        html.Tbody(signal_rows),
-        style={"width": "100%"},
-        className="mb-2",
-    )
-
-    # Calendar
+    # Calendar section
     festivos_en_periodo = {d: n for d, n in festivos.items() if fmin_p <= d <= fecha_max}
-
     legend = html.Div(
         [
             html.Span("■ Festivo  ", style={"color": "#856404", "fontSize": "0.68rem"}),
@@ -518,7 +489,6 @@ def _tab_contexto_exterior(
             html.Span("■ Laborable", style={"color": "#212529", "fontSize": "0.68rem"}),
         ]
     )
-
     festivos_list = (
         html.Div(
             [
@@ -541,7 +511,7 @@ def _tab_contexto_exterior(
 
     return html.Div(
         [
-            table,
+            html.Div(lines),
             _sub_header("fas fa-calendar-alt", "Calendario del período", "#E67E22"),
             legend,
             _build_calendar(fmin_p, fecha_max, festivos),
@@ -565,18 +535,18 @@ def _tab_contexto_interior(
     ap_act = _dias_apertura(fmin_p, fecha_max, festivos)
     ap_sama = _dias_apertura(fmin_sama, fmax_sama, festivos)
     ap_msaa = _dias_apertura(fmin_msaa, fmax_msaa, festivos)
+    diff_sa, color_sa = _raw_diff(ap_act, ap_sama)
+    diff_msa, color_msa = _raw_diff(ap_act, ap_msaa)
 
-    table = html.Table(
-        html.Tbody(
-            _kpi_row(
-                "Días de apertura",
-                f"{ap_act} / {dias_v}",
-                _delta_fmt(ap_act, ap_sama),
-                _delta_fmt(ap_act, ap_msaa),
-            )
-        ),
-        style={"width": "100%"},
-        className="mb-3",
+    line = _bullet(
+        "Días de apertura",
+        f"{ap_act} / {dias_v}",
+        f"{ap_sama} / {dias_v}",
+        diff_sa,
+        color_sa,
+        f"{ap_msaa} / {dias_v}",
+        diff_msa,
+        color_msa,
     )
 
     placeholder = html.Div(
@@ -585,11 +555,11 @@ def _tab_contexto_interior(
             className="text-muted fst-italic mb-0",
             style={"fontSize": "0.79rem"},
         ),
-        className="p-3 rounded-3",
+        className="p-3 rounded-3 mt-2",
         style={"backgroundColor": "#f8f9fa", "border": "1px dashed #dee2e6"},
     )
 
-    return html.Div([table, placeholder])
+    return html.Div([line, placeholder])
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
