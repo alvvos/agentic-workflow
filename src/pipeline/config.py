@@ -32,7 +32,7 @@ def _pg_url() -> str:
 # ── Destino personalizado ─────────────────────────────────────────────────────
 
 
-@dlt.destination(batch_size=500, loader_file_format="jsonl")
+@dlt.destination(batch_size=500, loader_file_format="typed-jsonl")
 class SeñalesDestino:
     """
     Destino dlt que enruta cada tabla lógica a la tabla real del proyecto.

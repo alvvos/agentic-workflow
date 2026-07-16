@@ -11,4 +11,5 @@ Environment=PREFECT_API_URL=http://127.0.0.1:4200/api
 ExecStart=/home/alvaro.salis/agentic-workflow/venv/bin/python scripts/sync_noche.py
 StandardOutput=journal
 StandardError=journal
+TimeoutStartSec=3600
 # Si el proceso falla (exit != 0) systemd lo registra pero no reinicia (oneshot)

@@ -300,11 +300,20 @@ def sync_mensual_flow() -> int:
         logger.warning("Bootstrap lsc FAIL: %s", exc)
 
     # ── Calendario cruceros: refresco anual independiente del feature loop ────
-    _cruceros_calendario(hoy)
+    try:
+        _cruceros_calendario(hoy)
+    except Exception as exc:
+        logger.warning("cruceros-calendario FAIL (no crítico): %s", exc)
 
     # ── Geo/Esri: enriquecimiento mensual + audit ─────────────────────────────
-    _geo_enriquecer(hoy)
-    _geo_audit()
+    try:
+        _geo_enriquecer(hoy)
+    except Exception as exc:
+        logger.warning("geo-enriquecer FAIL (no crítico): %s", exc)
+    try:
+        _geo_audit()
+    except Exception as exc:
+        logger.warning("geo-audit FAIL (no crítico): %s", exc)
 
     logger.info("── sync_mensual DONE (%.0fs) errores=%d ─", time.time() - t0, errores)
     return errores
