@@ -259,18 +259,50 @@ def _impacto_badge(
             label, color, bg, border = "Impacto moderado", "#b45309", "#fffbeb", "#fcd34d"
         else:
             label, color, bg, border = "Impacto alto", "#dc2626", "#fef2f2", "#fca5a5"
-        return html.Span(
-            label,
+        tau_sign = "+" if tau >= 0 else "−"
+        tau_str = f"τb = {tau_sign}{abs_tau:.2f}"
+        if p < 0.001:
+            p_str = "p < 0,001"
+        elif p < 0.01:
+            p_str = "p < 0,01"
+        elif p < 0.05:
+            p_str = "p < 0,05"
+        elif p < 0.1:
+            p_str = "p < 0,1"
+        else:
+            p_str = f"p = {p:.2f}"
+        return html.Div(
+            [
+                html.Span(
+                    label,
+                    style={
+                        "fontSize": "0.78rem",
+                        "fontWeight": "700",
+                        "color": color,
+                        "display": "block",
+                        "letterSpacing": "0.2px",
+                    },
+                ),
+                html.Span(
+                    f"{tau_str} \xb7 {p_str}",
+                    style={
+                        "fontSize": "0.68rem",
+                        "color": color,
+                        "opacity": "0.8",
+                        "display": "block",
+                        "marginTop": "1px",
+                        "fontVariantNumeric": "tabular-nums",
+                    },
+                ),
+            ],
             style={
-                "fontSize": "0.61rem",
-                "fontWeight": "600",
-                "color": color,
                 "backgroundColor": bg,
                 "border": f"1px solid {border}",
-                "borderRadius": "10px",
-                "padding": "2px 8px",
+                "borderRadius": "8px",
+                "padding": "5px 10px",
                 "whiteSpace": "nowrap",
-                "letterSpacing": "0.2px",
+                "textAlign": "center",
+                "minWidth": "110px",
             },
         )
     except Exception:
@@ -1035,8 +1067,8 @@ def _tab_contexto_exterior(
                                 badge,
                                 style={
                                     "flexShrink": "0",
-                                    "paddingTop": "3px",
-                                    "paddingLeft": "10px",
+                                    "paddingTop": "1px",
+                                    "paddingLeft": "12px",
                                 },
                             )
                             if badge
