@@ -46,7 +46,45 @@ def _upsert_visitas(rows: list) -> None:
 
     if not rows:
         return
-    get_conn().executemany(
+
+    conn = get_conn()
+
+    # Pre-check: filter out rows whose zona_id doesn't exist in zonas table.
+    # This prevents FK violations from aborting the whole batch when a zone
+    # has been removed from the master table (e.g. Manzanillo zona_id mismatch).
+    zona_ids_en_batch = list({r[1] for r in rows})  # index 1 = zona_id
+    placeholders = ",".join(["?"] * len(zona_ids_en_batch))
+    zonas_existentes = {
+        row[0]
+        for row in conn.execute(
+            f"SELECT zona_id FROM zonas WHERE zona_id IN ({placeholders})",
+            zona_ids_en_batch,
+        ).fetchall()
+    }
+    filas_validas = []
+    for r in rows:
+        if r[1] in zonas_existentes:
+            filas_validas.append(r)
+        else:
+            log.warning(
+                "zona_id=%s no existe en tabla zonas — fila omitida (fecha=%s, ubicacion=%s)",
+                r[1],
+                r[0],
+                r[2],
+            )
+    if not filas_validas:
+        log.warning("_upsert_visitas: todas las filas del lote fueron omitidas por FK inválida.")
+        return
+    if len(filas_validas) < len(rows):
+        log.info(
+            "_upsert_visitas: %d/%d filas omitidas; insertando %d filas válidas.",
+            len(rows) - len(filas_validas),
+            len(rows),
+            len(filas_validas),
+        )
+    rows = filas_validas
+
+    conn.executemany(
         """
         INSERT INTO visitas
             (fecha, zona_id, ubicacion_id, org_id,

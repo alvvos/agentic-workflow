@@ -132,14 +132,18 @@ def get_pm_data(
     uv_total = int(sub["unique_visitors"].sum())
     new_vis = int(sub["new_visitors"].dropna().sum())
 
-    # Hora pico (parsear hourly_visits JSON)
+    # Hora pico (parsear hourly_visits JSON — lista de 24 valores o dict {hour: count})
     hora_pico = None
     try:
         hourly_all = [0] * 24
         for row in sub["hourly_visits"].dropna():
             arr = json.loads(row) if isinstance(row, str) else row
-            for h, v in enumerate(arr):
-                hourly_all[h] += v
+            if isinstance(arr, dict):
+                for h, v in arr.items():
+                    hourly_all[int(h)] += float(v or 0)
+            elif isinstance(arr, list):
+                for h, v in enumerate(arr):
+                    hourly_all[h] += float(v or 0)
         hora_pico = int(hourly_all.index(max(hourly_all)))
     except Exception:
         pass
@@ -450,6 +454,9 @@ def get_hourly_breakdown(
                 if isinstance(row["hourly_visits"], str)
                 else row["hourly_visits"]
             )
+            if isinstance(arr, dict):
+                # Normalize dict {hour_str: count} → list of 24 values
+                arr = [float(arr.get(str(h), arr.get(h, 0)) or 0) for h in range(24)]
             if not isinstance(arr, list) or len(arr) != 24:
                 continue
         except Exception:
