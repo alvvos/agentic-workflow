@@ -225,6 +225,28 @@ def _kendall_tau_np(x, y) -> tuple[float, float]:
     return tau, p
 
 
+def _mann_whitney_np(group0, group1) -> tuple[float, float]:
+    """Rank-biserial r and asymptotic p-value for two independent groups (no scipy)."""
+    import math
+
+    import numpy as np
+
+    g0 = np.asarray(group0, dtype=float)
+    g1 = np.asarray(group1, dtype=float)
+    n0, n1 = len(g0), len(g1)
+    if n0 < 5 or n1 < 5:
+        return 0.0, 1.0
+    comp = g1[:, None] - g0[None, :]  # (n1, n0) signed differences
+    u1 = float(np.sum(comp > 0) + 0.5 * np.sum(comp == 0))
+    u2 = n0 * n1 - u1
+    r = (u1 - u2) / (n0 * n1)  # rank-biserial correlation, signed
+    mu = n0 * n1 / 2.0
+    sigma = math.sqrt(n0 * n1 * (n0 + n1 + 1) / 12.0)
+    z = (min(u1, u2) - mu) / sigma if sigma > 0 else 0.0
+    p = math.erfc(abs(z) / math.sqrt(2))
+    return r, p
+
+
 def _impacto_badge(
     señal_id: str,
     location_uuid: str,
@@ -249,18 +271,28 @@ def _impacto_badge(
         merged = pd.DataFrame({"s": s, "v": v_daily}).dropna()
         if len(merged) < 10:
             return None
-        tau, p = _kendall_tau_np(merged["s"].to_numpy(), merged["v"].to_numpy())
-        abs_tau = abs(tau)
-        if p > 0.1 or abs_tau < 0.1:
+
+        is_binary = merged["s"].nunique() <= 2
+        if is_binary:
+            g0 = merged.loc[merged["s"] == 0, "v"].to_numpy()
+            g1 = merged.loc[merged["s"] != 0, "v"].to_numpy()
+            effect, p = _mann_whitney_np(g0, g1)
+            stat_label = "r"
+        else:
+            effect, p = _kendall_tau_np(merged["s"].to_numpy(), merged["v"].to_numpy())
+            stat_label = "τb"
+
+        abs_effect = abs(effect)
+        if p > 0.1 or abs_effect < 0.1:
             label, color, bg, border = "Sin impacto", "#9ca3af", "#f9fafb", "#e5e7eb"
-        elif abs_tau < 0.25:
+        elif abs_effect < 0.25:
             label, color, bg, border = "Impacto leve", "#6b7280", "#f3f4f6", "#d1d5db"
-        elif abs_tau < 0.45:
+        elif abs_effect < 0.45:
             label, color, bg, border = "Impacto moderado", "#b45309", "#fffbeb", "#fcd34d"
         else:
             label, color, bg, border = "Impacto alto", "#dc2626", "#fef2f2", "#fca5a5"
-        tau_sign = "+" if tau >= 0 else "−"
-        tau_str = f"τb = {tau_sign}{abs_tau:.2f}"
+        eff_sign = "+" if effect >= 0 else "−"
+        tau_str = f"{stat_label} = {eff_sign}{abs_effect:.2f}"
         if p < 0.001:
             p_str = "p < 0,001"
         elif p < 0.01:
