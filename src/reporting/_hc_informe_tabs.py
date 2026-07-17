@@ -676,76 +676,6 @@ def _build_by_enum(
     return by_enum
 
 
-def _fmt_kvis(n: int) -> str:
-    if n >= 1_000_000:
-        return f"{n / 1_000_000:.1f}M".replace(".", ",")
-    if n >= 10_000:
-        return f"{round(n / 1000)}K"
-    return f"{n:,}".replace(",", ".")
-
-
-def _pct(d: float | None) -> str:
-    if d is None:
-        return "—"
-    sign = "+" if d >= 0 else ""
-    return f"{sign}{d:.0f}%"
-
-
-def _delta_kpi(d_sa: float | None, d_msa: float | None) -> str:
-    parts = [
-        s
-        for s in [
-            f"{_pct(d_sa)} SA" if d_sa is not None else "",
-            f"{_pct(d_msa)} MSAA" if d_msa is not None else "",
-        ]
-        if s
-    ]
-    return " / ".join(parts)
-
-
-def _kpi_row(color: str, label: str, value: str, delta: str) -> html.Div:
-    return html.Div(
-        [
-            html.Span(
-                "●",
-                style={
-                    "color": color,
-                    "fontSize": "0.55rem",
-                    "marginRight": "7px",
-                    "verticalAlign": "middle",
-                },
-            ),
-            html.Span(
-                label + ": ", style={"fontWeight": "600", "color": "#343a40", "fontSize": _SZ_PROSE}
-            ),
-            html.Span(value, style={"fontWeight": "700", "color": color, "fontSize": _SZ_VAL}),
-            html.Span(
-                f"   {delta}" if delta else "",
-                style={"color": "#6b7280", "fontSize": _SZ_REF, "marginLeft": "2px"},
-            ),
-        ],
-        style={"marginBottom": "5px"},
-    )
-
-
-def _ratio_row(label: str, ratio: float, delta: str) -> html.Div:
-    return html.Div(
-        [
-            html.Span("   ↳  ", style={"color": "#9ca3af", "fontSize": _SZ_REF}),
-            html.Span(label + ": ", style={"color": "#6b7280", "fontSize": _SZ_REF}),
-            html.Span(
-                f"{ratio:.1f}%",
-                style={"fontWeight": "700", "color": "#0052CC", "fontSize": _SZ_PROSE},
-            ),
-            html.Span(
-                f"   {delta}" if delta else "",
-                style={"color": "#9ca3af", "fontSize": _SZ_REF, "marginLeft": "2px"},
-            ),
-        ],
-        style={"marginBottom": "5px", "paddingLeft": "8px"},
-    )
-
-
 def _narrative_block(by_enum: dict[int, dict], ventana: str) -> html.Div:
     """Blue callout box with 2-3 interpretive sentences at the top of Resumen."""
     per, lbl_sa, _ = _periodo_labels(ventana)
@@ -836,76 +766,33 @@ def _narrative_block(by_enum: dict[int, dict], ventana: str) -> html.Div:
     )
 
 
-def _kpi_bullets(
+def _analysis_sentences(
     by_enum: dict[int, dict],
-    ventana: str,
     df: pd.DataFrame,
     fmin_p: date,
     fecha_max: date,
+    ventana: str,
 ) -> html.Div:
-    """'Principales KPIs' compact bullet list (PDF-style)."""
+    """Prose sentences for dwell time, peak day/hour, new visitors, and frequency."""
     import json as _json
 
-    rows: list = [
-        html.Div(
-            "Principales KPIs:",
-            style={
-                "fontSize": "0.78rem",
-                "fontWeight": "700",
-                "color": "#6b7280",
-                "letterSpacing": "0.5px",
-                "textTransform": "uppercase",
-                "marginBottom": "8px",
-            },
-        )
-    ]
-
-    ext = by_enum.get(2)
+    _, lbl_sa, _ = _periodo_labels(ventana)
     int_ = by_enum.get(1)
-    caja = by_enum.get(0)
-
-    zone_cfg = [
-        (2, ext, _ZONE_COLOR[2], "Exterior (calle)"),
-        (1, int_, _ZONE_COLOR[1], "Interior (tienda)"),
-        (0, caja, _ZONE_COLOR[0], "Caja / Checkout"),
-    ]
-
-    for ze, grp, color, label in zone_cfg:
-        if grp is None or grp["vis_act"] == 0:
-            continue
-        rows.append(
-            _kpi_row(color, label, _fmt_kvis(grp["vis_act"]), _delta_kpi(grp["d_sa"], grp["d_msa"]))
-        )
-
-        # Attraction ratio vs parent zone
-        parent = ext if ze == 1 else (int_ if ze == 0 else None)
-        if parent and parent["vis_act"] > 0:
-            ratio_act = grp["vis_act"] / parent["vis_act"] * 100
-            ratio_lbl = "Ratio atracción tienda" if ze == 1 else "Ratio atracción caja"
-            r_delta = ""
-            if parent["vis_sa"] > 0 and grp["vis_sa"] > 0:
-                d_pp = ratio_act - grp["vis_sa"] / parent["vis_sa"] * 100
-                sign = "+" if d_pp >= 0 else ""
-                r_delta = f"{sign}{d_pp:.1f}pp SA"
-                if parent.get("vis_msa", 0) > 0 and grp.get("vis_msa", 0) > 0:
-                    d_pp_m = ratio_act - grp["vis_msa"] / parent["vis_msa"] * 100
-                    sign2 = "+" if d_pp_m >= 0 else ""
-                    r_delta += f" / {sign2}{d_pp_m:.1f}pp MSAA"
-            rows.append(_ratio_row(ratio_lbl, ratio_act, r_delta))
+    sentences: list = []
 
     # Dwell time
     dwell_grp = int_ or (next(iter(by_enum.values()), None) if by_enum else None)
     if dwell_grp and dwell_grp["est_mean"] > 0:
         est = dwell_grp["est_mean"]
         est_sa = dwell_grp["est_sa_mean"]
-        d_est = ""
+        est_str = f"{est:.1f} min"
         if est_sa > 0:
             diff = est - est_sa
             sign = "+" if diff >= 0 else ""
-            d_est = f"{sign}{diff:.1f} min SA"
-        rows.append(_kpi_row("#6b7280", "Estancia media", f"{est:.1f} min", d_est))
+            est_str += f" ({sign}{diff:.1f} min vs {lbl_sa})"
+        sentences.append(html.Li(f"Estancia media en tienda: {est_str}."))
 
-    # Peak day (from dias_p_list across all zones)
+    # Peak weekday
     try:
         all_dias = [d for grp in by_enum.values() for d in grp.get("dias_p_list", [])]
         if all_dias:
@@ -921,10 +808,10 @@ def _kpi_bullets(
             if len(by_day) >= 3:
                 dia_max = int(by_day.idxmax())
                 dia_min = int(by_day.idxmin())
-                dia_str = _DIA_NAMES_ES[dia_max].capitalize()
+                txt = f"Día de mayor afluencia: {_DIA_NAMES_ES[dia_max].capitalize()}"
                 if dia_max != dia_min:
-                    dia_str += f" (menor: {_DIA_NAMES_ES[dia_min]})"
-                rows.append(_kpi_row("#6b7280", "Día más fuerte", dia_str, ""))
+                    txt += f" (menor: {_DIA_NAMES_ES[dia_min]})"
+                sentences.append(html.Li(txt + "."))
     except Exception:
         pass
 
@@ -943,7 +830,7 @@ def _kpi_bullets(
                     pass
             if hourly:
                 hp = max(hourly, key=lambda h: hourly[h])
-                rows.append(_kpi_row("#6b7280", "Hora pico", f"{hp:02d}:00–{hp + 1:02d}:00", ""))
+                sentences.append(html.Li(f"Hora pico: {hp:02d}:00–{hp + 1:02d}:00."))
         except Exception:
             pass
 
@@ -956,12 +843,12 @@ def _kpi_bullets(
             if total_uv > 0 and total_new > 0:
                 pct_new = total_new / total_uv * 100
                 if pct_new >= 60:
-                    perfil = "alta atracción"
+                    perfil = "perfil de alta atracción"
                 elif pct_new >= 35:
-                    perfil = "equilibrio nuevo/recurrente"
+                    perfil = "equilibrio entre nuevos y recurrentes"
                 else:
-                    perfil = "base recurrente"
-                rows.append(_kpi_row("#6b7280", "Visitantes nuevos", f"{pct_new:.0f}%", perfil))
+                    perfil = "base recurrente consolidada"
+                sentences.append(html.Li(f"Visitantes nuevos: {pct_new:.0f}% — {perfil}."))
         except Exception:
             pass
 
@@ -972,13 +859,30 @@ def _kpi_bullets(
             df_p = df[(df["fecha_dt"] >= fmin_p) & (df["fecha_dt"] <= fecha_max)]
             freq_mean = df_p[freq_col].replace(0, pd.NA).mean()
             if pd.notna(freq_mean) and freq_mean > 1.05:
-                rows.append(
-                    _kpi_row("#6b7280", "Frecuencia media", f"{freq_mean:.1f} visitas/UV", "")
+                sentences.append(
+                    html.Li(f"Frecuencia media: {freq_mean:.1f} visitas por visitante único.")
                 )
         except Exception:
             pass
 
-    return html.Div(rows, style={"marginTop": "2px"})
+    if not sentences:
+        return html.Div()
+
+    return html.Div(
+        [
+            _sub_header("fas fa-chart-bar", "Análisis del período", "#0052CC"),
+            html.Ul(
+                sentences,
+                style={
+                    "fontSize": _SZ_PROSE,
+                    "lineHeight": "1.8",
+                    "paddingLeft": "18px",
+                    "marginBottom": "0",
+                },
+            ),
+        ],
+        style={"marginTop": "8px"},
+    )
 
 
 # ── Tab content builders ──────────────────────────────────────────────────────
@@ -1036,12 +940,10 @@ def _tab_resumen(
     by_enum = _build_by_enum(zonas_data, df, fmin_msaa, fmax_msaa)
     if not by_enum:
         return html.P("Sin datos de zona disponibles.", className="text-muted small")
-    return html.Div(
-        [
-            _narrative_block(by_enum, ventana),
-            _kpi_bullets(by_enum, ventana, df, fmin_p, fecha_max),
-        ]
-    )
+    narrative = _narrative_block(by_enum, ventana)
+    vis_blocks = _visitor_blocks(zonas_data, {0, 1, 2}, df, fmin_msaa, fmax_msaa, ventana)
+    analysis = _analysis_sentences(by_enum, df, fmin_p, fecha_max, ventana)
+    return html.Div([narrative] + vis_blocks + [analysis])
 
 
 def _tab_contexto_exterior(
