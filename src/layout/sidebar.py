@@ -134,15 +134,15 @@ def build_sidebar(org_options=None):
                                 dbc.RadioItems(
                                     id="pm-ventana",
                                     options=[
-                                        {"label": "Semana (7 días)", "value": "semana"},
-                                        {"label": "Mes (28 días)", "value": "mes"},
+                                        {"label": "Últimos 7 días", "value": "semana"},
+                                        {"label": "Últimos 28 días", "value": "mes"},
                                     ],
                                     value="semana",
                                     className="mb-1",
                                     style={"fontSize": "0.87rem"},
                                 ),
                                 html.Small(
-                                    "Mes: últimos 28 días vs. mes anterior.",
+                                    "Compara los días del período vs. los mismos días previos.",
                                     className="text-muted d-block mb-2",
                                     style={"fontSize": "0.68rem", "lineHeight": "1.4"},
                                 ),

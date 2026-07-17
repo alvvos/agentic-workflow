@@ -348,11 +348,11 @@ def _periodo_labels(ventana: str) -> tuple[str, str, str]:
     """(per_act_lower, lbl_sa, lbl_msa) — lowercase, ready for composition."""
     if ventana == "mes":
         return (
-            "en el período analizado",
-            "el período anterior",
+            "en los últimos 28 días",
+            "los 28 días previos",
             "el mismo período del año pasado",
         )
-    return "esta semana", "la semana anterior", "la misma semana del año pasado"
+    return "en los últimos 7 días", "los 7 días previos", "la misma semana del año pasado"
 
 
 def _diff_spans(
@@ -590,7 +590,7 @@ def _build_calendar(fmin: date, fmax: date, festivos: dict[date, str]) -> html.D
             html.Th(
                 d,
                 style={
-                    "fontSize": "0.69rem",
+                    "fontSize": "0.76rem",
                     "textAlign": "center",
                     "color": "#dc3545" if i >= 5 else "#6c757d",
                     "padding": "2px 4px",
@@ -625,7 +625,7 @@ def _build_calendar(fmin: date, fmax: date, festivos: dict[date, str]) -> html.D
             festivo_name = festivos.get(d, "")
             children: list = [
                 html.Span(
-                    str(d.day), style={"display": "block", "fontWeight": fw, "fontSize": "0.8rem"}
+                    str(d.day), style={"display": "block", "fontWeight": fw, "fontSize": "0.9rem"}
                 )
             ]
             if festivo_name and in_period:
@@ -650,11 +650,11 @@ def _build_calendar(fmin: date, fmax: date, festivos: dict[date, str]) -> html.D
                     children,
                     style={
                         "textAlign": "center",
-                        "padding": "4px 2px",
+                        "padding": "6px 3px",
                         "backgroundColor": bg,
                         "color": color,
                         "borderRadius": "5px",
-                        "minWidth": "36px",
+                        "minWidth": "42px",
                         "verticalAlign": "top",
                         "border": border,
                     },
@@ -669,7 +669,7 @@ def _build_calendar(fmin: date, fmax: date, festivos: dict[date, str]) -> html.D
             style={
                 "width": "100%",
                 "borderCollapse": "separate",
-                "borderSpacing": "3px",
+                "borderSpacing": "4px",
                 "tableLayout": "fixed",
             },
         ),
@@ -742,8 +742,7 @@ def _build_by_enum(
 
 def _narrative_block(by_enum: dict[int, dict], ventana: str) -> html.Div:
     """Blue callout box with 2-3 interpretive sentences at the top of Resumen."""
-    per, lbl_sa, _ = _periodo_labels(ventana)
-    per_cap = per[0].upper() + per[1:]
+    _, lbl_sa, _ = _periodo_labels(ventana)
 
     ext = by_enum.get(2)
     int_ = by_enum.get(1)
@@ -761,22 +760,22 @@ def _narrative_block(by_enum: dict[int, dict], ventana: str) -> html.Div:
             if ext["d_sa"] > 10 and gap > 15:
                 parts.append(
                     "Buen crecimiento de tráfico exterior aunque no se ha podido captar todo"
-                    " su potencial en tienda. Recomendación: revisar los elementos de conversión de calle a tienda."
+                    " su potencial en tienda. Revisa los elementos de conversión de calle a tienda."
                 )
             elif n_pos == len(deltas):
-                parts.append(f"{per_cap} positiva con crecimiento en todas las zonas.")
+                parts.append(f"Crecimiento en todas las zonas respecto a {lbl_sa}.")
             elif n_neg == len(deltas):
-                parts.append(f"{per_cap} de menor tráfico en todas las zonas respecto a {lbl_sa}.")
+                parts.append(f"Tráfico inferior en todas las zonas respecto a {lbl_sa}.")
             elif n_pos > n_neg:
-                parts.append(f"{per_cap} con tendencia positiva en la mayoría de zonas.")
+                parts.append(f"Mayoría de zonas con crecimiento respecto a {lbl_sa}.")
             else:
-                parts.append(f"{per_cap} con tendencia mixta por zona.")
+                parts.append("Tendencia mixta según zona.")
         elif n_pos == len(deltas):
-            parts.append(f"{per_cap} positiva con crecimiento en todas las zonas.")
+            parts.append(f"Crecimiento en todas las zonas respecto a {lbl_sa}.")
         elif n_neg == len(deltas):
-            parts.append(f"{per_cap} de menor tráfico respecto a {lbl_sa}.")
+            parts.append(f"Tráfico inferior respecto a {lbl_sa}.")
         else:
-            parts.append(f"{per_cap} con tendencia mixta por zona.")
+            parts.append("Tendencia mixta según zona.")
 
     # Dwell time comment
     dwell_grp = int_ or (next(iter(by_enum.values()), None) if by_enum else None)
@@ -827,133 +826,6 @@ def _narrative_block(by_enum: dict[int, dict], ventana: str) -> html.Div:
             "padding": "10px 14px",
             "marginBottom": "16px",
         },
-    )
-
-
-def _analysis_sentences(
-    by_enum: dict[int, dict],
-    df: pd.DataFrame,
-    fmin_p: date,
-    fecha_max: date,
-    ventana: str,
-) -> html.Div:
-    """Prose sentences for dwell time, peak day/hour, new visitors, and frequency."""
-    import json as _json
-
-    _, lbl_sa, _ = _periodo_labels(ventana)
-    int_ = by_enum.get(1)
-    sentences: list = []
-
-    # Dwell time
-    dwell_grp = int_ or (next(iter(by_enum.values()), None) if by_enum else None)
-    if dwell_grp and dwell_grp["est_mean"] > 0:
-        est = dwell_grp["est_mean"]
-        est_sa = dwell_grp["est_sa_mean"]
-        est_str = f"{est:.1f} min"
-        if est_sa > 0:
-            diff = est - est_sa
-            sign = "+" if diff >= 0 else ""
-            est_str += f" ({sign}{diff:.1f} min vs {lbl_sa})"
-        sentences.append(html.Li(f"Estancia media en tienda: {est_str}."))
-
-    # Peak weekday
-    try:
-        all_dias = [d for grp in by_enum.values() for d in grp.get("dias_p_list", [])]
-        if all_dias:
-            combined = pd.concat(all_dias, ignore_index=True)
-            combined["wd"] = pd.to_datetime(combined["fecha_dt"]).dt.dayofweek
-            by_day = (
-                combined.groupby(["fecha_dt", "wd"])["unique_visitors"]
-                .sum()
-                .reset_index()
-                .groupby("wd")["unique_visitors"]
-                .mean()
-            )
-            if len(by_day) >= 3:
-                dia_max = int(by_day.idxmax())
-                dia_min = int(by_day.idxmin())
-                txt = f"Día de mayor afluencia: {_DIA_NAMES_ES[dia_max].capitalize()}"
-                if dia_max != dia_min:
-                    txt += f" (menor: {_DIA_NAMES_ES[dia_min]})"
-                sentences.append(html.Li(txt + "."))
-    except Exception:
-        pass
-
-    # Peak hour
-    if not df.empty and "hourly_visits" in df.columns:
-        try:
-            df_p = df[(df["fecha_dt"] >= fmin_p) & (df["fecha_dt"] <= fecha_max)]
-            hourly: dict[int, float] = {}
-            for val in df_p["hourly_visits"].dropna():
-                try:
-                    h_dict = _json.loads(val) if isinstance(val, str) else (val or {})
-                    for h, v in h_dict.items():
-                        k = int(h)
-                        hourly[k] = hourly.get(k, 0.0) + (float(v) if v else 0.0)
-                except Exception:
-                    pass
-            if hourly:
-                hp = max(hourly, key=lambda h: hourly[h])
-                sentences.append(
-                    html.Li(
-                        f"La hora de mayor afluencia se sitúa entre las {hp:02d}:00 y las {hp + 1:02d}:00."
-                    )
-                )
-        except Exception:
-            pass
-
-    # New-visitor ratio
-    if not df.empty and "new_visitors" in df.columns and "unique_visitors" in df.columns:
-        try:
-            df_p = df[(df["fecha_dt"] >= fmin_p) & (df["fecha_dt"] <= fecha_max)]
-            total_new = df_p["new_visitors"].sum()
-            total_uv = df_p["unique_visitors"].sum()
-            if total_uv > 0 and total_new > 0:
-                pct_new = total_new / total_uv * 100
-                if pct_new >= 60:
-                    perfil = "perfil de alta atracción"
-                elif pct_new >= 35:
-                    perfil = "equilibrio entre nuevos y recurrentes"
-                else:
-                    perfil = "base recurrente consolidada"
-                sentences.append(
-                    html.Li(
-                        f"El {pct_new:.0f}% de los visitantes son nuevos, lo que indica {perfil}."
-                    )
-                )
-        except Exception:
-            pass
-
-    # Frequency
-    freq_col = "freq_28d" if (fecha_max - fmin_p).days > 10 else "freq_7d"
-    if not df.empty and freq_col in df.columns:
-        try:
-            df_p = df[(df["fecha_dt"] >= fmin_p) & (df["fecha_dt"] <= fecha_max)]
-            freq_mean = df_p[freq_col].replace(0, pd.NA).mean()
-            if pd.notna(freq_mean) and freq_mean > 1.05:
-                sentences.append(
-                    html.Li(f"Frecuencia media: {freq_mean:.1f} visitas por visitante único.")
-                )
-        except Exception:
-            pass
-
-    if not sentences:
-        return html.Div()
-
-    return html.Div(
-        [
-            _sub_header("fas fa-chart-bar", "Análisis del período", "#0052CC"),
-            html.Ul(
-                sentences,
-                style={
-                    "fontSize": _SZ_PROSE,
-                    "lineHeight": "1.8",
-                    "paddingLeft": "18px",
-                    "marginBottom": "0",
-                },
-            ),
-        ],
-        style={"marginTop": "8px"},
     )
 
 
@@ -1014,8 +886,7 @@ def _tab_resumen(
         return html.P("Sin datos de zona disponibles.", className="text-muted small")
     narrative = _narrative_block(by_enum, ventana)
     vis_blocks = _visitor_blocks(zonas_data, {0, 1, 2}, df, fmin_msaa, fmax_msaa, ventana)
-    analysis = _analysis_sentences(by_enum, df, fmin_p, fecha_max, ventana)
-    return html.Div([narrative] + vis_blocks + [analysis])
+    return html.Div([narrative] + vis_blocks)
 
 
 def _tab_contexto_exterior(
@@ -1113,53 +984,13 @@ def _tab_contexto_exterior(
         except Exception:
             pass
 
-    # Calendar
-    festivos_en_periodo = {d: n for d, n in festivos.items() if fmin_p <= d <= fecha_max}
-    legend = html.Div(
-        [
-            html.Span("■ Festivo  ", style={"color": "#856404", "fontSize": "0.72rem"}),
-            html.Span("■ Sábado  ", style={"color": "#6c757d", "fontSize": "0.72rem"}),
-            html.Span("■ Domingo  ", style={"color": "#adb5bd", "fontSize": "0.72rem"}),
-            html.Span("■ Laborable", style={"color": "#495057", "fontSize": "0.72rem"}),
-        ]
-    )
-    festivos_list = (
-        html.Div(
-            [
-                html.Span(
-                    f"{d.strftime('%d/%m')}  {name}",
-                    className="d-block",
-                    style={"fontSize": "0.76rem", "color": "#856404"},
-                )
-                for d, name in sorted(festivos_en_periodo.items())
-            ],
-            className="mt-2",
-        )
-        if festivos_en_periodo
-        else html.P(
-            "Sin festivos en el período.",
-            className="text-muted mt-2 mb-0",
-            style={"fontSize": "0.76rem"},
-        )
-    )
-
     señales_header = (
         [_sub_header("fas fa-cloud-sun", "Señales externas", "#E67E22")]
         if sentences and traffic
         else []
     )
 
-    return html.Div(
-        traffic
-        + señales_header
-        + [html.Div(sentences)]
-        + [
-            _sub_header("fas fa-calendar-alt", "Calendario del período", "#E67E22"),
-            legend,
-            _build_calendar(fmin_p, fecha_max, festivos),
-            festivos_list,
-        ]
-    )
+    return html.Div(traffic + señales_header + [html.Div(sentences)])
 
 
 def _tab_contexto_interior(
@@ -1303,4 +1134,66 @@ def render_informe_tabs(
             ]
         ),
         className="border-0 shadow-sm rounded-4 h-100",
+    )
+
+
+def render_periodo_calendar(
+    location_uuid: str | None,
+    fmin_p,
+    fecha_max,
+) -> dbc.Card:
+    """Standalone calendar card — placed above the map in the right column."""
+    fmin_p = _to_date(fmin_p)
+    fecha_max = _to_date(fecha_max)
+
+    pais_codigo, ciudad = _get_location_meta(location_uuid) if location_uuid else ("ES", "")
+    years = {fmin_p.year, fecha_max.year}
+    festivos = _get_festivos(pais_codigo, ciudad, years)
+    festivos_en_periodo = {d: n for d, n in festivos.items() if fmin_p <= d <= fecha_max}
+
+    legend = html.Div(
+        [
+            html.Span("■ Festivo  ", style={"color": "#856404", "fontSize": "0.72rem"}),
+            html.Span("■ Sábado  ", style={"color": "#6c757d", "fontSize": "0.72rem"}),
+            html.Span("■ Domingo  ", style={"color": "#adb5bd", "fontSize": "0.72rem"}),
+            html.Span("■ Laborable", style={"color": "#495057", "fontSize": "0.72rem"}),
+        ]
+    )
+    festivos_list = (
+        html.Div(
+            [
+                html.Span(
+                    f"{d.strftime('%d/%m')}  {name}",
+                    className="d-block",
+                    style={"fontSize": "0.76rem", "color": "#856404"},
+                )
+                for d, name in sorted(festivos_en_periodo.items())
+            ],
+            className="mt-2",
+        )
+        if festivos_en_periodo
+        else html.P(
+            "Sin festivos en el período.",
+            className="text-muted mt-2 mb-0",
+            style={"fontSize": "0.76rem"},
+        )
+    )
+
+    return dbc.Card(
+        dbc.CardBody(
+            [
+                html.H6(
+                    [
+                        html.I(className="fas fa-calendar-alt me-2", style={"color": "#E67E22"}),
+                        "Calendario del período",
+                    ],
+                    className="fw-bold mb-2",
+                    style={"fontSize": "0.88rem", "color": "#1e293b"},
+                ),
+                legend,
+                _build_calendar(fmin_p, fecha_max, festivos),
+                festivos_list,
+            ]
+        ),
+        className="border-0 shadow-sm rounded-4 mb-3",
     )

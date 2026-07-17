@@ -65,7 +65,7 @@ from src.reporting._hc_charts import (
 from src.reporting._hc_charts import (
     _fig_embudo_conversion as _fig_embudo_conversion_base,
 )
-from src.reporting._hc_informe_tabs import render_informe_tabs
+from src.reporting._hc_informe_tabs import render_informe_tabs, render_periodo_calendar
 from src.reporting.geo_panel import generar_mapa_contexto, generar_panel_geo_visual
 
 
@@ -1981,23 +1981,6 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
             )
         )
 
-    # ── Health status ────────────────────────────────────────────────────
-    if puntos >= 1:
-        health_label, badge_color = "Tendencia positiva", "success"
-    elif puntos <= -1:
-        health_label, badge_color = "Tendencia negativa", "danger"
-    else:
-        health_label, badge_color = "Tendencia estable", "warning"
-
-    health_badge_id = f"pm-health-{uid}"
-    n_zonas = len(zonas_data)
-    health_tooltip = (
-        f"Score calculado sobre {n_zonas} zona{'s' if n_zonas != 1 else ''}: "
-        f"+1 por cada zona con δ visitantes ≥ +5 %, "
-        f"−1 por cada zona con δ ≤ −5 %. "
-        f"Score total: {puntos:+d}."
-    )
-
     # ── Geo data ─────────────────────────────────────────────────────────
     geo_vals_loc = get_geo_vals(location_uuid) if location_uuid else {}
     fecha_captura = get_geo_snapshot_date(location_uuid) if location_uuid else None
@@ -2028,26 +2011,7 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
                                 },
                             ),
                         ],
-                        xs=9,
-                    ),
-                    dbc.Col(
-                        html.Div(
-                            [
-                                dbc.Badge(
-                                    health_label,
-                                    color=badge_color,
-                                    pill=True,
-                                    className="fs-6 px-3 py-2",
-                                    id=health_badge_id,
-                                    style={"cursor": "help"},
-                                ),
-                                dbc.Tooltip(
-                                    health_tooltip, target=health_badge_id, placement="left"
-                                ),
-                            ],
-                            className="d-flex justify-content-end align-items-center h-100",
-                        ),
-                        xs=3,
+                        xs=12,
                     ),
                 ]
             )
@@ -2193,17 +2157,28 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
     _correlacion_card = render_informe_tabs(
         location_uuid, zonas_data, df, fmin_p, fecha_max, ventana=ventana
     )
+    _calendario_card = render_periodo_calendar(location_uuid, fmin_p, fecha_max)
 
     cuerpo_superior = (
         dbc.Row(
             [
                 dbc.Col(_correlacion_card, xs=12, lg=6, className="mb-3 mb-lg-0"),
-                dbc.Col(mapa_contexto, xs=12, lg=6),
+                dbc.Col(
+                    [_calendario_card, html.Div(className="mb-3"), mapa_contexto],
+                    xs=12,
+                    lg=6,
+                ),
             ],
             className="mb-3 align-items-start",
         )
         if mapa_contexto
-        else html.Div(_correlacion_card, className="mb-3")
+        else dbc.Row(
+            [
+                dbc.Col(_correlacion_card, xs=12, lg=6, className="mb-3 mb-lg-0"),
+                dbc.Col(_calendario_card, xs=12, lg=6),
+            ],
+            className="mb-3 align-items-start",
+        )
     )
 
     return html.Div(
