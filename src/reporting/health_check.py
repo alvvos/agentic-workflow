@@ -1672,7 +1672,7 @@ def _render_senal_contexto_modal(
 
 
 def _funnel_connector_row(from_z: dict, to_z: dict) -> html.Div:
-    """Visual separator showing the conversion ratio between two consecutive funnel zones."""
+    """Sentence showing the conversion ratio between two consecutive funnel zones."""
     from_act = from_z["r"].get("visitantes", 0)
     from_ant = from_z["a"].get("visitantes", 0)
     to_act = to_z["r"].get("visitantes", 0)
@@ -1682,40 +1682,17 @@ def _funnel_connector_row(from_z: dict, to_z: dict) -> html.Div:
     ratio_act = to_act / from_act * 100
     ratio_ant = (to_ant / from_ant * 100) if from_ant > 0 else None
     diff = (ratio_act - ratio_ant) if ratio_ant is not None else None
-    color = "#28A745" if ratio_act >= 15 else "#E67E22" if ratio_act >= 7 else "#DC3545"
-    spans: list = [
-        html.I(
-            className="fas fa-arrow-down me-1", style={"color": "#adb5bd", "fontSize": "0.65rem"}
-        ),
-        html.Span(
-            f"{from_z['zona']} → {to_z['zona']}: ",
-            style={"fontSize": "0.77rem", "color": "#6c757d"},
-        ),
-        html.Span(
-            f"{ratio_act:.1f}%",
-            style={"fontSize": "0.84rem", "fontWeight": "700", "color": color},
-        ),
-        html.Span(
-            f" · {to_act:,} de {from_act:,}",
-            style={"fontSize": "0.73rem", "color": "#adb5bd"},
-        ),
-    ]
-    if diff is not None and abs(diff) >= 0.3:
+    txt = (
+        f"De los {from_act:,} visitantes de {from_z['zona']}, el {ratio_act:.1f}%"
+        f" accedió a {to_z['zona']} ({to_act:,})."
+    ).replace(",", ".")
+    if diff is not None and abs(diff) >= 0.5:
         sign = "+" if diff >= 0 else ""
-        diff_color = "#28A745" if diff >= 0.3 else "#DC3545"
-        spans.append(
-            html.Span(
-                f" ({sign}{diff:.1f}pp vs período previo)",
-                style={"fontSize": "0.73rem", "color": diff_color},
-            )
-        )
-    return html.Div(
-        html.Div(spans, className="d-flex align-items-center flex-wrap gap-1"),
-        style={
-            "padding": "4px 12px 6px 18px",
-            "margin": "4px 0 8px",
-            "borderLeft": "2px dashed #dee2e6",
-        },
+        txt += f" {sign}{diff:.1f}pp respecto al período previo."
+    return html.P(
+        txt,
+        className="text-muted mb-0 mt-2",
+        style={"fontSize": "0.82rem", "fontStyle": "italic"},
     )
 
 
