@@ -1671,6 +1671,54 @@ def _render_senal_contexto_modal(
     )
 
 
+def _funnel_connector_row(from_z: dict, to_z: dict) -> html.Div:
+    """Visual separator showing the conversion ratio between two consecutive funnel zones."""
+    from_act = from_z["r"].get("visitantes", 0)
+    from_ant = from_z["a"].get("visitantes", 0)
+    to_act = to_z["r"].get("visitantes", 0)
+    to_ant = to_z["a"].get("visitantes", 0)
+    if from_act <= 0:
+        return html.Div()
+    ratio_act = to_act / from_act * 100
+    ratio_ant = (to_ant / from_ant * 100) if from_ant > 0 else None
+    diff = (ratio_act - ratio_ant) if ratio_ant is not None else None
+    color = "#28A745" if ratio_act >= 15 else "#E67E22" if ratio_act >= 7 else "#DC3545"
+    spans: list = [
+        html.I(
+            className="fas fa-arrow-down me-1", style={"color": "#adb5bd", "fontSize": "0.65rem"}
+        ),
+        html.Span(
+            f"{from_z['zona']} → {to_z['zona']}: ",
+            style={"fontSize": "0.77rem", "color": "#6c757d"},
+        ),
+        html.Span(
+            f"{ratio_act:.1f}%",
+            style={"fontSize": "0.84rem", "fontWeight": "700", "color": color},
+        ),
+        html.Span(
+            f" · {to_act:,} de {from_act:,}",
+            style={"fontSize": "0.73rem", "color": "#adb5bd"},
+        ),
+    ]
+    if diff is not None and abs(diff) >= 0.3:
+        sign = "+" if diff >= 0 else ""
+        diff_color = "#28A745" if diff >= 0.3 else "#DC3545"
+        spans.append(
+            html.Span(
+                f" ({sign}{diff:.1f}pp vs período previo)",
+                style={"fontSize": "0.73rem", "color": diff_color},
+            )
+        )
+    return html.Div(
+        html.Div(spans, className="d-flex align-items-center flex-wrap gap-1"),
+        style={
+            "padding": "4px 12px 6px 18px",
+            "margin": "4px 0 8px",
+            "borderLeft": "2px dashed #dee2e6",
+        },
+    )
+
+
 def _render_zona_section_jerarquica(
     zonas_data, zona_children_map, child_zone_names, uid, periodo_label
 ) -> html.Div:
@@ -1679,6 +1727,21 @@ def _render_zona_section_jerarquica(
         [z for z in zonas_data if z["zona"] not in child_zone_names],
         key=lambda z: _sort_zona_key(z["zona"], z.get("zone_enum")),
     )
+
+    # Lookup table for funnel connector: enum → zone dict (only funnel zones)
+    _enum_to_z = {z["zone_enum"]: z for z in zonas_data if z.get("zone_enum") in (0, 1, 2)}
+    _next_enum = {2: 1, 1: 0}  # exterior→interior→checkout
+
+    def _connector_after(ze: int | None) -> html.Div:
+        """Return a funnel connector if ze has a defined next funnel step."""
+        if ze not in _next_enum:
+            return html.Div()
+        nxt = _next_enum[ze]
+        from_z = _enum_to_z.get(ze)
+        to_z = _enum_to_z.get(nxt)
+        if from_z and to_z:
+            return _funnel_connector_row(from_z, to_z)
+        return html.Div()
 
     if not zona_children_map:
         cols = [
@@ -1709,6 +1772,9 @@ def _render_zona_section_jerarquica(
     lone_roots = [pz for pz in parent_zones if not zona_children_map.get(pz["zona"])]
     true_parents = [pz for pz in parent_zones if zona_children_map.get(pz["zona"])]
 
+    # Track which funnel step was last rendered to inject connectors between sections.
+    _last_funnel_enum: int | None = None
+
     sections = []
     if lone_roots:
         lone_cols = [
@@ -1733,10 +1799,25 @@ def _render_zona_section_jerarquica(
             for pz in lone_roots
         ]
         sections.append(html.Div(dbc.Row(lone_cols, className="g-2"), className="mb-4"))
+        # Track the highest funnel step rendered in lone_roots (exterior = 2 is first)
+        lone_enums = [pz.get("zone_enum") for pz in lone_roots if pz.get("zone_enum") in (0, 1, 2)]
+        if lone_enums:
+            _last_funnel_enum = max(lone_enums)  # 2>1>0, exterior comes first
 
     for pz in true_parents:
+        current_enum = pz.get("zone_enum")
         children_names = zona_children_map.get(pz["zona"], [])
         children_data = [z for z in zonas_data if z["zona"] in children_names]
+
+        # Inject connector between sections when transitioning funnel steps
+        if (
+            _last_funnel_enum is not None
+            and current_enum is not None
+            and _next_enum.get(_last_funnel_enum) == current_enum
+        ):
+            connector = _connector_after(_last_funnel_enum)
+            if connector.children:
+                sections.append(connector)
 
         parent_card = _render_zona_card(
             pz["zona"],
@@ -1760,6 +1841,15 @@ def _render_zona_section_jerarquica(
             # card + indented grandchildren); simple children go into a grid row.
             simple_cols = []
             sub_parent_blocks = []
+
+            # If this zone (e.g. Tienda) has checkout children, inject ratio before them.
+            checkout_children = [cz for cz in children_data if cz.get("zone_enum") == 0]
+            pre_children: list = []
+            if checkout_children and current_enum == 1:
+                conn = _funnel_connector_row(pz, checkout_children[0])
+                if conn.children:
+                    pre_children.append(conn)
+
             for cz in sorted(
                 children_data, key=lambda z: _sort_zona_key(z["zona"], z.get("zone_enum"))
             ):
@@ -1820,7 +1910,7 @@ def _render_zona_section_jerarquica(
                     )
                 else:
                     simple_cols.append(dbc.Col(child_card, xs=12, sm=6, className="mb-2"))
-            children_content = []
+            children_content = pre_children
             if simple_cols:
                 children_content.append(dbc.Row(simple_cols, className="g-2 mb-2"))
             children_content.extend(sub_parent_blocks)
@@ -1834,7 +1924,10 @@ def _render_zona_section_jerarquica(
                     },
                 )
             )
+
         sections.append(html.Div(block, className="mb-4"))
+        if current_enum in (0, 1, 2):
+            _last_funnel_enum = current_enum
 
     return html.Div(sections)
 
