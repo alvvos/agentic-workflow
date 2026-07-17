@@ -66,9 +66,9 @@ _C_POS = "#16a34a"  # positive diff
 _C_NEG = "#dc2626"  # negative diff
 _C_NEU = "#6b7280"  # neutral / equal
 
-_SZ_PROSE = "0.88rem"
-_SZ_VAL = "1.08rem"
-_SZ_REF = "0.78rem"
+_SZ_PROSE = "0.95rem"
+_SZ_VAL = "1.13rem"
+_SZ_REF = "0.84rem"
 
 
 # ── Date / location helpers ──────────────────────────────────────────────────
@@ -615,6 +615,46 @@ def _build_calendar(fmin: date, fmax: date, festivos: dict[date, str]) -> html.D
 # ── Tab content builders ──────────────────────────────────────────────────────
 
 
+def _visitor_blocks(
+    zonas_data: list[dict],
+    zone_filter: set[int],
+    df: pd.DataFrame | None,
+    fmin_msaa: date,
+    fmax_msaa: date,
+    ventana: str,
+) -> list:
+    """Visitor-count header + sentence blocks for the requested zone_enums."""
+    by_enum: dict[int, dict] = {}
+    for z in zonas_data:
+        ze = z.get("zone_enum")
+        if ze is None or ze not in zone_filter:
+            continue
+        if ze not in by_enum:
+            by_enum[ze] = {"zona_names": [], "vis_act": 0, "vis_sama": 0, "vis_msaa": 0}
+        by_enum[ze]["zona_names"].append(z["zona"])
+        by_enum[ze]["vis_act"] += z["r"].get("visitantes", 0)
+        by_enum[ze]["vis_sama"] += z["a"].get("visitantes", 0)
+
+    if df is not None and not df.empty and "unique_visitors" in df.columns and "Zona" in df.columns:
+        for grp in by_enum.values():
+            mask = (
+                df["Zona"].isin(grp["zona_names"])
+                & (df["fecha_dt"] >= fmin_msaa)
+                & (df["fecha_dt"] <= fmax_msaa)
+            )
+            grp["vis_msaa"] = int(df.loc[mask, "unique_visitors"].sum())
+
+    blocks = []
+    for ze in sorted(by_enum.keys(), reverse=True):  # higher enum first (exterior before interior)
+        grp = by_enum[ze]
+        vis = grp["vis_act"]
+        vis_sa = grp["vis_sama"] if grp["vis_sama"] > 0 else None
+        vis_msa = grp["vis_msaa"] if grp["vis_msaa"] > 0 else None
+        blocks.append(_zone_header(ze))
+        blocks.append(_sentence_visitantes(ze, vis, vis_sa, vis_msa, ventana))
+    return blocks
+
+
 def _tab_resumen(
     zonas_data: list[dict],
     df: pd.DataFrame,
@@ -624,39 +664,9 @@ def _tab_resumen(
 ) -> html.Div:
     fmin_msaa = fmin_p - timedelta(days=364)
     fmax_msaa = fecha_max - timedelta(days=364)
-
-    by_enum: dict[int, dict] = {}
-    for z in zonas_data:
-        ze = z.get("zone_enum")
-        if ze is None or ze not in (0, 1, 2):  # skip sub-zones (zone_enum=3)
-            continue
-        if ze not in by_enum:
-            by_enum[ze] = {"zona_names": [], "vis_act": 0, "vis_sama": 0, "vis_msaa": 0}
-        by_enum[ze]["zona_names"].append(z["zona"])
-        by_enum[ze]["vis_act"] += z["r"].get("visitantes", 0)
-        by_enum[ze]["vis_sama"] += z["a"].get("visitantes", 0)
-
-    if not df.empty and "unique_visitors" in df.columns and "Zona" in df.columns:
-        for grp in by_enum.values():
-            mask = (
-                df["Zona"].isin(grp["zona_names"])
-                & (df["fecha_dt"] >= fmin_msaa)
-                & (df["fecha_dt"] <= fmax_msaa)
-            )
-            grp["vis_msaa"] = int(df.loc[mask, "unique_visitors"].sum())
-
-    if not by_enum:
+    blocks = _visitor_blocks(zonas_data, {0, 1, 2}, df, fmin_msaa, fmax_msaa, ventana)
+    if not blocks:
         return html.P("Sin datos de zona disponibles.", className="text-muted small")
-
-    blocks = []
-    for ze in sorted(by_enum.keys(), reverse=True):  # exterior (2) first
-        grp = by_enum[ze]
-        vis = grp["vis_act"]
-        vis_sa = grp["vis_sama"] if grp["vis_sama"] > 0 else None
-        vis_msa = grp["vis_msaa"] if grp["vis_msaa"] > 0 else None
-        blocks.append(_zone_header(ze))
-        blocks.append(_sentence_visitantes(ze, vis, vis_sa, vis_msa, ventana))
-
     return html.Div(blocks)
 
 
@@ -671,6 +681,7 @@ def _tab_contexto_exterior(
     fmin_msaa: date,
     fmax_msaa: date,
     df: pd.DataFrame | None = None,
+    zonas_data: list[dict] | None = None,
 ) -> html.Div:
     dias_v = 28 if ventana == "mes" else 7
 
@@ -678,6 +689,12 @@ def _tab_contexto_exterior(
     ap_sa = _dias_apertura(fmin_sama, fmax_sama, festivos)
     ap_msa = _dias_apertura(fmin_msaa, fmax_msaa, festivos)
 
+    # ── Tráfico exterior ──────────────────────────────────────────────────────
+    traffic = (
+        _visitor_blocks(zonas_data, {2}, df, fmin_msaa, fmax_msaa, ventana) if zonas_data else []
+    )
+
+    # ── Señales externas + días apertura ─────────────────────────────────────
     sentences = [_sentence_dias_apertura(ap_act, dias_v, ap_sa, ap_msa, ventana)]
 
     if location_uuid:
@@ -778,9 +795,17 @@ def _tab_contexto_exterior(
         )
     )
 
+    señales_header = (
+        [_sub_header("fas fa-cloud-sun", "Señales externas", "#E67E22")]
+        if sentences and traffic
+        else []
+    )
+
     return html.Div(
-        [
-            html.Div(sentences),
+        traffic
+        + señales_header
+        + [html.Div(sentences)]
+        + [
             _sub_header("fas fa-calendar-alt", "Calendario del período", "#E67E22"),
             legend,
             _build_calendar(fmin_p, fecha_max, festivos),
@@ -798,12 +823,19 @@ def _tab_contexto_interior(
     fmax_sama: date,
     fmin_msaa: date,
     fmax_msaa: date,
+    zonas_data: list[dict] | None = None,
+    df: pd.DataFrame | None = None,
 ) -> html.Div:
     dias_v = 28 if ventana == "mes" else 7
 
     ap_act = _dias_apertura(fmin_p, fecha_max, festivos)
     ap_sa = _dias_apertura(fmin_sama, fmax_sama, festivos)
     ap_msa = _dias_apertura(fmin_msaa, fmax_msaa, festivos)
+
+    # ── Tráfico interior: tienda (1) y caja (0) por separado ─────────────────
+    traffic = (
+        _visitor_blocks(zonas_data, {0, 1}, df, fmin_msaa, fmax_msaa, ventana) if zonas_data else []
+    )
 
     placeholder = html.Div(
         html.P(
@@ -815,7 +847,9 @@ def _tab_contexto_interior(
         style={"backgroundColor": "#f8f9fa", "border": "1px dashed #dee2e6"},
     )
 
-    return html.Div([_sentence_dias_apertura(ap_act, dias_v, ap_sa, ap_msa, ventana), placeholder])
+    return html.Div(
+        traffic + [_sentence_dias_apertura(ap_act, dias_v, ap_sa, ap_msa, ventana), placeholder]
+    )
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -874,6 +908,7 @@ def render_informe_tabs(
                         fmin_msaa,
                         fmax_msaa,
                         df=df,
+                        zonas_data=zonas_data,
                     ),
                     style={"paddingTop": "12px"},
                 ),
@@ -892,6 +927,8 @@ def render_informe_tabs(
                         fmax_sama,
                         fmin_msaa,
                         fmax_msaa,
+                        zonas_data=zonas_data,
+                        df=df,
                     ),
                     style={"paddingTop": "12px"},
                 ),
