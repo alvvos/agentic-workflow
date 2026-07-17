@@ -57,6 +57,7 @@ _SIGNAL_CFG: list[tuple[str, str, str, str]] = [
 ]
 
 _DIA_NAMES = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"]
+_DIA_NAMES_ES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 
 # ── Typography & color tokens ────────────────────────────────────────────────
 _C_PROSE = "#495057"
@@ -612,75 +613,301 @@ def _build_calendar(fmin: date, fmax: date, festivos: dict[date, str]) -> html.D
     )
 
 
-# ── General evaluation prose ─────────────────────────────────────────────────
-
-_DIA_NAMES_ES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+# ── Resumen: narrative callout + KPI list ────────────────────────────────────
 
 
-def _evaluacion_general(
+def _build_by_enum(
     zonas_data: list[dict],
+    df: pd.DataFrame | None,
+    fmin_msaa: date,
+    fmax_msaa: date,
+) -> dict[int, dict]:
+    """Aggregate zonas_data into {zone_enum: metrics_dict} with SA, MSAA and dwell."""
+    by_enum: dict[int, dict] = {}
+    for z in zonas_data:
+        ze = z.get("zone_enum")
+        if ze is None or ze not in (0, 1, 2):
+            continue
+        grp = by_enum.setdefault(
+            ze,
+            dict(
+                zona_names=[],
+                vis_act=0,
+                vis_sa=0,
+                vis_msa=0,
+                est_sum=0.0,
+                est_cnt=0,
+                est_sa_sum=0.0,
+                est_sa_cnt=0,
+                dias_p_list=[],
+            ),
+        )
+        grp["zona_names"].append(z["zona"])
+        grp["vis_act"] += z["r"].get("visitantes", 0)
+        grp["vis_sa"] += z["a"].get("visitantes", 0)
+        est = z["r"].get("estancia", 0)
+        if est > 0:
+            grp["est_sum"] += est
+            grp["est_cnt"] += 1
+        est_a = z["a"].get("estancia", 0)
+        if est_a > 0:
+            grp["est_sa_sum"] += est_a
+            grp["est_sa_cnt"] += 1
+        dias = z.get("dias_p")
+        if dias is not None and not dias.empty and "unique_visitors" in dias.columns:
+            grp["dias_p_list"].append(dias)
+
+    if df is not None and not df.empty and "unique_visitors" in df.columns and "Zona" in df.columns:
+        for grp in by_enum.values():
+            mask = (
+                df["Zona"].isin(grp["zona_names"])
+                & (df["fecha_dt"] >= fmin_msaa)
+                & (df["fecha_dt"] <= fmax_msaa)
+            )
+            grp["vis_msa"] = int(df.loc[mask, "unique_visitors"].sum())
+
+    for grp in by_enum.values():
+        v, vs, vm = grp["vis_act"], grp["vis_sa"], grp["vis_msa"]
+        grp["d_sa"] = ((v - vs) / vs * 100) if vs > 0 else None
+        grp["d_msa"] = ((v - vm) / vm * 100) if vm > 0 else None
+        grp["est_mean"] = grp["est_sum"] / grp["est_cnt"] if grp["est_cnt"] > 0 else 0.0
+        grp["est_sa_mean"] = grp["est_sa_sum"] / grp["est_sa_cnt"] if grp["est_sa_cnt"] > 0 else 0.0
+
+    return by_enum
+
+
+def _fmt_kvis(n: int) -> str:
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M".replace(".", ",")
+    if n >= 10_000:
+        return f"{round(n / 1000)}K"
+    return f"{n:,}".replace(",", ".")
+
+
+def _pct(d: float | None) -> str:
+    if d is None:
+        return "—"
+    sign = "+" if d >= 0 else ""
+    return f"{sign}{d:.0f}%"
+
+
+def _delta_kpi(d_sa: float | None, d_msa: float | None) -> str:
+    parts = [
+        s
+        for s in [
+            f"{_pct(d_sa)} SA" if d_sa is not None else "",
+            f"{_pct(d_msa)} MSAA" if d_msa is not None else "",
+        ]
+        if s
+    ]
+    return " / ".join(parts)
+
+
+def _kpi_row(color: str, label: str, value: str, delta: str) -> html.Div:
+    return html.Div(
+        [
+            html.Span(
+                "●",
+                style={
+                    "color": color,
+                    "fontSize": "0.55rem",
+                    "marginRight": "7px",
+                    "verticalAlign": "middle",
+                },
+            ),
+            html.Span(
+                label + ": ", style={"fontWeight": "600", "color": "#343a40", "fontSize": _SZ_PROSE}
+            ),
+            html.Span(value, style={"fontWeight": "700", "color": color, "fontSize": _SZ_VAL}),
+            html.Span(
+                f"   {delta}" if delta else "",
+                style={"color": "#6b7280", "fontSize": _SZ_REF, "marginLeft": "2px"},
+            ),
+        ],
+        style={"marginBottom": "5px"},
+    )
+
+
+def _ratio_row(label: str, ratio: float, delta: str) -> html.Div:
+    return html.Div(
+        [
+            html.Span("   ↳  ", style={"color": "#9ca3af", "fontSize": _SZ_REF}),
+            html.Span(label + ": ", style={"color": "#6b7280", "fontSize": _SZ_REF}),
+            html.Span(
+                f"{ratio:.1f}%",
+                style={"fontWeight": "700", "color": "#0052CC", "fontSize": _SZ_PROSE},
+            ),
+            html.Span(
+                f"   {delta}" if delta else "",
+                style={"color": "#9ca3af", "fontSize": _SZ_REF, "marginLeft": "2px"},
+            ),
+        ],
+        style={"marginBottom": "5px", "paddingLeft": "8px"},
+    )
+
+
+def _narrative_block(by_enum: dict[int, dict], ventana: str) -> html.Div:
+    """Blue callout box with 2-3 interpretive sentences at the top of Resumen."""
+    per, lbl_sa, _ = _periodo_labels(ventana)
+    per_cap = per[0].upper() + per[1:]
+
+    ext = by_enum.get(2)
+    int_ = by_enum.get(1)
+
+    parts: list[str] = []
+
+    # Overall assessment
+    deltas = [grp["d_sa"] for grp in by_enum.values() if grp["d_sa"] is not None]
+    if deltas:
+        n_pos = sum(1 for d in deltas if d > 5)
+        n_neg = sum(1 for d in deltas if d < -5)
+
+        if ext and int_ and ext["d_sa"] is not None and int_["d_sa"] is not None:
+            gap = ext["d_sa"] - int_["d_sa"]
+            if ext["d_sa"] > 10 and gap > 15:
+                parts.append(
+                    "Buen crecimiento de tráfico exterior aunque no se ha podido captar todo"
+                    " su potencial en tienda. Recomendación: revisar los elementos de conversión calle→tienda."
+                )
+            elif n_pos == len(deltas):
+                parts.append(f"{per_cap} positiva con crecimiento en todas las zonas.")
+            elif n_neg == len(deltas):
+                parts.append(f"{per_cap} de menor tráfico en todas las zonas respecto a {lbl_sa}.")
+            elif n_pos > n_neg:
+                parts.append(f"{per_cap} con tendencia positiva en la mayoría de zonas.")
+            else:
+                parts.append(f"{per_cap} con tendencia mixta por zona.")
+        elif n_pos == len(deltas):
+            parts.append(f"{per_cap} positiva con crecimiento en todas las zonas.")
+        elif n_neg == len(deltas):
+            parts.append(f"{per_cap} de menor tráfico respecto a {lbl_sa}.")
+        else:
+            parts.append(f"{per_cap} con tendencia mixta por zona.")
+
+    # Dwell time comment
+    dwell_grp = int_ or (next(iter(by_enum.values()), None) if by_enum else None)
+    if dwell_grp:
+        est = dwell_grp["est_mean"]
+        est_sa = dwell_grp["est_sa_mean"]
+        if est > 0 and est_sa > 0:
+            diff = est - est_sa
+            if abs(diff) >= 0.5:
+                direction = "aumentado" if diff > 0 else "reducido"
+                parts.append(
+                    f"El tiempo en tienda se ha {direction} en {abs(diff):.1f} min respecto a {lbl_sa}."
+                )
+
+    # Conversion ratio trend
+    if ext and int_ and ext["vis_sa"] > 0 and int_["vis_sa"] > 0 and ext["vis_act"] > 0:
+        ratio_act = int_["vis_act"] / ext["vis_act"] * 100
+        ratio_sa = int_["vis_sa"] / ext["vis_sa"] * 100
+        diff_r = ratio_act - ratio_sa
+        if diff_r <= -3:
+            parts.append(
+                f"El ratio de conversión exterior→tienda ha caído {abs(diff_r):.1f}pp"
+                f" ({ratio_act:.0f}% vs {ratio_sa:.0f}% en {lbl_sa})."
+            )
+        elif diff_r >= 3:
+            parts.append(
+                f"El ratio de conversión exterior→tienda ha mejorado {diff_r:.1f}pp"
+                f" ({ratio_act:.0f}% vs {ratio_sa:.0f}% en {lbl_sa})."
+            )
+
+    if not parts:
+        return html.Div()
+
+    return html.Div(
+        html.P(
+            " ".join(parts),
+            style={
+                "fontSize": _SZ_PROSE,
+                "marginBottom": "0",
+                "lineHeight": "1.7",
+                "color": "#1e293b",
+            },
+        ),
+        style={
+            "backgroundColor": "#f0f4fb",
+            "borderLeft": "3px solid #0052CC",
+            "borderRadius": "0 6px 6px 0",
+            "padding": "10px 14px",
+            "marginBottom": "16px",
+        },
+    )
+
+
+def _kpi_bullets(
+    by_enum: dict[int, dict],
+    ventana: str,
     df: pd.DataFrame,
     fmin_p: date,
     fecha_max: date,
-    ventana: str,
 ) -> html.Div:
-    """Narrative paragraph block: dwell time, peak day, peak hour, new-visitor ratio, frequency."""
+    """'Principales KPIs' compact bullet list (PDF-style)."""
     import json as _json
 
-    per, lbl_sa, _ = _periodo_labels(ventana)
-    per_cap = per[0].upper() + per[1:]
-    freq_col = "freq_28d" if ventana == "mes" else "freq_7d"
+    rows: list = [
+        html.Div(
+            "Principales KPIs:",
+            style={
+                "fontSize": "0.78rem",
+                "fontWeight": "700",
+                "color": "#6b7280",
+                "letterSpacing": "0.5px",
+                "textTransform": "uppercase",
+                "marginBottom": "8px",
+            },
+        )
+    ]
 
-    blocks: list = []
+    ext = by_enum.get(2)
+    int_ = by_enum.get(1)
+    caja = by_enum.get(0)
 
-    # ── Dwell time (tienda = zone_enum 1, fallback to any zone) ──────────────
-    est_act = est_ant = 0.0
-    for z in zonas_data:
-        if z.get("zone_enum") == 1 and z["r"].get("estancia", 0) > 0:
-            est_act = z["r"]["estancia"]
-            est_ant = z["a"].get("estancia", 0)
-            break
-    if est_act == 0:
-        for z in zonas_data:
-            if z["r"].get("estancia", 0) > 0:
-                est_act = z["r"]["estancia"]
-                est_ant = z["a"].get("estancia", 0)
-                break
-    if est_act > 0:
-        diff_est = est_act - est_ant if est_ant > 0 else None
-        ref_str = f"{est_ant:.1f} min" if est_ant > 0 else None
-        inicio = [
-            _t("La estancia media en tienda fue de "),
-            _bold(f"{est_act:.1f} min"),
-            _t(f" {per}"),
-        ]
-        blocks.append(
-            _sp(
-                _assemble(
-                    inicio,
-                    _diff_spans(
-                        diff_est,
-                        ref_str,
-                        lbl_sa,
-                        suffix=" min",
-                        decimals=1,
-                        ref_num=est_ant if est_ant > 0 else None,
-                    ),
-                    [],
-                )
-            )
+    zone_cfg = [
+        (2, ext, _ZONE_COLOR[2], "Exterior (calle)"),
+        (1, int_, _ZONE_COLOR[1], "Interior (tienda)"),
+        (0, caja, _ZONE_COLOR[0], "Caja / Checkout"),
+    ]
+
+    for ze, grp, color, label in zone_cfg:
+        if grp is None or grp["vis_act"] == 0:
+            continue
+        rows.append(
+            _kpi_row(color, label, _fmt_kvis(grp["vis_act"]), _delta_kpi(grp["d_sa"], grp["d_msa"]))
         )
 
-    # ── Strongest / weakest day of week ──────────────────────────────────────
+        # Attraction ratio vs parent zone
+        parent = ext if ze == 1 else (int_ if ze == 0 else None)
+        if parent and parent["vis_act"] > 0:
+            ratio_act = grp["vis_act"] / parent["vis_act"] * 100
+            ratio_lbl = "Ratio atracción tienda" if ze == 1 else "Ratio atracción caja"
+            r_delta = ""
+            if parent["vis_sa"] > 0 and grp["vis_sa"] > 0:
+                d_pp = ratio_act - grp["vis_sa"] / parent["vis_sa"] * 100
+                sign = "+" if d_pp >= 0 else ""
+                r_delta = f"{sign}{d_pp:.1f}pp SA"
+                if parent.get("vis_msa", 0) > 0 and grp.get("vis_msa", 0) > 0:
+                    d_pp_m = ratio_act - grp["vis_msa"] / parent["vis_msa"] * 100
+                    sign2 = "+" if d_pp_m >= 0 else ""
+                    r_delta += f" / {sign2}{d_pp_m:.1f}pp MSAA"
+            rows.append(_ratio_row(ratio_lbl, ratio_act, r_delta))
+
+    # Dwell time
+    dwell_grp = int_ or (next(iter(by_enum.values()), None) if by_enum else None)
+    if dwell_grp and dwell_grp["est_mean"] > 0:
+        est = dwell_grp["est_mean"]
+        est_sa = dwell_grp["est_sa_mean"]
+        d_est = ""
+        if est_sa > 0:
+            diff = est - est_sa
+            sign = "+" if diff >= 0 else ""
+            d_est = f"{sign}{diff:.1f} min SA"
+        rows.append(_kpi_row("#6b7280", "Estancia media", f"{est:.1f} min", d_est))
+
+    # Peak day (from dias_p_list across all zones)
     try:
-        all_dias = [
-            z["dias_p"]
-            for z in zonas_data
-            if z.get("zone_enum") in (0, 1, 2)
-            and z.get("dias_p") is not None
-            and not z["dias_p"].empty
-            and "unique_visitors" in z["dias_p"].columns
-        ]
+        all_dias = [d for grp in by_enum.values() for d in grp.get("dias_p_list", [])]
         if all_dias:
             combined = pd.concat(all_dias, ignore_index=True)
             combined["wd"] = pd.to_datetime(combined["fecha_dt"]).dt.dayofweek
@@ -694,28 +921,14 @@ def _evaluacion_general(
             if len(by_day) >= 3:
                 dia_max = int(by_day.idxmax())
                 dia_min = int(by_day.idxmin())
-                vis_max = int(round(by_day[dia_max]))
-                vis_max_str = f"{vis_max:,}".replace(",", ".")
-                blocks.append(
-                    _sp(
-                        [
-                            _t(f"{per_cap} el día con mayor afluencia fue el "),
-                            _bold(_DIA_NAMES_ES[dia_max]),
-                            _t(" (media de "),
-                            _bold(vis_max_str, color=_C_VAL, size=_SZ_PROSE),
-                            _t(" visitantes)"),
-                        ]
-                        + (
-                            [_t(f", y el de menor el {_DIA_NAMES_ES[dia_min]}.")]
-                            if dia_max != dia_min
-                            else [_t(".")]
-                        )
-                    )
-                )
+                dia_str = _DIA_NAMES_ES[dia_max].capitalize()
+                if dia_max != dia_min:
+                    dia_str += f" (menor: {_DIA_NAMES_ES[dia_min]})"
+                rows.append(_kpi_row("#6b7280", "Día más fuerte", dia_str, ""))
     except Exception:
         pass
 
-    # ── Peak hour ─────────────────────────────────────────────────────────────
+    # Peak hour
     if not df.empty and "hourly_visits" in df.columns:
         try:
             df_p = df[(df["fecha_dt"] >= fmin_p) & (df["fecha_dt"] <= fecha_max)]
@@ -729,20 +942,12 @@ def _evaluacion_general(
                 except Exception:
                     pass
             if hourly:
-                hora_pico = max(hourly, key=lambda h: hourly[h])
-                blocks.append(
-                    _sp(
-                        [
-                            _t("La franja horaria de mayor actividad fue "),
-                            _bold(f"{hora_pico:02d}:00–{hora_pico + 1:02d}:00"),
-                            _t(f" {per}."),
-                        ]
-                    )
-                )
+                hp = max(hourly, key=lambda h: hourly[h])
+                rows.append(_kpi_row("#6b7280", "Hora pico", f"{hp:02d}:00–{hp + 1:02d}:00", ""))
         except Exception:
             pass
 
-    # ── New-visitor ratio ─────────────────────────────────────────────────────
+    # New-visitor ratio
     if not df.empty and "new_visitors" in df.columns and "unique_visitors" in df.columns:
         try:
             df_p = df[(df["fecha_dt"] >= fmin_p) & (df["fecha_dt"] <= fecha_max)]
@@ -751,44 +956,29 @@ def _evaluacion_general(
             if total_uv > 0 and total_new > 0:
                 pct_new = total_new / total_uv * 100
                 if pct_new >= 60:
-                    perfil = "un perfil de alta atracción de nuevo público"
+                    perfil = "alta atracción"
                 elif pct_new >= 35:
-                    perfil = "un equilibrio saludable entre clientes nuevos y recurrentes"
+                    perfil = "equilibrio nuevo/recurrente"
                 else:
-                    perfil = "una base principalmente de clientes recurrentes"
-                blocks.append(
-                    _sp(
-                        [
-                            _bold(f"{pct_new:.0f}%", color=_C_VAL, size=_SZ_PROSE),
-                            _t(f" de los visitantes {per} eran nuevos, lo que apunta a {perfil}."),
-                        ]
-                    )
-                )
+                    perfil = "base recurrente"
+                rows.append(_kpi_row("#6b7280", "Visitantes nuevos", f"{pct_new:.0f}%", perfil))
         except Exception:
             pass
 
-    # ── Visit frequency ───────────────────────────────────────────────────────
+    # Frequency
+    freq_col = "freq_28d" if (fecha_max - fmin_p).days > 10 else "freq_7d"
     if not df.empty and freq_col in df.columns:
         try:
             df_p = df[(df["fecha_dt"] >= fmin_p) & (df["fecha_dt"] <= fecha_max)]
             freq_mean = df_p[freq_col].replace(0, pd.NA).mean()
-            if pd.notna(freq_mean) and freq_mean > 1.0:
-                blocks.append(
-                    _sp(
-                        [
-                            _t("La frecuencia media de visita fue de "),
-                            _bold(f"{freq_mean:.1f}"),
-                            _t(" visitas por visitante único en el período."),
-                        ]
-                    )
+            if pd.notna(freq_mean) and freq_mean > 1.05:
+                rows.append(
+                    _kpi_row("#6b7280", "Frecuencia media", f"{freq_mean:.1f} visitas/UV", "")
                 )
         except Exception:
             pass
 
-    if not blocks:
-        return html.Div()
-
-    return html.Div([_sub_header("fas fa-chart-bar", "Análisis del período", "#0052CC")] + blocks)
+    return html.Div(rows, style={"marginTop": "2px"})
 
 
 # ── Tab content builders ──────────────────────────────────────────────────────
@@ -843,11 +1033,15 @@ def _tab_resumen(
 ) -> html.Div:
     fmin_msaa = fmin_p - timedelta(days=364)
     fmax_msaa = fecha_max - timedelta(days=364)
-    blocks = _visitor_blocks(zonas_data, {0, 1, 2}, df, fmin_msaa, fmax_msaa, ventana)
-    if not blocks:
+    by_enum = _build_by_enum(zonas_data, df, fmin_msaa, fmax_msaa)
+    if not by_enum:
         return html.P("Sin datos de zona disponibles.", className="text-muted small")
-    eval_block = _evaluacion_general(zonas_data, df, fmin_p, fecha_max, ventana)
-    return html.Div(blocks + [eval_block])
+    return html.Div(
+        [
+            _narrative_block(by_enum, ventana),
+            _kpi_bullets(by_enum, ventana, df, fmin_p, fecha_max),
+        ]
+    )
 
 
 def _tab_contexto_exterior(
