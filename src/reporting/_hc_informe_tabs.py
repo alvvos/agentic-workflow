@@ -612,6 +612,185 @@ def _build_calendar(fmin: date, fmax: date, festivos: dict[date, str]) -> html.D
     )
 
 
+# ── General evaluation prose ─────────────────────────────────────────────────
+
+_DIA_NAMES_ES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+
+
+def _evaluacion_general(
+    zonas_data: list[dict],
+    df: pd.DataFrame,
+    fmin_p: date,
+    fecha_max: date,
+    ventana: str,
+) -> html.Div:
+    """Narrative paragraph block: dwell time, peak day, peak hour, new-visitor ratio, frequency."""
+    import json as _json
+
+    per, lbl_sa, _ = _periodo_labels(ventana)
+    per_cap = per[0].upper() + per[1:]
+    freq_col = "freq_28d" if ventana == "mes" else "freq_7d"
+
+    blocks: list = []
+
+    # ── Dwell time (tienda = zone_enum 1, fallback to any zone) ──────────────
+    est_act = est_ant = 0.0
+    for z in zonas_data:
+        if z.get("zone_enum") == 1 and z["r"].get("estancia", 0) > 0:
+            est_act = z["r"]["estancia"]
+            est_ant = z["a"].get("estancia", 0)
+            break
+    if est_act == 0:
+        for z in zonas_data:
+            if z["r"].get("estancia", 0) > 0:
+                est_act = z["r"]["estancia"]
+                est_ant = z["a"].get("estancia", 0)
+                break
+    if est_act > 0:
+        diff_est = est_act - est_ant if est_ant > 0 else None
+        ref_str = f"{est_ant:.1f} min" if est_ant > 0 else None
+        inicio = [
+            _t("La estancia media en tienda fue de "),
+            _bold(f"{est_act:.1f} min"),
+            _t(f" {per}"),
+        ]
+        blocks.append(
+            _sp(
+                _assemble(
+                    inicio,
+                    _diff_spans(
+                        diff_est,
+                        ref_str,
+                        lbl_sa,
+                        suffix=" min",
+                        decimals=1,
+                        ref_num=est_ant if est_ant > 0 else None,
+                    ),
+                    [],
+                )
+            )
+        )
+
+    # ── Strongest / weakest day of week ──────────────────────────────────────
+    try:
+        all_dias = [
+            z["dias_p"]
+            for z in zonas_data
+            if z.get("zone_enum") in (0, 1, 2)
+            and z.get("dias_p") is not None
+            and not z["dias_p"].empty
+            and "unique_visitors" in z["dias_p"].columns
+        ]
+        if all_dias:
+            combined = pd.concat(all_dias, ignore_index=True)
+            combined["wd"] = pd.to_datetime(combined["fecha_dt"]).dt.dayofweek
+            by_day = (
+                combined.groupby(["fecha_dt", "wd"])["unique_visitors"]
+                .sum()
+                .reset_index()
+                .groupby("wd")["unique_visitors"]
+                .mean()
+            )
+            if len(by_day) >= 3:
+                dia_max = int(by_day.idxmax())
+                dia_min = int(by_day.idxmin())
+                vis_max = int(round(by_day[dia_max]))
+                vis_max_str = f"{vis_max:,}".replace(",", ".")
+                blocks.append(
+                    _sp(
+                        [
+                            _t(f"{per_cap} el día con mayor afluencia fue el "),
+                            _bold(_DIA_NAMES_ES[dia_max]),
+                            _t(" (media de "),
+                            _bold(vis_max_str, color=_C_VAL, size=_SZ_PROSE),
+                            _t(" visitantes)"),
+                        ]
+                        + (
+                            [_t(f", y el de menor el {_DIA_NAMES_ES[dia_min]}.")]
+                            if dia_max != dia_min
+                            else [_t(".")]
+                        )
+                    )
+                )
+    except Exception:
+        pass
+
+    # ── Peak hour ─────────────────────────────────────────────────────────────
+    if not df.empty and "hourly_visits" in df.columns:
+        try:
+            df_p = df[(df["fecha_dt"] >= fmin_p) & (df["fecha_dt"] <= fecha_max)]
+            hourly: dict[int, float] = {}
+            for val in df_p["hourly_visits"].dropna():
+                try:
+                    h_dict = _json.loads(val) if isinstance(val, str) else (val or {})
+                    for h, v in h_dict.items():
+                        k = int(h)
+                        hourly[k] = hourly.get(k, 0.0) + (float(v) if v else 0.0)
+                except Exception:
+                    pass
+            if hourly:
+                hora_pico = max(hourly, key=lambda h: hourly[h])
+                blocks.append(
+                    _sp(
+                        [
+                            _t("La franja horaria de mayor actividad fue "),
+                            _bold(f"{hora_pico:02d}:00–{hora_pico + 1:02d}:00"),
+                            _t(f" {per}."),
+                        ]
+                    )
+                )
+        except Exception:
+            pass
+
+    # ── New-visitor ratio ─────────────────────────────────────────────────────
+    if not df.empty and "new_visitors" in df.columns and "unique_visitors" in df.columns:
+        try:
+            df_p = df[(df["fecha_dt"] >= fmin_p) & (df["fecha_dt"] <= fecha_max)]
+            total_new = df_p["new_visitors"].sum()
+            total_uv = df_p["unique_visitors"].sum()
+            if total_uv > 0 and total_new > 0:
+                pct_new = total_new / total_uv * 100
+                if pct_new >= 60:
+                    perfil = "un perfil de alta atracción de nuevo público"
+                elif pct_new >= 35:
+                    perfil = "un equilibrio saludable entre clientes nuevos y recurrentes"
+                else:
+                    perfil = "una base principalmente de clientes recurrentes"
+                blocks.append(
+                    _sp(
+                        [
+                            _bold(f"{pct_new:.0f}%", color=_C_VAL, size=_SZ_PROSE),
+                            _t(f" de los visitantes {per} eran nuevos, lo que apunta a {perfil}."),
+                        ]
+                    )
+                )
+        except Exception:
+            pass
+
+    # ── Visit frequency ───────────────────────────────────────────────────────
+    if not df.empty and freq_col in df.columns:
+        try:
+            df_p = df[(df["fecha_dt"] >= fmin_p) & (df["fecha_dt"] <= fecha_max)]
+            freq_mean = df_p[freq_col].replace(0, pd.NA).mean()
+            if pd.notna(freq_mean) and freq_mean > 1.0:
+                blocks.append(
+                    _sp(
+                        [
+                            _t("La frecuencia media de visita fue de "),
+                            _bold(f"{freq_mean:.1f}"),
+                            _t(" visitas por visitante único en el período."),
+                        ]
+                    )
+                )
+        except Exception:
+            pass
+
+    if not blocks:
+        return html.Div()
+
+    return html.Div([_sub_header("fas fa-chart-bar", "Análisis del período", "#0052CC")] + blocks)
+
+
 # ── Tab content builders ──────────────────────────────────────────────────────
 
 
@@ -667,7 +846,8 @@ def _tab_resumen(
     blocks = _visitor_blocks(zonas_data, {0, 1, 2}, df, fmin_msaa, fmax_msaa, ventana)
     if not blocks:
         return html.P("Sin datos de zona disponibles.", className="text-muted small")
-    return html.Div(blocks)
+    eval_block = _evaluacion_general(zonas_data, df, fmin_p, fecha_max, ventana)
+    return html.Div(blocks + [eval_block])
 
 
 def _tab_contexto_exterior(
