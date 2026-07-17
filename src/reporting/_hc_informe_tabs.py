@@ -193,6 +193,80 @@ def _sp(children: list) -> html.P:
     )
 
 
+# ── Kendall's τ (pure numpy + math, no scipy) ────────────────────────────────
+
+
+def _kendall_tau_np(x, y) -> tuple[float, float]:
+    """Kendall's τ_b and asymptotic p-value without scipy."""
+    import math
+
+    import numpy as np
+
+    x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+    n = len(x)
+    if n < 10:
+        return 0.0, 1.0
+    c = d = tx = ty = 0
+    for i in range(n - 1):
+        dx = x[i] - x[i + 1 :]
+        dy = y[i] - y[i + 1 :]
+        prod = dx * dy
+        c += int((prod > 0).sum())
+        d += int((prod < 0).sum())
+        tx += int((dx == 0).sum())
+        ty += int((dy == 0).sum())
+    pairs = n * (n - 1) // 2
+    denom = math.sqrt((pairs - tx) * (pairs - ty))
+    tau = (c - d) / denom if denom > 0 else 0.0
+    sigma = math.sqrt(2 * (2 * n + 5) / (9 * n * (n - 1)))
+    z = tau / sigma if sigma > 0 else 0.0
+    p = math.erfc(abs(z) / math.sqrt(2))
+    return tau, p
+
+
+def _impacto_badge(
+    señal_id: str,
+    location_uuid: str,
+    df: pd.DataFrame,
+    fmin_hist: date,
+    fecha_max: date,
+) -> dbc.Badge | None:
+    """Badge showing Kendall's τ correlation between signal and visitor counts."""
+    try:
+        from src.db.queries import get_señal_diaria
+
+        s = get_señal_diaria(
+            location_uuid, señal_id, pd.Timestamp(fmin_hist), pd.Timestamp(fecha_max)
+        )
+        if s is None or s.empty:
+            return None
+        v_daily = df.groupby("fecha_dt")["unique_visitors"].sum()
+        if v_daily.empty:
+            return None
+        v_daily.index = pd.to_datetime(v_daily.index)
+        s.index = pd.to_datetime(s.index)
+        merged = pd.DataFrame({"s": s, "v": v_daily}).dropna()
+        if len(merged) < 10:
+            return None
+        tau, p = _kendall_tau_np(merged["s"].to_numpy(), merged["v"].to_numpy())
+        abs_tau = abs(tau)
+        if p > 0.1 or abs_tau < 0.1:
+            label, bg = "Sin impacto", "#adb5bd"
+        elif abs_tau < 0.25:
+            label, bg = "Impacto leve", "#6c757d"
+        elif abs_tau < 0.45:
+            label, bg = "Impacto moderado", "#E67E22"
+        else:
+            label, bg = "Impacto alto", "#dc3545"
+        return dbc.Badge(
+            label,
+            style={"backgroundColor": bg, "fontSize": "0.63rem", "fontWeight": "600"},
+            className="mb-1",
+        )
+    except Exception:
+        return None
+
+
 # ── Sentence composition ─────────────────────────────────────────────────────
 
 
@@ -213,6 +287,7 @@ def _diff_spans(
     lbl: str,
     suffix: str = "",
     decimals: int = 0,
+    ref_num: float | int | None = None,
 ) -> list:
     """Span list for one comparison clause, empty if no data."""
     if diff is None or ref_str is None:
@@ -223,8 +298,13 @@ def _diff_spans(
     more = "más" if is_pos else "menos"
     abs_d = abs(diff)
     d_str = f"{abs_d:.{decimals}f}{suffix}" if decimals > 0 else f"{int(round(abs_d))}{suffix}"
+    pct_part = ""
+    if ref_num is not None and ref_num != 0:
+        pct = abs_d / abs(ref_num) * 100
+        sign = "+" if is_pos else "−"
+        pct_part = f" ({sign}{pct:.1f}%)"
     return [
-        _diff_span(f"{d_str} {more}", positive=is_pos),
+        _diff_span(f"{d_str} {more}{pct_part}", positive=is_pos),
         _t(f" que {lbl} "),
         _ref(f"({ref_str})"),
     ]
@@ -266,7 +346,9 @@ def _sentence_visitantes(
     inicio = [_t(f"{sujeto} registró "), _bold(vis_str, color=color), _t(f" visitantes {per}")]
     return _sp(
         _assemble(
-            inicio, _diff_spans(diff_sa, ref_sa, lbl_sa), _diff_spans(diff_msa, ref_msa, lbl_msa)
+            inicio,
+            _diff_spans(diff_sa, ref_sa, lbl_sa, ref_num=vis_sa),
+            _diff_spans(diff_msa, ref_msa, lbl_msa, ref_num=vis_msa),
         )
     )
 
@@ -372,8 +454,12 @@ def _sentence_señal(
     return _sp(
         _assemble(
             inicio,
-            _diff_spans(diff_sa, ref_sa, lbl_sa, suffix=diff_suffix, decimals=decimals),
-            _diff_spans(diff_msa, ref_msa, lbl_msa, suffix=diff_suffix, decimals=decimals),
+            _diff_spans(
+                diff_sa, ref_sa, lbl_sa, suffix=diff_suffix, decimals=decimals, ref_num=val_sa
+            ),
+            _diff_spans(
+                diff_msa, ref_msa, lbl_msa, suffix=diff_suffix, decimals=decimals, ref_num=val_msa
+            ),
         )
     )
 
@@ -575,6 +661,7 @@ def _tab_contexto_exterior(
     fmax_sama: date,
     fmin_msaa: date,
     fmax_msaa: date,
+    df: pd.DataFrame | None = None,
 ) -> html.Div:
     dias_v = 28 if ventana == "mes" else 7
 
@@ -624,9 +711,17 @@ def _tab_contexto_exterior(
                 if v_act is None:
                     continue
 
-                sentences.append(
-                    _sentence_señal(señal_id, v_act, suffix, method, v_sa, v_msa, ventana)
+                sentence = _sentence_señal(señal_id, v_act, suffix, method, v_sa, v_msa, ventana)
+                badge = (
+                    _impacto_badge(señal_id, location_uuid, df, fmin_msaa, fecha_max)
+                    if df is not None and not df.empty
+                    else None
                 )
+                block = html.Div(
+                    ([badge] if badge else []) + [sentence],
+                    style={"marginBottom": "2px"},
+                )
+                sentences.append(block)
         except Exception:
             pass
 
@@ -755,6 +850,7 @@ def render_informe_tabs(
                         fmax_sama,
                         fmin_msaa,
                         fmax_msaa,
+                        df=df,
                     ),
                     style={"paddingTop": "12px"},
                 ),
