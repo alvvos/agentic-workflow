@@ -697,7 +697,7 @@ def _narrative_block(by_enum: dict[int, dict], ventana: str) -> html.Div:
             if ext["d_sa"] > 10 and gap > 15:
                 parts.append(
                     "Buen crecimiento de tráfico exterior aunque no se ha podido captar todo"
-                    " su potencial en tienda. Recomendación: revisar los elementos de conversión calle→tienda."
+                    " su potencial en tienda. Recomendación: revisar los elementos de conversión de calle a tienda."
                 )
             elif n_pos == len(deltas):
                 parts.append(f"{per_cap} positiva con crecimiento en todas las zonas.")
@@ -734,12 +734,12 @@ def _narrative_block(by_enum: dict[int, dict], ventana: str) -> html.Div:
         diff_r = ratio_act - ratio_sa
         if diff_r <= -3:
             parts.append(
-                f"El ratio de conversión exterior→tienda ha caído {abs(diff_r):.1f}pp"
+                f"El ratio de conversión del exterior a la tienda ha caído {abs(diff_r):.1f}pp"
                 f" ({ratio_act:.0f}% vs {ratio_sa:.0f}% en {lbl_sa})."
             )
         elif diff_r >= 3:
             parts.append(
-                f"El ratio de conversión exterior→tienda ha mejorado {diff_r:.1f}pp"
+                f"El ratio de conversión del exterior a la tienda ha mejorado {diff_r:.1f}pp"
                 f" ({ratio_act:.0f}% vs {ratio_sa:.0f}% en {lbl_sa})."
             )
 
@@ -830,7 +830,11 @@ def _analysis_sentences(
                     pass
             if hourly:
                 hp = max(hourly, key=lambda h: hourly[h])
-                sentences.append(html.Li(f"Hora pico: {hp:02d}:00–{hp + 1:02d}:00."))
+                sentences.append(
+                    html.Li(
+                        f"La hora de mayor afluencia se sitúa entre las {hp:02d}:00 y las {hp + 1:02d}:00."
+                    )
+                )
         except Exception:
             pass
 
@@ -848,7 +852,11 @@ def _analysis_sentences(
                     perfil = "equilibrio entre nuevos y recurrentes"
                 else:
                     perfil = "base recurrente consolidada"
-                sentences.append(html.Li(f"Visitantes nuevos: {pct_new:.0f}% — {perfil}."))
+                sentences.append(
+                    html.Li(
+                        f"El {pct_new:.0f}% de los visitantes son nuevos, lo que indica {perfil}."
+                    )
+                )
         except Exception:
             pass
 
