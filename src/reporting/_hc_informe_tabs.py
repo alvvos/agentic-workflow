@@ -757,25 +757,58 @@ def _narrative_block(by_enum: dict[int, dict], ventana: str) -> html.Div:
 
         if ext and int_ and ext["d_sa"] is not None and int_["d_sa"] is not None:
             gap = ext["d_sa"] - int_["d_sa"]
-            if ext["d_sa"] > 10 and gap > 15:
+            ext_s = f"{ext['d_sa']:+.1f}%"
+            int_s = f"{int_['d_sa']:+.1f}%"
+            if ext["d_sa"] > 5 and gap > 5:
+                if gap > 15:
+                    parts.append(
+                        f"Buen crecimiento de tráfico exterior ({ext_s}) pero la tienda no"
+                        f" sigue el mismo ritmo ({int_s}). Revisa los elementos de conversión"
+                        " de calle a tienda."
+                    )
+                else:
+                    parts.append(
+                        f"El exterior gana tráfico ({ext_s}) pero la captación en tienda"
+                        f" crece menos ({int_s}). Hay margen de mejora en la conversión."
+                    )
+            elif ext["d_sa"] > 0 and int_["d_sa"] < -5:
                 parts.append(
-                    "Buen crecimiento de tráfico exterior aunque no se ha podido captar todo"
-                    " su potencial en tienda. Revisa los elementos de conversión de calle a tienda."
+                    f"Más tráfico exterior ({ext_s}) pero caída en tienda ({int_s})."
+                    " El local no está convirtiendo el paso de calle."
                 )
             elif n_pos == len(deltas):
-                parts.append(f"Crecimiento en todas las zonas respecto a {lbl_sa}.")
+                parts.append(
+                    f"Crecimiento generalizado respecto a {lbl_sa}"
+                    f" — exterior {ext_s}, tienda {int_s}."
+                )
             elif n_neg == len(deltas):
-                parts.append(f"Tráfico inferior en todas las zonas respecto a {lbl_sa}.")
+                parts.append(
+                    f"Caída generalizada respecto a {lbl_sa}"
+                    f" — exterior {ext_s}, tienda {int_s}."
+                )
             elif n_pos > n_neg:
-                parts.append(f"Mayoría de zonas con crecimiento respecto a {lbl_sa}.")
+                parts.append(
+                    f"Mayoría de zonas con crecimiento respecto a {lbl_sa}"
+                    f" (exterior {ext_s}, tienda {int_s})."
+                )
             else:
-                parts.append("Tendencia mixta según zona.")
+                parts.append(
+                    f"Tendencia mixta: exterior {ext_s}, tienda {int_s} respecto a {lbl_sa}."
+                )
         elif n_pos == len(deltas):
             parts.append(f"Crecimiento en todas las zonas respecto a {lbl_sa}.")
         elif n_neg == len(deltas):
-            parts.append(f"Tráfico inferior respecto a {lbl_sa}.")
+            parts.append(f"Caída generalizada respecto a {lbl_sa}.")
         else:
             parts.append("Tendencia mixta según zona.")
+
+        # Checkout alert
+        caja = by_enum.get(0)
+        if caja and caja["d_sa"] is not None and caja["d_sa"] < -20:
+            parts.append(
+                f"La zona de caja registra una caída pronunciada ({caja['d_sa']:+.1f}%)"
+                " — revisar disponibilidad y atención en caja."
+            )
 
     # Dwell time comment
     dwell_grp = int_ or (next(iter(by_enum.values()), None) if by_enum else None)
