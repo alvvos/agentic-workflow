@@ -894,6 +894,11 @@ def _visitor_blocks(
             )
             grp["vis_msaa"] = int(df.loc[mask, "unique_visitors"].sum())
 
+    _next_enum = {2: 1, 1: 0}
+    _zone_name = {
+        ze: grp["zona_names"][0] if grp["zona_names"] else str(ze) for ze, grp in by_enum.items()
+    }
+
     blocks = []
     for ze in sorted(by_enum.keys(), reverse=True):  # higher enum first (exterior before interior)
         grp = by_enum[ze]
@@ -902,6 +907,31 @@ def _visitor_blocks(
         vis_msa = grp["vis_msaa"] if grp["vis_msaa"] > 0 else None
         blocks.append(_zone_header(ze))
         blocks.append(_sentence_visitantes(ze, vis, vis_sa, vis_msa, ventana))
+        nxt = _next_enum.get(ze)
+        if nxt is not None and nxt in by_enum and vis > 0:
+            nxt_vis = by_enum[nxt]["vis_act"]
+            nxt_vis_sa = by_enum[nxt]["vis_sama"]
+            ratio = nxt_vis / vis * 100
+            ratio_sa = (
+                (nxt_vis_sa / grp["vis_sama"] * 100)
+                if grp["vis_sama"] > 0 and nxt_vis_sa > 0
+                else None
+            )
+            txt = f"De los {vis:,} visitantes de {_zone_name[ze]}, el {ratio:.1f}% accedió a {_zone_name[nxt]} ({nxt_vis:,}).".replace(
+                ",", "."
+            )
+            if ratio_sa is not None:
+                diff = ratio - ratio_sa
+                if abs(diff) >= 0.5:
+                    sign = "+" if diff >= 0 else ""
+                    txt += f" {sign}{diff:.1f}pp respecto al período previo."
+            blocks.append(
+                html.P(
+                    txt,
+                    className="text-muted mb-2 mt-1",
+                    style={"fontSize": "0.82rem", "fontStyle": "italic"},
+                )
+            )
     return blocks
 
 
