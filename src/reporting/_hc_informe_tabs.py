@@ -230,7 +230,7 @@ def _impacto_badge(
     df: pd.DataFrame,
     fmin_hist: date,
     fecha_max: date,
-) -> dbc.Badge | None:
+) -> html.Span | None:
     """Badge showing Kendall's τ correlation between signal and visitor counts."""
     try:
         from src.db.queries import get_señal_diaria
@@ -251,17 +251,26 @@ def _impacto_badge(
         tau, p = _kendall_tau_np(merged["s"].to_numpy(), merged["v"].to_numpy())
         abs_tau = abs(tau)
         if p > 0.1 or abs_tau < 0.1:
-            label, bg = "Sin impacto", "#adb5bd"
+            label, color, bg, border = "Sin impacto", "#9ca3af", "#f9fafb", "#e5e7eb"
         elif abs_tau < 0.25:
-            label, bg = "Impacto leve", "#6c757d"
+            label, color, bg, border = "Impacto leve", "#6b7280", "#f3f4f6", "#d1d5db"
         elif abs_tau < 0.45:
-            label, bg = "Impacto moderado", "#E67E22"
+            label, color, bg, border = "Impacto moderado", "#b45309", "#fffbeb", "#fcd34d"
         else:
-            label, bg = "Impacto alto", "#dc3545"
-        return dbc.Badge(
+            label, color, bg, border = "Impacto alto", "#dc2626", "#fef2f2", "#fca5a5"
+        return html.Span(
             label,
-            style={"backgroundColor": bg, "fontSize": "0.63rem", "fontWeight": "600"},
-            className="mb-1",
+            style={
+                "fontSize": "0.61rem",
+                "fontWeight": "600",
+                "color": color,
+                "backgroundColor": bg,
+                "border": f"1px solid {border}",
+                "borderRadius": "10px",
+                "padding": "2px 8px",
+                "whiteSpace": "nowrap",
+                "letterSpacing": "0.2px",
+            },
         )
     except Exception:
         return None
@@ -718,8 +727,22 @@ def _tab_contexto_exterior(
                     else None
                 )
                 block = html.Div(
-                    ([badge] if badge else []) + [sentence],
-                    style={"marginBottom": "2px"},
+                    [
+                        html.Div(sentence, style={"flex": "1", "minWidth": "0"}),
+                        (
+                            html.Div(
+                                badge,
+                                style={
+                                    "flexShrink": "0",
+                                    "paddingTop": "3px",
+                                    "paddingLeft": "10px",
+                                },
+                            )
+                            if badge
+                            else None
+                        ),
+                    ],
+                    style={"display": "flex", "alignItems": "flex-start", "marginBottom": "2px"},
                 )
                 sentences.append(block)
         except Exception:
