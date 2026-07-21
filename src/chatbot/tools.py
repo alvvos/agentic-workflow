@@ -43,29 +43,28 @@ def _find_location(location_uuid: str) -> dict | None:
 
 
 def _load_dataset(session_id: str = "local_dev") -> pd.DataFrame:
-    # Non-default session_id means a test/synthetic run — skip DB and go to CSV directly.
-    if session_id == "local_dev":
-        try:
-            from src.db.store import get_conn
+    try:
+        from src.db.store import get_conn
 
-            df = (
-                get_conn()
-                .execute(
-                    """
-                SELECT fecha, ubicacion_id AS location_id, zona_id,
-                       total_visitas AS total_visits, visitantes_unicos AS unique_visitors,
-                       visitantes_nuevos AS new_visitors,
-                       tiempo_estancia_min AS dwell_time, visitas_horarias AS hourly_visits
-                FROM visitas ORDER BY fecha
-            """
-                )
-                .df()
+        df = (
+            get_conn()
+            .execute(
+                """
+            SELECT fecha, ubicacion_id AS location_id, zona_id,
+                   total_visitas AS total_visits, visitantes_unicos AS unique_visitors,
+                   visitantes_nuevos AS new_visitors,
+                   tiempo_estancia_min AS dwell_time, visitas_horarias AS hourly_visits
+            FROM visitas ORDER BY fecha
+        """
             )
-            if not df.empty:
-                df["fecha"] = pd.to_datetime(df["fecha"])
-                return df
-        except Exception:
-            pass
+            .df()
+        )
+        if not df.empty:
+            df["fecha"] = pd.to_datetime(df["fecha"])
+            return df
+    except Exception:
+        pass
+    # Fallback: CSV (entorno sin DB o tests con datos sintéticos)
     path = _DATA_DIR / f"dataset_{session_id}.csv"
     if not path.exists():
         files = sorted(glob(_RAW_GLOB))
@@ -127,7 +126,7 @@ def get_pm_data(
     # Métricas base
     total_dias = delta_days + 1
     total_vis = int(sub["total_visits"].sum())
-    media_dia = round(total_vis / max(len(sub), 1), 0)
+    media_dia = round(total_vis / max(sub["fecha"].nunique(), 1), 0)
     dwell_med = round(sub["dwell_time"].mean(), 0)
     uv_total = int(sub["unique_visitors"].sum())
     new_vis = int(sub["new_visitors"].dropna().sum())
@@ -180,7 +179,7 @@ def get_pm_data(
         "visitantes_unicos": uv_total,
         "visitantes_nuevos": new_vis,
         "pct_nuevos": round(new_vis / uv_total * 100, 1) if uv_total else None,
-        "dwell_time_seg": int(dwell_med),
+        "dwell_time_min": int(dwell_med),
         "hora_pico": hora_pico,
         "wow_pct": wow_pct,
         "filas_analizadas": len(sub),
@@ -601,14 +600,19 @@ def get_weather_holidays(
 
     lat = loc.get("lat") or 40.4168
     lon = loc.get("lon") or -3.7038
-    region_code = loc.get("codigo_region", "MD")
+    region_code = loc.get("codigo_region")
+    pais_codigo = loc.get("pais_codigo", "ES")
 
     # ── Festivos ─────────────────────────────────────────────────────────────
     years = list({t0.year, t1.year})
     try:
-        cal = _holidays_lib.Spain(subdiv=region_code, years=years)
+        country_cls = _holidays_lib.country_holidays(pais_codigo, subdiv=region_code, years=years)
+        cal = country_cls
     except Exception:
-        cal = _holidays_lib.Spain(years=years)
+        try:
+            cal = _holidays_lib.country_holidays(pais_codigo, years=years)
+        except Exception:
+            cal = {}
 
     dates = pd.date_range(fecha_inicio, fecha_fin, freq="D")
     festivos = [
@@ -618,12 +622,15 @@ def get_weather_holidays(
     # ── Clima (Open-Meteo archive) ────────────────────────────────────────────
     weather_daily: dict = {}
     try:
+        tz = loc.get("timezone") or (
+            "America/Mexico_City" if pais_codigo == "MX" else "Europe/Madrid"
+        )
         url = (
             f"https://archive-api.open-meteo.com/v1/archive"
             f"?latitude={lat}&longitude={lon}"
             f"&start_date={fecha_inicio}&end_date={fecha_fin}"
             f"&daily=temperature_2m_max,temperature_2m_min,precipitation_sum"
-            f"&timezone=Europe%2FMadrid"
+            f"&timezone={requests.utils.quote(tz)}"
         )
         resp = requests.get(url, timeout=10).json()
         for i, fstr in enumerate(resp["daily"]["time"]):
@@ -1037,67 +1044,31 @@ def get_model_metrics(
     zone_uuid: str | None = None,
 ) -> dict:
     """
-    Devuelve las métricas de precisión del modelo predictivo XGBoost para
-    una ubicación/zona: WMAPE, MAE, fecha de entrenamiento, features usadas
-    y resultados de evaluación de features individuales si están disponibles.
+    Devuelve métricas de calidad del modelo predictivo XGBoost y evaluación
+    de features individuales para una ubicación/zona.
+
+    NOTA: el modelo entrena on-demand (sin registro persistente). Para obtener
+    WMAPE/MAE del modelo actual llama a get_forecast — devuelve métricas reales
+    calculadas contra datos de validación del mismo entrenamiento.
+    Esta herramienta devuelve los resultados de evaluación de features almacenados
+    en evaluaciones_señales (si los hay).
     """
-    try:
-        from src.db.store import get_conn
+    loc = _find_location(location_uuid)
+    nombre = loc.get("name", location_uuid) if loc else location_uuid
 
-        conn = get_conn()
-        # model_registry fue eliminado — devolvemos mensaje informativo
-        model_rows = []
-    except Exception as e:
-        return {"error": f"No se pudo consultar el registro de modelos: {e}"}
-
-    if not model_rows:
-        loc = _find_location(location_uuid)
-        nombre = loc.get("name", location_uuid) if loc else location_uuid
-        return {
-            "ubicacion": nombre,
-            "modelos": [],
-            "nota": "No hay modelos entrenados registrados para esta ubicación.",
-        }
-
-    modelos = []
-    for mid, zuuid, trained_at, features_raw, metrics_raw, is_valid in model_rows:
-        features = (
-            features_raw
-            if isinstance(features_raw, list)
-            else (json.loads(features_raw) if features_raw else [])
-        )
-        metrics = (
-            metrics_raw
-            if isinstance(metrics_raw, dict)
-            else (json.loads(metrics_raw) if metrics_raw else {})
-        )
-        modelos.append(
-            {
-                "model_id": mid,
-                "zone_uuid": zuuid,
-                "entrenado": str(trained_at)[:10] if trained_at else None,
-                "valido": bool(is_valid),
-                "n_features": len(features),
-                "features": features,
-                "metricas": metrics,
-            }
-        )
-
-    # Feature evaluation results
     feat_evals: list = []
     try:
         from src.db.store import get_conn
 
         conn = get_conn()
-        q2 = """SELECT señal_id, fecha_eval_ini, fecha_eval_fin,
-                       wmape_baseline, wmape_con_feat, wmape_delta, horizonte
-                FROM evaluaciones_señales WHERE ubicacion_id = ?"""
-        p2: list = [location_uuid]
+        q = """SELECT señal_id, fecha_eval_ini, fecha_eval_fin,
+                      wmape_baseline, wmape_con_feat, wmape_delta, horizonte
+               FROM evaluaciones_señales WHERE ubicacion_id = ?"""
+        params: list = [location_uuid]
         if zone_uuid:
-            q2 += " AND (indice_split IS NULL OR indice_split = 0)"
-        q2 += " ORDER BY evaluado_en DESC LIMIT 50"
-        eval_rows = conn.execute(q2, p2).fetchall()
-        for fk, fi, ff, wb, wf, wd, hz in eval_rows:
+            q += " AND (indice_split IS NULL OR indice_split = 0)"
+        q += " ORDER BY evaluado_en DESC LIMIT 50"
+        for fk, fi, ff, wb, wf, wd, hz in conn.execute(q, params).fetchall():
             feat_evals.append(
                 {
                     "feature_key": fk,
@@ -1111,15 +1082,14 @@ def get_model_metrics(
     except Exception:
         pass
 
-    loc = _find_location(location_uuid)
-    nombre = loc.get("name", location_uuid) if loc else location_uuid
-
     return {
         "ubicacion": nombre,
-        "n_modelos": len(modelos),
-        "modelo_mas_reciente": modelos[0] if modelos else None,
-        "todos_modelos": modelos,
+        "nota": (
+            "El modelo entrena on-demand; no hay registro persistente de modelos. "
+            "Llama a get_forecast para obtener WMAPE/MAE del modelo actual."
+        ),
         "evaluacion_features": feat_evals,
+        "n_evaluaciones_features": len(feat_evals),
     }
 
 
@@ -1248,7 +1218,7 @@ def get_dwell_profile(
         "ubicacion": nombre,
         "periodo": {"inicio": fecha_inicio, "fin": fecha_fin},
         "dias_con_datos": len(rows),
-        "media_estancia_seg": int(media_estancia) if media_estancia else None,
+        "media_estancia_min": int(media_estancia) if media_estancia else None,
     }
     if boxplot_parsed:
         result["boxplot_estancia_min"] = boxplot_parsed
@@ -1262,3 +1232,126 @@ def get_dwell_profile(
         result["fidelizacion_anyo"] = freq_anyo
 
     return result
+
+
+# ── Herramienta 16: get_funnel_ratios ────────────────────────────────────────
+
+
+def get_funnel_ratios(
+    location_uuid: str,
+    fecha_inicio: str,
+    fecha_fin: str,
+) -> dict:
+    """
+    Calcula los ratios de conversión del embudo Exterior→Interior→Checkout
+    (Calle→Tienda→Caja) para una ubicación en un rango de fechas.
+
+    Devuelve visitantes por tipo de zona, ratio Calle→Tienda, ratio Tienda→Caja
+    y ratio global Calle→Caja. Incluye comparativa WoW (mismos días semana anterior)
+    para cada ratio.
+
+    Usa tipo_zona de la tabla zonas para clasificar: exterior, interior, checkout.
+    """
+    try:
+        t0, t1 = pd.Timestamp(fecha_inicio), pd.Timestamp(fecha_fin)
+    except Exception:
+        return {"error": "Formato de fecha no válido. Usa YYYY-MM-DD."}
+    if t1 < t0:
+        return {"error": "La fecha de inicio debe ser anterior a la fecha de fin."}
+
+    try:
+        from src.db.store import get_conn
+
+        conn = get_conn()
+        rows = conn.execute(
+            """
+            SELECT z.tipo_zona, SUM(v.total_visitas) AS total
+            FROM visitas v
+            JOIN zonas z ON z.zona_id = v.zona_id
+            WHERE v.ubicacion_id = ?
+              AND v.fecha >= ? AND v.fecha <= ?
+              AND z.oculta = FALSE
+            GROUP BY z.tipo_zona
+            """,
+            [location_uuid, str(t0.date()), str(t1.date())],
+        ).fetchall()
+    except Exception as e:
+        return {"error": f"Error al consultar datos: {e}"}
+
+    if not rows:
+        return {"error": f"Sin datos para el rango {fecha_inicio}→{fecha_fin}."}
+
+    totals: dict[str, int] = {}
+    for tipo, total in rows:
+        if tipo:
+            totals[tipo.lower()] = int(total or 0)
+
+    ext = totals.get("exterior", 0)
+    inte = totals.get("interior", 0)
+    chk = totals.get("checkout", 0)
+
+    def _ratio(num: int, den: int) -> float | None:
+        return round(num / den * 100, 1) if den > 0 else None
+
+    # WoW: mismos días semana anterior
+    delta = (t1 - t0).days + 1
+    t0_wow = t0 - pd.Timedelta(days=delta)
+    t1_wow = t1 - pd.Timedelta(days=delta)
+    wow: dict[str, int] = {}
+    try:
+        wow_rows = conn.execute(
+            """
+            SELECT z.tipo_zona, SUM(v.total_visitas) AS total
+            FROM visitas v
+            JOIN zonas z ON z.zona_id = v.zona_id
+            WHERE v.ubicacion_id = ?
+              AND v.fecha >= ? AND v.fecha <= ?
+              AND z.oculta = FALSE
+            GROUP BY z.tipo_zona
+            """,
+            [location_uuid, str(t0_wow.date()), str(t1_wow.date())],
+        ).fetchall()
+        for tipo, total in wow_rows:
+            if tipo:
+                wow[tipo.lower()] = int(total or 0)
+    except Exception:
+        pass
+
+    ext_w = wow.get("exterior", 0)
+    inte_w = wow.get("interior", 0)
+    chk_w = wow.get("checkout", 0)
+
+    r_calle_tienda = _ratio(inte, ext)
+    r_tienda_caja = _ratio(chk, inte)
+    r_calle_caja = _ratio(chk, ext)
+    r_calle_tienda_wow = _ratio(inte_w, ext_w)
+    r_tienda_caja_wow = _ratio(chk_w, inte_w)
+    r_calle_caja_wow = _ratio(chk_w, ext_w)
+
+    def _diff(now, prev):
+        if now is not None and prev is not None:
+            return round(now - prev, 1)
+        return None
+
+    loc = _find_location(location_uuid)
+    nombre = loc.get("name", location_uuid) if loc else location_uuid
+
+    return {
+        "ubicacion": nombre,
+        "periodo": {"inicio": fecha_inicio, "fin": fecha_fin},
+        "visitantes": {"exterior": ext, "interior": inte, "checkout": chk},
+        "ratios": {
+            "calle_tienda_pct": r_calle_tienda,
+            "tienda_caja_pct": r_tienda_caja,
+            "calle_caja_pct": r_calle_caja,
+        },
+        "wow": {
+            "visitantes": {"exterior": ext_w, "interior": inte_w, "checkout": chk_w},
+            "calle_tienda_pct": r_calle_tienda_wow,
+            "tienda_caja_pct": r_tienda_caja_wow,
+            "calle_caja_pct": r_calle_caja_wow,
+            "diff_calle_tienda_pp": _diff(r_calle_tienda, r_calle_tienda_wow),
+            "diff_tienda_caja_pp": _diff(r_tienda_caja, r_tienda_caja_wow),
+            "diff_calle_caja_pp": _diff(r_calle_caja, r_calle_caja_wow),
+        },
+    }

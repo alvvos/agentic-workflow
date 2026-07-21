@@ -21,8 +21,10 @@ from src.chatbot.tools import (
     get_active_features,
     get_anomalies,
     get_cruise_calls,
+    get_dwell_profile,
     get_external_features,
     get_forecast,
+    get_funnel_ratios,
     get_gis_data,
     get_hourly_breakdown,
     get_location_info,
@@ -277,6 +279,51 @@ _TOOL_DEFINITIONS = [
             "required": ["location_uuid"],
         },
     },
+    {
+        "name": "get_funnel_ratios",
+        "description": (
+            "Calcula los ratios de conversión del embudo Exterior→Interior→Checkout "
+            "(Calle→Tienda→Caja) para una ubicación en un rango de fechas. "
+            "Devuelve visitantes por tipo de zona, ratio Calle→Tienda (%), ratio "
+            "Tienda→Caja (%) y ratio global Calle→Caja (%), con comparativa WoW "
+            "(mismos días semana anterior) y diferencia en puntos porcentuales. "
+            "Úsala cuando el usuario pregunte sobre conversión, ratio de acceso a tienda, "
+            "efectividad del embudo, cuántos que pasan por calle entran a la tienda, etc."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location_uuid": {"type": "string", "description": "UUID de la ubicación."},
+                "fecha_inicio": {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
+                "fecha_fin": {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
+            },
+            "required": ["location_uuid", "fecha_inicio", "fecha_fin"],
+        },
+    },
+    {
+        "name": "get_dwell_profile",
+        "description": (
+            "Devuelve el perfil de permanencia (dwell time) de visitantes para una "
+            "ubicación/zona: media de estancia en minutos, distribución percentil "
+            "(boxplot min/Q1/mediana/Q3/max) y fidelización por ventana temporal "
+            "(7d, 28d, mes, año) con porcentaje de clientes que repiten visita. "
+            "Úsala cuando el usuario pregunte cuánto tiempo pasan los clientes, "
+            "tasa de fidelización, porcentaje de recurrentes o si los clientes vuelven."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location_uuid": {"type": "string", "description": "UUID de la ubicación."},
+                "fecha_inicio": {"type": "string", "description": "Fecha inicio YYYY-MM-DD."},
+                "fecha_fin": {"type": "string", "description": "Fecha fin YYYY-MM-DD."},
+                "zone_uuid": {
+                    "type": "string",
+                    "description": "UUID de la zona específica (opcional).",
+                },
+            },
+            "required": ["location_uuid", "fecha_inicio", "fecha_fin"],
+        },
+    },
 ]
 
 _TOOL_FN = {
@@ -292,6 +339,8 @@ _TOOL_FN = {
     "get_external_features": lambda args: get_external_features(**args),
     "get_cruise_calls": lambda args: get_cruise_calls(**args),
     "get_model_metrics": lambda args: get_model_metrics(**args),
+    "get_funnel_ratios": lambda args: get_funnel_ratios(**args),
+    "get_dwell_profile": lambda args: get_dwell_profile(**args),
 }
 
 
