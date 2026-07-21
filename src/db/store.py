@@ -1622,6 +1622,23 @@ _SOURCE_REGISTRY_SEED = [
             },
         },
     },
+    {
+        "fuente": "google_places",
+        "periodicidad": "mensual",
+        "categoria": "contexto_espacial",
+        "descripcion": "POIs del entorno via Google Maps Places Nearby Search — complementa Esri con mayor cobertura local.",
+        "url_referencia": "https://developers.google.com/maps/documentation/places/web-service/search-nearby",
+        "cobertura_desde": None,
+        "latencia_dias": 0,
+        "paises": ["ES", "MX", "PT"],
+        "esquema_params": "{'radio_m': 1200, 'max_resultados': 200}",
+        "ejemplo_params": {"radio_m": 1200},
+        "config": {
+            "tipo_conector": "pois_google",
+            "radio_m": 1200,
+            "max_resultados": 200,
+        },
+    },
 ]
 
 
@@ -1680,6 +1697,7 @@ def _migrar_tipo_conector(conn: PgConn) -> None:
         "cruceros": {"tipo_conector": "agenda_ajax_tabla"},
         "puertos_estado": {"tipo_conector": "excel_mensual", "modo": "listado"},
         "esri_places": {"tipo_conector": "pois_radio"},
+        "google_places": {"tipo_conector": "pois_google"},
     }
     for fuente, extra_config in mapeo.items():
         conn.execute(

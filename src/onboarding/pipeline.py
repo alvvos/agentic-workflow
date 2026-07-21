@@ -101,6 +101,39 @@ def activar_clima_task(location_uuid: str, routing: RoutingResult) -> int:
     return result.get(location_uuid, 0)
 
 
+# ── Isocronas Esri ────────────────────────────────────────────────────────────
+
+
+@task(name="poblar-isocronas", retries=2, retry_delay_seconds=60)
+def poblar_isocronas_task(location_uuid: str) -> bool:
+    """Llama a Esri GeoEnrichment ring buffer y escribe anillos_captacion en ubicaciones."""
+    from src.data_ingestion.esri_client import write_anillos_captacion
+    from src.db.store import get_conn
+
+    row = (
+        get_conn()
+        .execute(
+            "SELECT lat, lon FROM ubicaciones WHERE ubicacion_id = ? AND lat IS NOT NULL",
+            [location_uuid],
+        )
+        .fetchone()
+    )
+    if not row:
+        return False
+    return write_anillos_captacion(location_uuid, float(row[0]), float(row[1]))
+
+
+# ── POIs Google Places ────────────────────────────────────────────────────────
+
+
+@task(name="poblar-pois-google", retries=2, retry_delay_seconds=60)
+def poblar_pois_google_task(location_uuid: str) -> int:
+    """Llama a Google Maps Places Nearby Search y puebla puntos_interes."""
+    from src.conectores.pois_google import sync_google_places_location
+
+    return sync_google_places_location(location_uuid, verbose=False)
+
+
 # ── Agente 3: Context Scout ───────────────────────────────────────────────────
 
 
@@ -152,6 +185,18 @@ def onboarding_ubicacion(location_uuid: str) -> bool:
         logger.info(
             "Clima activado — %d días históricos escritos para %s", dias_clima, routing.nombre
         )
+
+    # Fase 2c — Isocronas Esri (ring buffers → anillos_captacion)
+    isocronas_ok = poblar_isocronas_task(location_uuid)
+    logger.info(
+        "Isocronas %s para %s",
+        "escritas" if isocronas_ok else "no disponibles (ESRI_KEY ausente o sin geometría)",
+        routing.nombre,
+    )
+
+    # Fase 2d — POIs Google Places
+    n_pois_google = poblar_pois_google_task(location_uuid)
+    logger.info("POIs Google: %d POIs escritos para %s", n_pois_google, routing.nombre)
 
     # Fase 3 — Context Scout
     scout = context_scout_task(location_uuid)

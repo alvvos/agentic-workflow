@@ -154,6 +154,20 @@ def sync_esri_places_location(
     return _sync(location_uuid, params, verbose)
 
 
+def sync_google_places_location(
+    location_uuid: str,
+    params: dict | None = None,
+    verbose: bool = True,
+) -> int:
+    """
+    Compatibilidad con src/callbacks/admin_pois.py.
+    Delegado al conector pois_google.
+    """
+    from src.conectores.pois_google import sync_google_places_location as _sync
+
+    return _sync(location_uuid, params, verbose)
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

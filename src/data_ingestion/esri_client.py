@@ -85,6 +85,7 @@ def _geoenrich_call(
     buffer_radii: list[int],
     analysis_variables: list[str],
     token: str,
+    return_geometry: bool = False,
 ) -> list[dict]:
     """Llama al GeoEnrichment API y devuelve una lista de atributos (uno por anillo)."""
     study_areas = json.dumps(
@@ -101,7 +102,7 @@ def _geoenrich_call(
         {
             "studyAreas": study_areas,
             "analysisVariables": ",".join(analysis_variables),
-            "returnGeometry": "false",
+            "returnGeometry": "true" if return_geometry else "false",
             "f": "json",
             "token": token,
         }
@@ -115,6 +116,8 @@ def _geoenrich_call(
     feature_sets = data.get("results", [{}])[0].get("value", {}).get("FeatureSet", [])
     if not feature_sets:
         return []
+    if return_geometry:
+        return [f.get("geometry", {}) for f in feature_sets[0].get("features", [])]
     return [f.get("attributes", {}) for f in feature_sets[0].get("features", [])]
 
 
@@ -183,3 +186,68 @@ def fetch_geoenrich(ubicacion_id: str, lat: float, lon: float) -> dict[str, floa
         log.error("[%s] circle call FAILED — %s", ubicacion_id, exc)
 
     return resultado
+
+
+_RING_RADII = [400, 800, 1200]
+
+
+def fetch_anillos_captacion(ubicacion_id: str, lat: float, lon: float) -> dict | None:
+    """
+    Obtiene los ring buffers [400, 800, 1200]m como GeoJSON FeatureCollection.
+    Cada Feature incluye la propiedad 'radio_m'.
+    Devuelve None si la llamada falla o no hay geometría.
+    """
+    token = os.environ.get("ESRI_KEY", "")
+    if not token:
+        raise RuntimeError("ESRI_KEY no encontrado en el entorno")
+
+    try:
+        geoms = _geoenrich_call(
+            lat,
+            lon,
+            buffer_radii=_RING_RADII,
+            analysis_variables=["KeyFacts.TOTPOP_CY"],
+            token=token,
+            return_geometry=True,
+        )
+    except Exception as exc:
+        log.error("[%s] fetch_anillos_captacion FAILED — %s", ubicacion_id, exc)
+        return None
+
+    features = []
+    for geom, radio in zip(geoms, _RING_RADII):
+        rings = geom.get("rings") if geom else None
+        if not rings:
+            continue
+        features.append(
+            {
+                "type": "Feature",
+                "properties": {"radio_m": radio},
+                "geometry": {"type": "Polygon", "coordinates": rings},
+            }
+        )
+
+    if not features:
+        log.warning("[%s] fetch_anillos_captacion: sin geometría en respuesta", ubicacion_id)
+        return None
+
+    return {"type": "FeatureCollection", "features": features}
+
+
+def write_anillos_captacion(ubicacion_id: str, lat: float, lon: float) -> bool:
+    """
+    Obtiene los ring buffers y los persiste en ubicaciones.anillos_captacion.
+    Devuelve True si se escribió correctamente.
+    """
+    geojson = fetch_anillos_captacion(ubicacion_id, lat, lon)
+    if not geojson:
+        return False
+
+    from src.db.store import get_conn
+
+    get_conn().execute(
+        "UPDATE ubicaciones SET anillos_captacion = %s::jsonb WHERE ubicacion_id = %s",
+        [json.dumps(geojson, ensure_ascii=False), ubicacion_id],
+    )
+    log.info("[%s] anillos_captacion escritos (%d anillos)", ubicacion_id, len(geojson["features"]))
+    return True
