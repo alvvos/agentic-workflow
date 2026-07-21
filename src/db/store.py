@@ -549,6 +549,7 @@ def _apply_ddl(conn: PgConn) -> None:
     _migrate_fuentes(conn)
     _migrar_tipo_conector(conn)
     _migrate_snapshots_geo_simple(conn)
+    _migrate_señales_fill_gaps(conn)
     _purgar_senales_obsoletas(conn)
     _sync_users_from_json(conn)
 
@@ -1715,6 +1716,30 @@ def _migrate_snapshots_geo_simple(conn: PgConn) -> None:
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_snapshots_geo_ubicacion ON snapshots_geo (ubicacion_id)"
+    )
+
+
+def _migrate_señales_fill_gaps(conn: PgConn) -> None:
+    """
+    Añade fill_gaps a señales: 'zero' para señales de evento puntual
+    (cruceros, lluvia) donde la ausencia de dato significa valor=0;
+    'ffill' para señales continuas (temperatura) donde interpolar es correcto.
+
+    get_señal_diaria() usa esta columna para rellenar huecos sin inflar sumas.
+    """
+    conn.execute(
+        "ALTER TABLE señales ADD COLUMN IF NOT EXISTS fill_gaps TEXT "
+        "CHECK (fill_gaps IN ('zero', 'ffill')) DEFAULT 'zero'"
+    )
+    # Señales continuas — temperatura: interpolar huecos tiene sentido
+    conn.execute(
+        "UPDATE señales SET fill_gaps = 'ffill' WHERE señal_id IN ('temp_max', 'temp_min')"
+    )
+    # Señales de evento puntual — ya tienen DEFAULT 'zero', forzamos explícitamente
+    conn.execute(
+        "UPDATE señales SET fill_gaps = 'zero' "
+        "WHERE señal_id IN ('llueve', 'n_pasajeros_crucero_dia', "
+        "                   'n_pasajeros_crucero_oficial', 'escala_crucero')"
     )
 
 

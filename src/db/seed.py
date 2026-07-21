@@ -357,7 +357,7 @@ def seed_feature_flags() -> dict:
     crucero_keys = ["n_pasajeros_crucero_dia"]
 
     active_rows = [(fk, loc, "active", "diaria") for fk in climate_keys for loc in locs]
-    inactive_rows = [(fk, loc, "inactive", "trimestral") for fk in geo_keys for loc in locs]
+    inactive_rows = [(fk, loc, "inactive", "mensual") for fk in geo_keys for loc in locs]
     contexto_diaria_rows = [
         (fk, loc, "contexto", "diaria") for fk in ev_diaria_keys for loc in locs
     ]

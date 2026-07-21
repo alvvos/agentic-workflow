@@ -594,32 +594,39 @@ def get_señal_diaria(
 ) -> pd.Series:
     """
     Devuelve una Series con índice DatetimeIndex diario y los valores de una
-    señal concreta en valores_señales. Forward-fill para señales mensuales.
+    señal concreta en valores_señales.
+
+    El relleno de huecos depende de señales.fill_gaps:
+    - 'zero': días sin dato → 0 (señales de evento puntual: cruceros, lluvia).
+    - 'ffill': días sin dato → valor anterior (señales continuas: temperatura).
+
     No filtra por status en activacion_señales — sirve tanto para 'active'
     como para 'contexto'.
     """
     from src.db.store import get_conn
 
+    conn = get_conn()
     full_idx = pd.date_range(fecha_min, fecha_max, freq="D")
-    df = (
-        get_conn()
-        .execute(
-            """SELECT fecha, valor::double precision AS valor
+
+    row = conn.execute("SELECT fill_gaps FROM señales WHERE señal_id = ?", [señal_id]).fetchone()
+    fill_gaps = row[0] if row and row[0] else "zero"
+
+    df = conn.execute(
+        """SELECT fecha, valor::double precision AS valor
            FROM   valores_señales
            WHERE  ubicacion_id = ?
              AND  señal_id     = ?
              AND  fecha BETWEEN ? AND ?
            ORDER  BY fecha""",
-            [ubicacion_id, señal_id, fecha_min.date(), fecha_max.date()],
-        )
-        .df()
-    )
+        [ubicacion_id, señal_id, fecha_min.date(), fecha_max.date()],
+    ).df()
+
     if df.empty:
         return pd.Series(0.0, index=full_idx, name=señal_id)
+
     df["fecha"] = pd.to_datetime(df["fecha"])
     serie = df.set_index("fecha")["valor"].reindex(full_idx)
-    # forward-fill para señales con granularidad mensual
-    serie = serie.ffill().fillna(0.0)
+    serie = serie.ffill().fillna(0.0) if fill_gaps == "ffill" else serie.fillna(0.0)
     serie.name = señal_id
     return serie
 
