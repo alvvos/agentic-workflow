@@ -68,9 +68,9 @@ def toggle_fecha(tipo):
 def actualizar_locs(org_uuid):
     data_master.reload_if_changed()
     if not org_uuid:
-        return [], []
+        return [], None
     opciones = data_master.mapa_locs_por_org.get(org_uuid, [])
-    default = [opciones[0]["value"]] if opciones else []
+    default = opciones[0]["value"] if opciones else None
     return opciones, default
 
 
@@ -94,6 +94,8 @@ def auto_fill_zonas(locs):
     data_master.reload_if_changed()
     if not locs:
         return [], []
+    if isinstance(locs, str):
+        locs = [locs]
     opts_bi = []
     vistos_bi = set()
 
@@ -157,6 +159,8 @@ def render_child_zone_selectors(locs, selected_parents):
     data_master.reload_if_changed()
     if not locs or not selected_parents:
         return []
+    if isinstance(locs, str):
+        locs = [locs]
     children_ui = []
     seen_parents: set = set()
     for parent_name in selected_parents:

@@ -325,6 +325,8 @@ def get_df_visitas(ubicacion_ids) -> pd.DataFrame:
     """
     if not ubicacion_ids:
         return pd.DataFrame()
+    if isinstance(ubicacion_ids, str):
+        ubicacion_ids = [ubicacion_ids]
     conn = get_conn()
     placeholders = ",".join(["?" for _ in ubicacion_ids])
     df = conn.execute(
@@ -677,7 +679,7 @@ def get_pois_for_location(ubicacion_id: str) -> list[dict]:
         get_conn()
         .execute(
             """SELECT nombre, lat, lon, categoria, valor_relativo, detalle,
-                  radio_m, isocrona_minutos, isocrona_geojson::text
+                  radio_m, isocrona_minutos, isocrona_geojson::text, fuente
            FROM puntos_interes
            WHERE ubicacion_id = ? AND activo = TRUE
            ORDER BY categoria, valor_relativo DESC""",
@@ -695,6 +697,7 @@ def get_pois_for_location(ubicacion_id: str) -> list[dict]:
         "radio_m",
         "isocrona_minutos",
         "isocrona_geojson",
+        "fuente",
     ]
     return [dict(zip(keys, r)) for r in rows]
 

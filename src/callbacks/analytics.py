@@ -39,6 +39,8 @@ from src.reporting.health_check import generar_panel_pm
 def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, pm_ventana, _data_v, s_id):
     if not locs:
         return html.Div(), "Esperando selección de ubicación...", html.Div(), html.Div()
+    if isinstance(locs, str):
+        locs = [locs]
 
     df = get_df_visitas(locs)
     if df.empty:

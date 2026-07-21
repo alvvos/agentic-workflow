@@ -406,10 +406,22 @@ def build_admin_content():
                                                                             html.I(
                                                                                 className="fas fa-satellite me-2"
                                                                             ),
-                                                                            "Sincronizar Esri Places",
+                                                                            "Esri Places",
                                                                         ],
                                                                         id="admin-pois-sync-btn",
                                                                         color="success",
+                                                                        outline=True,
+                                                                        className="fw-bold",
+                                                                    ),
+                                                                    dbc.Button(
+                                                                        [
+                                                                            html.I(
+                                                                                className="fab fa-google me-2"
+                                                                            ),
+                                                                            "Google Places",
+                                                                        ],
+                                                                        id="admin-pois-google-sync-btn",
+                                                                        color="info",
                                                                         outline=True,
                                                                         className="rounded-end-3 fw-bold",
                                                                     ),

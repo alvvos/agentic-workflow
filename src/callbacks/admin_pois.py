@@ -326,3 +326,32 @@ def _sync_esri_places(n, location_uuid):
         return ("Módulo esri_places no disponible — verifica ESRI_KEY.", "warning", True, no_update)
     except Exception as e:
         return f"Error Esri Places: {e}", "danger", True, no_update
+
+
+@app.callback(
+    Output("admin-pois-feedback", "children", allow_duplicate=True),
+    Output("admin-pois-feedback", "color", allow_duplicate=True),
+    Output("admin-pois-feedback", "is_open", allow_duplicate=True),
+    Output("admin-pois-table", "children", allow_duplicate=True),
+    Input("admin-pois-google-sync-btn", "n_clicks"),
+    State("admin-pois-loc-select", "value"),
+    prevent_initial_call=True,
+)
+def _sync_google_places(n, location_uuid):
+    if not n or not location_uuid:
+        return no_update, no_update, no_update, no_update
+    try:
+        from src.data_ingestion.sync_mensual import sync_google_places_location
+
+        n_upserted = sync_google_places_location(location_uuid, verbose=False)
+        msg = f"Google Places: {n_upserted} POI(s) sincronizados."
+        return msg, "success", True, _render_table(location_uuid)
+    except ImportError:
+        return (
+            "Módulo google_places no disponible — verifica GOOGLE_MAPS_API_KEY.",
+            "warning",
+            True,
+            no_update,
+        )
+    except Exception as e:
+        return f"Error Google Places: {e}", "danger", True, no_update

@@ -1,26 +1,41 @@
 """
-Conector para consultar POIs via Google Maps Places API (Nearby Search v1).
+Conector para consultar POIs via Google Maps Places API (New — Nearby Search v1).
+
+Usa la API nueva (places.googleapis.com/v1) porque la legacy
+(maps.googleapis.com/api/place) requiere activación manual separada.
 
 Interfaz pública:
     TIPO = "pois_google"
     sync(ubicacion_id, cfg, verbose) -> int
-    sync_google_places_location(location_uuid, params, verbose) -> int   ← desde admin_pois y onboarding
+    sync_google_places_location(location_uuid, params, verbose) -> int
 """
 
 from __future__ import annotations
 
 import json
 import os
-import time
-import urllib.parse
 import urllib.request
 
 TIPO = "pois_google"
 
-_BASE_URL = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+_NEARBY_URL = "https://places.googleapis.com/v1/places:searchNearby"
+
+# Campos a solicitar — price_level no existe en v1; resto son estables
+_FIELD_MASK = ",".join(
+    [
+        "places.id",
+        "places.displayName",
+        "places.location",
+        "places.types",
+        "places.primaryType",
+        "places.primaryTypeDisplayName",
+        "places.rating",
+        "places.userRatingCount",
+        "places.formattedAddress",
+    ]
+)
 
 # (google_type, categoria_interna, valor_relativo)
-# El orden importa: se usa la primera categoría que coincide con el place_id visto
 _TYPE_MAP: list[tuple[str, str, float]] = [
     ("subway_station", "metro", 0.90),
     ("train_station", "metro", 0.90),
@@ -62,8 +77,8 @@ def sync_google_places_location(
     verbose: bool = True,
 ) -> int:
     """
-    Consulta Google Maps Places Nearby Search y upsertea POIs en puntos_interes.
-    Itera por tipo de lugar para maximizar cobertura con la API legacy.
+    Consulta Google Maps Places API (New) con Nearby Search y upsertea POIs.
+    Itera por tipo de lugar para maximizar cobertura (max 20 resultados por tipo).
     Devuelve el número de POIs procesados.
     """
     from src.db.queries import upsert_poi
@@ -76,8 +91,8 @@ def sync_google_places_location(
         return 0
 
     params = params or {}
-    radio_m = int(params.get("radio_m", 1200))
-    max_res = int(params.get("max_resultados", 200))
+    radio_m = float(params.get("radio_m", 1200))
+    max_per_type = min(int(params.get("max_resultados", 200)), 20)  # API new: max 20/llamada
 
     row = (
         get_conn()
@@ -92,45 +107,80 @@ def sync_google_places_location(
             print(f"  [pois_google] {location_uuid}: sin coordenadas, omitido")
         return 0
 
-    lat, lon, org_id = row[0], row[1], row[2]
+    lat, lon, org_id = float(row[0]), float(row[1]), row[2]
 
-    def _call_api(google_type: str, page_token: str | None = None) -> dict:
-        p: dict = {
-            "location": f"{lat},{lon}",
-            "radius": radio_m,
-            "type": google_type,
-            "key": token,
+    def _call(google_type: str, page_token: str | None = None) -> dict:
+        body: dict = {
+            "includedTypes": [google_type],
+            "maxResultCount": max_per_type,
+            "locationRestriction": {
+                "circle": {
+                    "center": {"latitude": lat, "longitude": lon},
+                    "radius": radio_m,
+                }
+            },
         }
         if page_token:
-            p["pagetoken"] = page_token
-        url = _BASE_URL + "?" + urllib.parse.urlencode(p)
-        with urllib.request.urlopen(urllib.request.Request(url), timeout=30) as resp:
+            body["pageToken"] = page_token
+        data = json.dumps(body).encode()
+        req = urllib.request.Request(
+            _NEARBY_URL,
+            data=data,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "X-Goog-Api-Key": token,
+                "X-Goog-FieldMask": _FIELD_MASK,
+            },
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read())
 
     def _fetch_type(google_type: str) -> list[dict]:
         results: list[dict] = []
         page_token = None
-        while len(results) < max_res:
-            if page_token:
-                time.sleep(2)  # Google requiere espera antes de usar page_token
+        while True:
             try:
-                data = _call_api(google_type, page_token)
+                data = _call(google_type, page_token)
             except Exception as e:
                 if verbose:
                     print(f"  [pois_google] {location_uuid}/{google_type} ERROR — {e}")
                 break
-            status = data.get("status", "")
-            if status not in ("OK", "ZERO_RESULTS"):
+            if "error" in data:
                 if verbose:
-                    print(f"  [pois_google] {location_uuid}/{google_type} status={status}")
+                    code = data["error"].get("code", "?")
+                    msg = data["error"].get("message", "")
+                    print(f"  [pois_google] {location_uuid}/{google_type} API error {code}: {msg}")
                 break
-            results.extend(data.get("results", []))
-            page_token = data.get("next_page_token")
+            results.extend(data.get("places", []))
+            page_token = data.get("nextPageToken")
             if not page_token:
                 break
         return results
 
-    seen_place_ids: set[str] = set()
+    def _build_detalle(place: dict) -> str | None:
+        parts = []
+        ptdn = place.get("primaryTypeDisplayName", {})
+        if isinstance(ptdn, dict):
+            t = ptdn.get("text", "")
+        else:
+            t = str(ptdn)
+        if t:
+            parts.append(t)
+        rating = place.get("rating")
+        n_ratings = place.get("userRatingCount")
+        if rating is not None:
+            r_str = f"★{rating:.1f}"
+            if n_ratings:
+                r_str += f" ({n_ratings:,})"
+            parts.append(r_str)
+        addr = place.get("formattedAddress", "")
+        if addr:
+            # Solo calle + ciudad, sin código postal largo
+            parts.append(addr.split(",")[0])
+        return " · ".join(parts) if parts else None
+
+    seen_ids: set[str] = set()
     n = 0
 
     for google_type in _GOOGLE_TYPES:
@@ -138,18 +188,22 @@ def sync_google_places_location(
         places = _fetch_type(google_type)
 
         for place in places:
-            pid = place.get("place_id", "")
-            if pid in seen_place_ids:
+            pid = place.get("id", "")
+            if pid in seen_ids:
                 continue
             if pid:
-                seen_place_ids.add(pid)
+                seen_ids.add(pid)
 
-            name = (place.get("name") or "").strip()
+            name_obj = place.get("displayName", {})
+            name = (
+                name_obj.get("text", "") if isinstance(name_obj, dict) else str(name_obj)
+            ).strip()
             if not name:
                 continue
-            geo = place.get("geometry", {}).get("location", {})
-            p_lat = geo.get("lat")
-            p_lon = geo.get("lng")
+
+            loc = place.get("location", {})
+            p_lat = loc.get("latitude")
+            p_lon = loc.get("longitude")
             if p_lat is None or p_lon is None:
                 continue
 
@@ -160,8 +214,7 @@ def sync_google_places_location(
                     resolved_cat, resolved_val = _TYPE_TO_CAT[pt]
                     break
 
-            place_types = place.get("types", [])
-            detalle = " · ".join(t.replace("_", " ") for t in place_types[:3]) or None
+            detalle = _build_detalle(place)
 
             try:
                 upsert_poi(
@@ -174,7 +227,7 @@ def sync_google_places_location(
                     categoria=resolved_cat,
                     valor_relativo=resolved_val,
                     detalle=detalle,
-                    radio_m=radio_m,
+                    radio_m=int(radio_m),
                 )
                 n += 1
             except Exception as e:
@@ -184,6 +237,6 @@ def sync_google_places_location(
     if verbose:
         print(
             f"  [pois_google] {location_uuid}: {n} POIs procesados "
-            f"({len(seen_place_ids)} únicos encontrados)"
+            f"({len(seen_ids)} únicos encontrados)"
         )
     return n

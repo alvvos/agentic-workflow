@@ -52,6 +52,7 @@ from src.data_processing.geo_enrichment import get_catchment_rings
 _JS_POINT_TO_LAYER = assign(
     """function(feature, latlng, ctx) {
     const c = feature.properties.color || '#3388ff';
+    const p = feature.properties;
     const icon = L.divIcon({
         className: '',
         html: '<svg width="22" height="32" viewBox="0 0 22 32" xmlns="http://www.w3.org/2000/svg">' +
@@ -60,11 +61,22 @@ _JS_POINT_TO_LAYER = assign(
               '<circle cx="11" cy="11" r="4.5" fill="white" opacity="0.75"/></svg>',
         iconSize: [22, 32], iconAnchor: [11, 32], popupAnchor: [0, -34]
     });
-    return L.marker(latlng, {icon}).bindTooltip(
-        '<b>' + feature.properties.name + '</b>' +
-        (feature.properties.detalle ? '<br>' + feature.properties.detalle : ''),
-        {direction: 'top', offset: [0, -30]}
-    );
+    const tooltip = '<b>' + p.name + '</b>' +
+        (p.categoria ? ' <span style="opacity:.65;font-size:.85em">· ' + p.categoria + '</span>' : '');
+    const fuenteBadge = p.fuente
+        ? '<span style="background:#edf0f5;padding:1px 5px;border-radius:8px;font-size:.72em;color:#888">' +
+          p.fuente.replace(/_/g,' ') + '</span>'
+        : '';
+    const popup = '<div style="min-width:160px;line-height:1.5">' +
+        '<b style="font-size:.95em">' + p.name + '</b>' +
+        (p.categoria ? '<br><span style="color:' + c + ';font-weight:600;font-size:.8em">' + p.categoria + '</span>' : '') +
+        (p.detalle ? '<br><span style="color:#555;font-size:.82em">' + p.detalle + '</span>' : '') +
+        (p.valor !== undefined ? '<br><span style="color:#999;font-size:.75em">Relevancia: ' + p.valor.toFixed(2) + '</span>' : '') +
+        (p.fuente ? '<br>' + fuenteBadge : '') +
+        '</div>';
+    return L.marker(latlng, {icon})
+        .bindTooltip(tooltip, {direction: 'top', offset: [0, -30]})
+        .bindPopup(popup, {maxWidth: 280});
 }"""
 )
 
@@ -2024,6 +2036,8 @@ def _get_pois(uuid: str) -> list[dict]:
                     "valor": r["valor_relativo"] if r["valor_relativo"] is not None else 0.5,
                     "detalle": r["detalle"] or "",
                     "sonar": r["categoria"] == "tourist_poi",
+                    "fuente": r.get("fuente") or "manual",
+                    "radio_m": r.get("radio_m"),
                 }
                 for r in rows
             ]
@@ -2041,7 +2055,9 @@ def _fig_mapa(vals, lat, lon, uuid):
     comp_seed = int(uuid.replace("-", ""), 16) % (2**31)
 
     catchment = get_catchment_rings(uuid)
-    usa_geo_real = catchment is not None and len(catchment) == 3
+    _is_geojson = isinstance(catchment, dict) and catchment.get("type") == "FeatureCollection"
+    _is_legacy = isinstance(catchment, list) and len(catchment) == 3
+    usa_geo_real = _is_geojson or _is_legacy
 
     fig = go.Figure()
 
@@ -2051,28 +2067,59 @@ def _fig_mapa(vals, lat, lon, uuid):
         (1, "rgba(243,156,18,0.10)", "rgba(243,156,18,0.42)", "Isócrona 0-10 min"),
         (0, "rgba(40,167,69,0.15)", "rgba(40,167,69,0.65)", "Isócrona 0-5 min"),
     ]
+    _ring_fig_styles = {
+        400: ("rgba(40,167,69,0.15)", "rgba(40,167,69,0.65)", "Isócrona 0-5 min"),
+        800: ("rgba(243,156,18,0.10)", "rgba(243,156,18,0.42)", "Isócrona 0-10 min"),
+        1200: ("rgba(0,82,204,0.07)", "rgba(0,82,204,0.28)", "Isócrona 0-15 min"),
+    }
     if usa_geo_real:
-        for idx, fill_col, line_col, name in ring_specs:
-            ring = catchment[idx]
-            if ring is None:
-                continue
-            lats = list(ring["lats"])
-            lons = list(ring["lons"])
-            for hole in ring.get("holes", []):
-                lats += [None] + list(hole["lats"])
-                lons += [None] + list(hole["lons"])
-            fig.add_trace(
-                go.Scattermap(
-                    lat=lats,
-                    lon=lons,
-                    mode="lines",
-                    fill="toself",
-                    fillcolor=fill_col,
-                    line=dict(color=line_col, width=2),
-                    name=name,
-                    hoverinfo="skip",
+        if _is_geojson:
+            for feature in reversed(catchment.get("features", [])):
+                radio = feature.get("properties", {}).get("radio_m", 0)
+                fill_col, line_col, trace_name = _ring_fig_styles.get(
+                    radio, ("rgba(100,100,100,0.1)", "rgba(100,100,100,0.3)", f"Ring {radio}m")
                 )
-            )
+                coords = feature.get("geometry", {}).get("coordinates", [[]])
+                outer = coords[0] if coords else []
+                lats = [c[1] for c in outer]
+                lons = [c[0] for c in outer]
+                for hole in coords[1:]:
+                    lats += [None] + [c[1] for c in hole]
+                    lons += [None] + [c[0] for c in hole]
+                fig.add_trace(
+                    go.Scattermap(
+                        lat=lats,
+                        lon=lons,
+                        mode="lines",
+                        fill="toself",
+                        fillcolor=fill_col,
+                        line=dict(color=line_col, width=2),
+                        name=trace_name,
+                        hoverinfo="skip",
+                    )
+                )
+        else:
+            for idx, fill_col, line_col, name in ring_specs:
+                ring = catchment[idx]
+                if ring is None:
+                    continue
+                lats = list(ring["lats"])
+                lons = list(ring["lons"])
+                for hole in ring.get("holes", []):
+                    lats += [None] + list(hole["lats"])
+                    lons += [None] + list(hole["lons"])
+                fig.add_trace(
+                    go.Scattermap(
+                        lat=lats,
+                        lon=lons,
+                        mode="lines",
+                        fill="toself",
+                        fillcolor=fill_col,
+                        line=dict(color=line_col, width=2),
+                        name=name,
+                        hoverinfo="skip",
+                    )
+                )
 
     # ── Competidores (pines rojos con clustering) ─────────────────────────────
     if n_comp > 0:
@@ -2675,12 +2722,36 @@ def _leaflet_mapa(vals: dict, lat: float, lon: float, uuid: str):
 
     # Isócronas — del mayor al menor para que los menores queden encima
     catchment = get_catchment_rings(uuid)
-    ring_styles = [
-        (2, "#0052CC", 0.07, 0.30),
-        (1, "#f39c12", 0.10, 0.45),
-        (0, "#28A745", 0.15, 0.65),
-    ]
-    if catchment and len(catchment) == 3:
+    _ring_color = {
+        400: ("#28A745", 0.15, 0.65),
+        800: ("#f39c12", 0.10, 0.45),
+        1200: ("#0052CC", 0.07, 0.30),
+    }
+    if catchment and isinstance(catchment, dict) and catchment.get("type") == "FeatureCollection":
+        # New format written by write_anillos_captacion
+        for feature in reversed(catchment.get("features", [])):
+            radio = feature.get("properties", {}).get("radio_m", 0)
+            color_hex, fill_op, stroke_op = _ring_color.get(radio, ("#3388ff", 0.10, 0.40))
+            layers.append(
+                dl.GeoJSON(
+                    data=feature,
+                    style={
+                        "color": color_hex,
+                        "weight": 2,
+                        "opacity": stroke_op,
+                        "fillColor": color_hex,
+                        "fillOpacity": fill_op,
+                    },
+                    id=f"ring-{radio}-{uuid[:8]}",
+                )
+            )
+    elif catchment and isinstance(catchment, list) and len(catchment) == 3:
+        # Legacy list format
+        ring_styles = [
+            (2, "#0052CC", 0.07, 0.30),
+            (1, "#f39c12", 0.10, 0.45),
+            (0, "#28A745", 0.15, 0.65),
+        ]
         for idx, color_hex, fill_op, stroke_op in ring_styles:
             ring = catchment[idx]
             if ring is None:
@@ -2728,7 +2799,12 @@ def _leaflet_mapa(vals: dict, lat: float, lon: float, uuid: str):
                                 "geometry": {"type": "Point", "coordinates": [p["lon"], p["lat"]]},
                                 "properties": {
                                     "name": p["label"],
+                                    "categoria": poi_cat_meta.get(p["categoria"], {}).get(
+                                        "label", p["categoria"]
+                                    ),
                                     "detalle": p.get("detalle", ""),
+                                    "valor": p.get("valor", 0.5),
+                                    "fuente": p.get("fuente", ""),
                                     "color": color,
                                 },
                             }

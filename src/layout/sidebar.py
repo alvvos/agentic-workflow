@@ -81,7 +81,7 @@ def build_sidebar(org_options=None):
                         ),
                         # ── Ubicaciones ──────────────────────────────────────
                         _section_label("fas fa-map-marker-alt", "Ubicaciones"),
-                        dcc.Dropdown(id="drop-locs", multi=True, className="mb-2"),
+                        dcc.Dropdown(id="drop-locs", className="mb-2"),
                         # ── Período ───────────────────────────────────────────
                         html.Div(
                             id="sidebar-periodo-wrapper",

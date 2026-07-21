@@ -70,7 +70,8 @@ def actualizar_alerta_sync(session_id, _data_v, _tick, locs):
                 "danger",
                 False,
             )
-        fechas_locs = [ultima_por_loc[loc] for loc in (locs or []) if loc in ultima_por_loc]
+        locs_list = [locs] if isinstance(locs, str) else (locs or [])
+        fechas_locs = [ultima_por_loc[loc] for loc in locs_list if loc in ultima_por_loc]
         if not fechas_locs:
             return (
                 [html.I(className="fas fa-exclamation-circle me-2"), "Sin datos — sincronizar"],
