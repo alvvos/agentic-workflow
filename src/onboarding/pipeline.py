@@ -198,6 +198,13 @@ def onboarding_ubicacion(location_uuid: str) -> bool:
     n_pois_google = poblar_pois_google_task(location_uuid)
     logger.info("POIs Google: %d POIs escritos para %s", n_pois_google, routing.nombre)
 
+    # Fase 2e — Actualizar scores n_* en snapshot geo con los POIs recién ingresados
+    if n_pois_google > 0:
+        from src.data_ingestion.geo import actualizar_scores_poi
+
+        actualizar_scores_poi(location_uuid)
+        logger.info("Scores POI actualizados en snapshot geo para %s", routing.nombre)
+
     # Fase 3 — Context Scout
     scout = context_scout_task(location_uuid)
     if scout.error:

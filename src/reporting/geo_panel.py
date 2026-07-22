@@ -2698,9 +2698,9 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
     return html.Div(
         [
             seccion_a,
+            seccion_d,
             seccion_b,
             seccion_c,
-            seccion_d,
         ]
     )
 

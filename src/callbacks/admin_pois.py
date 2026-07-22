@@ -341,9 +341,11 @@ def _sync_google_places(n, location_uuid):
     if not n or not location_uuid:
         return no_update, no_update, no_update, no_update
     try:
+        from src.data_ingestion.geo import actualizar_scores_poi
         from src.data_ingestion.sync_mensual import sync_google_places_location
 
         n_upserted = sync_google_places_location(location_uuid, verbose=False)
+        actualizar_scores_poi(location_uuid)
         msg = f"Google Places: {n_upserted} POI(s) sincronizados."
         return msg, "success", True, _render_table(location_uuid)
     except ImportError:

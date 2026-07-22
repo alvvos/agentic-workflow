@@ -83,6 +83,22 @@ def calcular_scores_poi(ubicacion_id: str) -> dict[str, float]:
     }
 
 
+def actualizar_scores_poi(ubicacion_id: str) -> int:
+    """
+    Recalcula n_* desde puntos_interes y actualiza el snapshot conservando el resto de features.
+    Llamar tras cualquier sync de POIs (Google Places, Esri Places, manual).
+    """
+    from src.data_processing.geo_enrichment import get_geo_vals, ingestar_snapshot
+
+    current = get_geo_vals(ubicacion_id)
+    if not current:
+        return 0
+    merged = {**current, **calcular_scores_poi(ubicacion_id)}
+    n = ingestar_snapshot(ubicacion_id, merged)
+    log.info("[%s] scores POI actualizados — %d features", ubicacion_id, n)
+    return n
+
+
 def ingestar_snapshot_esri(
     ubicacion_id: str,
     valores: dict[str, float | None],
