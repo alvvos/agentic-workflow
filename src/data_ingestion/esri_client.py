@@ -282,8 +282,8 @@ def fetch_anillos_captacion(ubicacion_id: str, lat: float, lon: float) -> dict |
         log.warning("[%s] fetch_anillos_captacion: sin geometría válida", ubicacion_id)
         return None
 
-    # Ordenar de mayor a menor (15→10→5) para pintar capas correctamente
-    features.sort(key=lambda f: f["properties"]["minutos"], reverse=True)
+    # Ordenar ascendente [5,10,15]: el rendering hace reversed() → pinta 15→10→5 (mayor detrás)
+    features.sort(key=lambda f: f["properties"]["minutos"])
     return {"type": "FeatureCollection", "features": features}
 
 
