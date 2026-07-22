@@ -190,54 +190,107 @@ def fetch_geoenrich(ubicacion_id: str, lat: float, lon: float) -> dict[str, floa
 
 _RING_RADII = [400, 800, 1200]
 
+_SERVICE_AREA_URL = (
+    "https://route.arcgis.com/arcgis/rest/services/World/ServiceAreas/"
+    "NAServer/ServiceArea_World/solveServiceArea"
+)
+
+# Travel mode "Walking Time" de ArcGIS Online — id estable para red peatonal mundial
+_WALK_TRAVEL_MODE = json.dumps(
+    {
+        "attributeParameterValues": [],
+        "description": "Pedestrian",
+        "distanceAttributeName": "Meters",
+        "id": "caFAgoThrvUpkFBW",
+        "impedanceAttributeName": "WalkTime",
+        "name": "Walking Time",
+        "restrictionAttributeNames": ["Avoid Roads Unsuitable for Pedestrians"],
+        "timeAttributeName": "WalkTime",
+        "type": "WALK",
+        "useHierarchy": False,
+        "uturnAtJunctions": "esriNFSBAllowBacktrack",
+    }
+)
+
+# minutos → radio_m equivalente para la capa visual (≈5 km/h peatonal)
+_MIN_TO_RADIO = {5: 400, 10: 800, 15: 1200}
+
 
 def fetch_anillos_captacion(ubicacion_id: str, lat: float, lon: float) -> dict | None:
     """
-    Obtiene los ring buffers [400, 800, 1200]m como GeoJSON FeatureCollection.
-    Cada Feature incluye la propiedad 'radio_m'.
-    Devuelve None si la llamada falla o no hay geometría.
+    Obtiene isócronas peatonales reales [5, 10, 15 min] usando ArcGIS Network Analysis
+    (Service Area — Walking Time). Devuelve GeoJSON FeatureCollection con la propiedad
+    'radio_m' (equivalente en metros) y 'minutos' para compatibilidad con la capa visual.
     """
     token = os.environ.get("ESRI_KEY", "")
     if not token:
         raise RuntimeError("ESRI_KEY no encontrado en el entorno")
 
+    facilities = json.dumps(
+        {
+            "type": "features",
+            "features": [{"geometry": {"x": lon, "y": lat, "spatialReference": {"wkid": 4326}}}],
+        }
+    )
+    params = urllib.parse.urlencode(
+        {
+            "facilities": facilities,
+            "defaultBreaks": "5,10,15",
+            "travelMode": _WALK_TRAVEL_MODE,
+            "outputType": "esriNAOutputServiceAreaPolygons",
+            "returnPolygons": "true",
+            "polygonDetail": "esriNAOutputPolygonHigh",
+            "f": "json",
+            "token": token,
+        }
+    )
+    req = urllib.request.Request(_SERVICE_AREA_URL, data=params.encode(), method="POST")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
     try:
-        geoms = _geoenrich_call(
-            lat,
-            lon,
-            buffer_radii=_RING_RADII,
-            analysis_variables=["KeyFacts.TOTPOP_CY"],
-            token=token,
-            return_geometry=True,
-        )
+        with urllib.request.urlopen(req, timeout=45) as r:
+            data = json.loads(r.read())
     except Exception as exc:
         log.error("[%s] fetch_anillos_captacion FAILED — %s", ubicacion_id, exc)
         return None
 
+    if "error" in data:
+        log.error("[%s] Service Area error — %s", ubicacion_id, data["error"])
+        return None
+
+    polys = data.get("saPolygons", {}).get("features", [])
+    if not polys:
+        log.warning("[%s] fetch_anillos_captacion: sin polígonos en respuesta", ubicacion_id)
+        return None
+
     features = []
-    for geom, radio in zip(geoms, _RING_RADII):
-        rings = geom.get("rings") if geom else None
+    for poly in polys:
+        attrs = poly.get("attributes", {})
+        minutos = int(attrs.get("ToBreak", 0))
+        radio = _MIN_TO_RADIO.get(minutos, minutos * 80)
+        rings = poly.get("geometry", {}).get("rings", [])
         if not rings:
             continue
         features.append(
             {
                 "type": "Feature",
-                "properties": {"radio_m": radio},
+                "properties": {"radio_m": radio, "minutos": minutos},
                 "geometry": {"type": "Polygon", "coordinates": rings},
             }
         )
 
     if not features:
-        log.warning("[%s] fetch_anillos_captacion: sin geometría en respuesta", ubicacion_id)
+        log.warning("[%s] fetch_anillos_captacion: sin geometría válida", ubicacion_id)
         return None
 
+    # Ordenar de mayor a menor (15→10→5) para pintar capas correctamente
+    features.sort(key=lambda f: f["properties"]["minutos"], reverse=True)
     return {"type": "FeatureCollection", "features": features}
 
 
 def write_anillos_captacion(ubicacion_id: str, lat: float, lon: float) -> bool:
     """
-    Obtiene los ring buffers y los persiste en ubicaciones.anillos_captacion.
-    Devuelve True si se escribió correctamente.
+    Obtiene isócronas peatonales de red [5/10/15 min] y las persiste en
+    ubicaciones.anillos_captacion. Devuelve True si se escribió correctamente.
     """
     geojson = fetch_anillos_captacion(ubicacion_id, lat, lon)
     if not geojson:
