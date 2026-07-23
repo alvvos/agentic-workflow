@@ -70,8 +70,7 @@ _REGISTRY: dict[str, OrgBranding] = {
         # Rojo corporativo Miniso — Pantone 2347 C
         primary="#E60012",
         secondary="#1A1A1A",
-        # SVG placeholder incluido en assets/. Reemplaza con el logo oficial PNG si lo tienes.
-        logo_asset="/assets/logo_miniso.png",
+        logo_asset="/assets/logo_miniso.svg",
         palette=(
             "#E60012",  # rojo Miniso primario
             "#1A1A1A",  # negro corporativo

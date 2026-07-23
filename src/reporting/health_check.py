@@ -2133,9 +2133,11 @@ def generar_mensajes_salud(
     _rgb = _rgb_str(primary_color)
     _rgb_dk = _rgb_str(_darken(primary_color))
     if _hero_img:
+        # Gradiente cinematográfico: color de marca arriba-izquierda → transparente
+        # en el centro → oscuro abajo donde vive el texto.
         _header_bg = {
             "backgroundImage": (
-                f"linear-gradient(135deg, rgba({_rgb},0.72) 0%, rgba({_rgb_dk},0.88) 100%), "
+                f"linear-gradient(160deg, rgba({_rgb},0.62) 0%, rgba(0,0,0,0.08) 45%, rgba(0,0,0,0.74) 100%), "
                 f"url('{_hero_img}')"
             ),
             "backgroundSize": "cover",
@@ -2145,35 +2147,52 @@ def generar_mensajes_salud(
         _header_bg = {
             "background": f"linear-gradient(135deg, {primary_color} 0%, {_darken(primary_color)} 100%)"
         }
+    _txt_shadow = "0 1px 4px rgba(0,0,0,0.55)" if _hero_img else "none"
     header = dbc.Card(
         dbc.CardBody(
-            dbc.Row(
+            html.Div(
                 [
-                    dbc.Col(
-                        [
-                            html.P(
-                                "ESTADO",
-                                className="mb-1 text-white-50 text-uppercase fw-bold",
-                                style={"fontSize": "0.61rem", "letterSpacing": "1px"},
-                            ),
-                            html.H4(ubi, className="fw-bold mb-1 text-white"),
-                            html.P(
-                                f"{(fecha_max - timedelta(days=dias_v - 1)).strftime('%d %b')} – "
-                                f"{fecha_max.strftime('%d %b %Y')}",
-                                className="mb-0",
-                                style={
-                                    "fontSize": "0.84rem",
-                                    "color": "rgba(255,255,255,0.82)",
-                                    "fontWeight": "500",
-                                },
-                            ),
-                        ],
-                        xs=12,
+                    html.P(
+                        "ESTADO",
+                        className="mb-1 text-uppercase fw-bold",
+                        style={
+                            "fontSize": "0.6rem",
+                            "letterSpacing": "1.5px",
+                            "color": "rgba(255,255,255,0.72)",
+                            "textShadow": _txt_shadow,
+                        },
                     ),
-                ]
-            )
+                    html.H3(
+                        ubi,
+                        className="fw-bold mb-1",
+                        style={
+                            "color": "white",
+                            "fontSize": "1.45rem",
+                            "textShadow": "0 2px 10px rgba(0,0,0,0.60)" if _hero_img else "none",
+                        },
+                    ),
+                    html.P(
+                        f"{(fecha_max - timedelta(days=dias_v - 1)).strftime('%d %b')} – "
+                        f"{fecha_max.strftime('%d %b %Y')}",
+                        className="mb-0",
+                        style={
+                            "fontSize": "0.82rem",
+                            "color": "rgba(255,255,255,0.85)",
+                            "fontWeight": "500",
+                            "textShadow": _txt_shadow,
+                        },
+                    ),
+                ],
+                style={"marginTop": "auto"},
+            ),
+            style={
+                "display": "flex",
+                "flexDirection": "column",
+                "padding": "20px 24px",
+                "minHeight": "175px",
+            },
         ),
-        className="border-0 rounded-4 mb-4 shadow-sm",
+        className="border-0 rounded-4 mb-4 shadow",
         style=_header_bg,
     )
 
