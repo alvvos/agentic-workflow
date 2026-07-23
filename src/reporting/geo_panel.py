@@ -1791,6 +1791,77 @@ def _render_entorno_funcional(vals: dict, prev_vals: dict, uuid_prefix: str):
     return dbc.Row(cols, className="g-3 mb-3")
 
 
+def _entorno_strip(vals: dict, uuid_prefix: str) -> html.Div:
+    """Fila compacta de métricas de entorno funcional para incrustar bajo el mapa de POIs."""
+    keys = ["n_nodos_transporte", "n_restauracion", "n_atracciones", "n_competidores", "n_anclas"]
+    cols = []
+    tooltips = []
+    for k in keys:
+        v = vals.get(k)
+        if v is None:
+            continue
+        meta = _ENTORNO_META[k]
+        n = int(v)
+        umb_bajo, umb_alto = meta["umbrales"]
+        status_color = "#28A745" if n >= umb_alto else ("#f39c12" if n >= umb_bajo else "#DC3545")
+        tip_id = f"tip-strip-{k}-{uuid_prefix}"
+        cols.append(
+            dbc.Col(
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.I(
+                                    className=f"{meta['icon']} me-1",
+                                    style={"color": meta["color"], "fontSize": "0.75rem"},
+                                ),
+                                html.Span(
+                                    str(n),
+                                    style={
+                                        "fontSize": "1.1rem",
+                                        "fontWeight": "700",
+                                        "color": _C_DARK,
+                                    },
+                                ),
+                            ],
+                            className="d-flex align-items-center",
+                        ),
+                        html.Div(
+                            meta["label"],
+                            style={
+                                "fontSize": "0.60rem",
+                                "color": _C_MUTED,
+                                "lineHeight": "1.2",
+                                "marginTop": "2px",
+                            },
+                        ),
+                    ],
+                    id=tip_id,
+                    style={
+                        "borderLeft": f"3px solid {status_color}",
+                        "paddingLeft": "8px",
+                        "cursor": "help",
+                    },
+                ),
+                xs=6,
+                sm=4,
+                className="mb-1",
+            )
+        )
+        tooltips.append(dbc.Tooltip(meta["tooltip"], target=tip_id, placement="top"))
+    if not cols:
+        return html.Div()
+    return html.Div(
+        [dbc.Row(cols, className="g-2")] + tooltips,
+        style={
+            "background": "#f8f9fa",
+            "borderRadius": "0 0 10px 10px",
+            "padding": "10px 14px 6px",
+            "borderTop": "1px solid #edf0f5",
+        },
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Charts — Sección A: Alcance
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2450,19 +2521,9 @@ def _fig_canal_online(vals):
 
 
 def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None):
-    from datetime import date
-
-    from src.data_processing.geo_enrichment import get_geo_vals
-
     activos = {k: v for k, v in vals.items() if v is not None}
     nombre, lat, lon = _info_ubicacion(location_uuid)
 
-    # Snapshot del año anterior para deltas interanuales del entorno funcional
-    hoy = date.today()
-    try:
-        prev_vals = get_geo_vals(location_uuid, fecha=date(hoy.year - 1, hoy.month, 1))
-    except Exception:
-        prev_vals = {}
     all_cards = _build_metric_cards(activos)
 
     if not activos:
@@ -2488,6 +2549,15 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
     ]
     # ── Tarjetas C: Gasto y digital ───────────────────────────────────────────
     cards_c = [c for c in all_cards if c["label"] in {"Canal online (presión omnicanal)"}]
+    # ── Entorno funcional — comprueba disponibilidad antes de montar el mapa ──
+    _entorno_keys = [
+        "n_nodos_transporte",
+        "n_restauracion",
+        "n_atracciones",
+        "n_competidores",
+        "n_anclas",
+    ]
+    has_entorno = any(activos.get(k) is not None for k in _entorno_keys)
     # ── Charts ───────────────────────────────────────────────────────────────
     fig_cap = _fig_captacion(activos)
     fig_mapa = _fig_mapa(activos, lat, lon, location_uuid)
@@ -2524,15 +2594,14 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
             if get_catchment_rings(location_uuid)
             else "Área de influencia · isócronas aproximadas"
         )
+        _map_col_children = [
+            _chart_card(fig_mapa, f"geo-map-{uid}", _H_CHART, title=iso_label, fullscreen=True),
+        ]
+        if has_entorno:
+            _map_col_children.append(_entorno_strip(activos, uid))
         sec_a_charts.append(
             dbc.Col(
-                _chart_card(
-                    fig_mapa,
-                    f"geo-map-{uid}",
-                    _H_CHART,
-                    title=iso_label,
-                    fullscreen=True,
-                ),
+                _map_col_children,
                 xs=12,
                 lg=7,
                 className="mb-3",
@@ -2664,41 +2733,9 @@ def generar_panel_geo_visual(location_uuid, vals, clima=None, fecha_captura=None
         className="mb-4",
     )
 
-    # ── SECCIÓN D: ENTORNO FUNCIONAL (POI scores) ─────────────────────────────
-    _entorno_keys = [
-        "n_nodos_transporte",
-        "n_restauracion",
-        "n_atracciones",
-        "n_competidores",
-        "n_anclas",
-    ]
-    has_entorno = any(activos.get(k) is not None for k in _entorno_keys)
-    if has_entorno:
-        seccion_d = html.Div(
-            [
-                _section_header(
-                    "fas fa-map-marked-alt",
-                    "Entorno funcional",
-                    "¿Qué hay alrededor que genera o absorbe tráfico de personas?",
-                ),
-                _render_entorno_funcional(activos, prev_vals, uid),
-            ],
-            className="mb-4",
-        )
-    else:
-        seccion_d = dbc.Alert(
-            [
-                html.I(className="fas fa-sync me-2"),
-                "Scores de entorno pendientes — se calculan en el próximo sync mensual (Places API).",
-            ],
-            color="secondary",
-            className="small py-2 px-3 rounded-4 mb-4",
-        )
-
     return html.Div(
         [
             seccion_a,
-            seccion_d,
             seccion_b,
             seccion_c,
         ]
