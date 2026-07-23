@@ -76,7 +76,7 @@ def actualizar_locs(org_uuid):
 
 @app.callback(
     Output("org-branding-store", "data"),
-    Output("org-brand-style", "children"),
+    Output("org-brand-css", "data"),
     Output("sidebar-logo-img", "src"),
     Output("sidebar-accent-bar", "style"),
     Input("drop-org", "value"),
@@ -236,3 +236,23 @@ def refresh_org_options(signal):
     from src.core.auth import get_current_org_access
 
     return data_master.get_opciones_orgs_for_user(get_current_org_access())
+
+
+# Inyecta el CSS de branding en un <style id="org-brand-style"> del <head>.
+# Crea el elemento si no existe — funciona aunque html.Style no esté disponible en esta versión de Dash.
+app.clientside_callback(
+    """
+    function(css) {
+        var el = document.getElementById('org-brand-style');
+        if (!el) {
+            el = document.createElement('style');
+            el.id = 'org-brand-style';
+            document.head.appendChild(el);
+        }
+        el.textContent = css || '';
+        return '';
+    }
+    """,
+    Output("org-brand-css-sink", "children"),
+    Input("org-brand-css", "data"),
+)
