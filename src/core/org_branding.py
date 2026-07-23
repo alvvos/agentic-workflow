@@ -122,32 +122,54 @@ def branding_css(b: OrgBranding) -> str:
     con los colores de la org. Se inyecta en un <style> de la página.
     """
     r, g, b_val = _hex_to_rgb(b.primary)
-    r2, g2, b2 = _hex_to_rgb(b.secondary)
     h = b.primary.lstrip("#")
     rd = int(int(h[0:2], 16) * 0.75)
     gd = int(int(h[2:4], 16) * 0.75)
     bd = int(int(h[4:6], 16) * 0.75)
     primary_dark = f"#{rd:02x}{gd:02x}{bd:02x}"
+    rgb = f"{r},{g},{b_val}"
     return f"""
 :root {{
   --bs-primary:          {b.primary};
-  --bs-primary-rgb:      {r},{g},{b_val};
+  --bs-primary-rgb:      {rgb};
   --bs-link-color:       {b.primary};
-  --bs-link-color-rgb:   {r},{g},{b_val};
+  --bs-link-color-rgb:   {rgb};
   --bs-link-hover-color: {b.secondary};
   --brand-primary:       {b.primary};
-  --brand-primary-rgb:   {r},{g},{b_val};
+  --brand-primary-rgb:   {rgb};
   --brand-secondary:     {b.secondary};
   --brand-dark:          {primary_dark};
 }}
+/* Bootstrap utilities */
 .text-primary  {{ color: {b.primary} !important; }}
 .bg-primary    {{ background-color: {b.primary} !important; }}
-.btn-primary   {{ background-color: {b.primary} !important;
-                  border-color: {b.primary} !important; }}
-.btn-primary:hover {{ background-color: {b.secondary} !important;
-                      border-color: {b.secondary} !important; }}
 .border-primary {{ border-color: {b.primary} !important; }}
 .badge.bg-primary {{ background-color: {b.primary} !important; }}
+/* Buttons */
+.btn-primary {{ background-color: {b.primary} !important; border-color: {b.primary} !important; }}
+.btn-primary:hover {{ background-color: {primary_dark} !important; border-color: {primary_dark} !important; }}
+.btn-primary:focus {{ box-shadow: 0 0 0 0.25rem rgba({rgb},0.25) !important; }}
+.btn-outline-primary {{ color: {b.primary} !important; border-color: {b.primary} !important; }}
+.btn-outline-primary:hover {{ background-color: {b.primary} !important; color: white !important; border-color: {b.primary} !important; }}
+.btn-outline-primary:focus {{ box-shadow: 0 0 0 0.25rem rgba({rgb},0.25) !important; }}
+/* Form controls (RadioItems, Checklist, DatePicker focus) */
+.form-check-input:checked {{ background-color: {b.primary} !important; border-color: {b.primary} !important; }}
+.form-check-input:focus {{ box-shadow: 0 0 0 0.25rem rgba({rgb},0.25) !important; border-color: {b.primary} !important; }}
+.form-control:focus {{ border-color: {b.primary} !important; box-shadow: 0 0 0 0.25rem rgba({rgb},0.25) !important; }}
+.form-select:focus {{ border-color: {b.primary} !important; box-shadow: 0 0 0 0.25rem rgba({rgb},0.25) !important; }}
+/* Accordion active header */
+.accordion-button:not(.collapsed) {{ color: {b.primary} !important; }}
+/* Tab menu */
+.custom-tabs .tab--selected {{ color: {b.primary} !important; border-bottom-color: {b.primary} !important; }}
+.custom-tabs .tab:not(.tab--selected):hover {{ color: {b.primary} !important; border-bottom-color: rgba({rgb},0.35) !important; }}
+/* Sidebar card top accent */
+.sidebar-accent-card {{ border-top-color: {b.primary} !important; }}
+/* Chat FAB — overrides the hardcoded inline gradient */
+#chat-fab {{ background: linear-gradient(135deg, {b.primary} 0%, {primary_dark} 100%) !important; box-shadow: 0 4px 18px rgba({rgb},0.40) !important; }}
+#chat-fab:hover {{ box-shadow: 0 8px 28px rgba({rgb},0.50) !important; }}
+/* Chat elements */
+.chat-bubble-user {{ background: {b.primary} !important; }}
+.chat-modal-content .fa-robot {{ color: {b.primary} !important; }}
 """.strip()
 
 

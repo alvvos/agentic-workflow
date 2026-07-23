@@ -484,6 +484,7 @@ def _bubble(role: str, text: str) -> html.Div:
     return html.Div(
         html.Div(
             content,
+            className="chat-bubble-user" if is_user else None,
             style={
                 "display": "inline-block",
                 "background": "#0052CC" if is_user else "white",
