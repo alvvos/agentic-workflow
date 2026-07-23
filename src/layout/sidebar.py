@@ -37,6 +37,7 @@ def build_sidebar(org_options=None):
         [
             html.Div(
                 html.Img(
+                    id="sidebar-logo-img",
                     src="/assets/logo.png",
                     style={"maxWidth": "100%", "maxHeight": "56px", "objectFit": "contain"},
                 ),
@@ -49,13 +50,14 @@ def build_sidebar(org_options=None):
                         html.Div(
                             [
                                 html.Div(
+                                    id="sidebar-accent-bar",
                                     style={
                                         "width": "3px",
                                         "height": "18px",
                                         "backgroundColor": "#0052CC",
                                         "borderRadius": "2px",
                                         "flexShrink": 0,
-                                    }
+                                    },
                                 ),
                                 html.Span(
                                     "Filtros",

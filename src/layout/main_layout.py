@@ -140,6 +140,8 @@ def serve_layout():
             dcc.Store(id="data-version", data=0),
             dcc.Store(id="sync-trigger", data=0),
             dcc.Store(id="sidebar-open", data=True),
+            dcc.Store(id="org-branding-store", data=None),
+            html.Style(id="org-brand-style", children=""),
             dcc.Interval(id="interval-staleness", interval=5 * 60 * 1000, n_intervals=0),
             dcc.Interval(id="interval-sync-poll", interval=1500, n_intervals=0, disabled=True),
             dbc.Modal(

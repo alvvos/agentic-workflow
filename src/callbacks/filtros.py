@@ -74,6 +74,47 @@ def actualizar_locs(org_uuid):
     return opciones, default
 
 
+@app.callback(
+    Output("org-branding-store", "data"),
+    Output("org-brand-style", "children"),
+    Output("sidebar-logo-img", "src"),
+    Output("sidebar-accent-bar", "style"),
+    Input("drop-org", "value"),
+)
+def aplicar_branding_org(org_id):
+    import os
+
+    from src.core.org_branding import OrgBranding, branding_css, get_org_branding
+
+    b: OrgBranding = get_org_branding(org_id)
+
+    # Ruta absoluta del asset para comprobar existencia
+    _assets_root = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "assets",
+    )
+    logo_filename = b.logo_asset.removeprefix("/assets/")
+    logo_src = (
+        b.logo_asset
+        if os.path.exists(os.path.join(_assets_root, logo_filename))
+        else "/assets/logo.png"
+    )
+
+    accent_style = {
+        "width": "3px",
+        "height": "18px",
+        "backgroundColor": b.primary,
+        "borderRadius": "2px",
+        "flexShrink": 0,
+    }
+    return (
+        {"org_id": b.org_id, "primary": b.primary, "secondary": b.secondary},
+        branding_css(b),
+        logo_src,
+        accent_style,
+    )
+
+
 def _funnel_key(z):
     tipo = z.get("tipo", "").lower()
     nombre = z.get("label", "").lower()
