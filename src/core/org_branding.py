@@ -157,7 +157,10 @@ def branding_css(b: OrgBranding) -> str:
 .form-check-input:focus {{ box-shadow: 0 0 0 0.25rem rgba({rgb},0.25) !important; border-color: {b.primary} !important; }}
 .form-control:focus {{ border-color: {b.primary} !important; box-shadow: 0 0 0 0.25rem rgba({rgb},0.25) !important; }}
 .form-select:focus {{ border-color: {b.primary} !important; box-shadow: 0 0 0 0.25rem rgba({rgb},0.25) !important; }}
-/* Accordion active header */
+/* Accordion — estado PM (cabeceras cerradas = color marca; abiertas = tint suave) */
+.pm-acordeon .accordion-button.collapsed {{ background-color: {b.primary} !important; }}
+.pm-acordeon .accordion-button:not(.collapsed) {{ background-color: rgba({rgb},0.06) !important; box-shadow: inset 0 -1px 0 rgba({rgb},0.12) !important; }}
+/* Accordion genérico Bootstrap */
 .accordion-button:not(.collapsed) {{ color: {b.primary} !important; }}
 /* Tab menu */
 .custom-tabs .tab--selected {{ color: {b.primary} !important; border-bottom-color: {b.primary} !important; }}
@@ -170,6 +173,11 @@ def branding_css(b: OrgBranding) -> str:
 /* Chat elements */
 .chat-bubble-user {{ background: {b.primary} !important; }}
 .chat-modal-content .fa-robot {{ color: {b.primary} !important; }}
+/* Dropdown Select (Dash/React-Select) open border */
+.Select.is-open > .Select-control {{ border-color: {b.primary} !important; box-shadow: 0 0 0 0.18rem rgba({rgb},0.20) !important; }}
+/* Hover tints for mention list and chat conversation list */
+.mention-option-item:hover {{ background-color: rgba({rgb},0.08) !important; }}
+.chat-conv-item:hover {{ background-color: rgba({rgb},0.06) !important; border-left-color: rgba({rgb},0.35) !important; }}
 """.strip()
 
 

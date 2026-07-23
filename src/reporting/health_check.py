@@ -13,6 +13,7 @@ Filosofía:
 """
 
 import calendar
+import os
 import re
 from datetime import date, timedelta
 
@@ -797,6 +798,11 @@ def _hex_rgba(hex_color: str, alpha: float) -> str:
     return f"rgba({r},{g},{b},{alpha})"
 
 
+_ASSETS_ROOT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets"
+)
+
+
 def _rgb_str(hex_color: str) -> str:
     """Devuelve 'R,G,B' para usar en rgba() de inline styles."""
     h = hex_color.lstrip("#")
@@ -810,6 +816,17 @@ def _darken(hex_color: str, factor: float = 0.75) -> str:
     g = int(int(h[2:4], 16) * factor)
     b = int(int(h[4:6], 16) * factor)
     return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _find_hero_image(location_uuid: str | None) -> str | None:
+    """Devuelve la URL del hero de la ubicación si existe en assets/locations/, o None."""
+    if not location_uuid:
+        return None
+    for ext in (".jpg", ".jpeg", ".png", ".webp"):
+        path = os.path.join(_ASSETS_ROOT, "locations", f"{location_uuid}{ext}")
+        if os.path.exists(path):
+            return f"/assets/locations/{location_uuid}{ext}"
+    return None
 
 
 def _render_signal_yoy_chart(
@@ -2111,9 +2128,23 @@ def generar_mensajes_salud(
     geo_vals_loc = get_geo_vals(location_uuid) if location_uuid else {}
     fecha_captura = get_geo_snapshot_date(location_uuid) if location_uuid else None
 
-    # ── Eventos de alto impacto (para narrativa) ─────────────────────────
-    # Arranca 2×dias_v atrás para cubrir también el período de comparación
     # ── Header ───────────────────────────────────────────────────────────
+    _hero_img = _find_hero_image(location_uuid)
+    _rgb = _rgb_str(primary_color)
+    _rgb_dk = _rgb_str(_darken(primary_color))
+    if _hero_img:
+        _header_bg = {
+            "backgroundImage": (
+                f"linear-gradient(135deg, rgba({_rgb},0.72) 0%, rgba({_rgb_dk},0.88) 100%), "
+                f"url('{_hero_img}')"
+            ),
+            "backgroundSize": "cover",
+            "backgroundPosition": "center",
+        }
+    else:
+        _header_bg = {
+            "background": f"linear-gradient(135deg, {primary_color} 0%, {_darken(primary_color)} 100%)"
+        }
     header = dbc.Card(
         dbc.CardBody(
             dbc.Row(
@@ -2143,9 +2174,7 @@ def generar_mensajes_salud(
             )
         ),
         className="border-0 rounded-4 mb-4 shadow-sm",
-        style={
-            "background": f"linear-gradient(135deg, {primary_color} 0%, {_darken(primary_color)} 100%)"
-        },
+        style=_header_bg,
     )
 
     # ── PDF header (print-only) ───────────────────────────────────────────
