@@ -70,7 +70,7 @@ _REGISTRY: dict[str, OrgBranding] = {
         # Rojo corporativo Miniso — Pantone 2347 C
         primary="#E60012",
         secondary="#1A1A1A",
-        logo_asset="/assets/logo_miniso.svg",
+        logo_asset="/assets/logo_miniso.png",
         palette=(
             "#E60012",  # rojo Miniso primario
             "#1A1A1A",  # negro corporativo
