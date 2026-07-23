@@ -245,17 +245,21 @@ def _pct_activos(df_zona, fmin, fmax):
 # so callers in this module see the original signatures without any change.
 
 
-def _fig_dwell_zonas(zonas_data, child_zones=None):
+def _fig_dwell_zonas(zonas_data, child_zones=None, primary_color: str = "#0052CC"):
     """Tiempo medio de permanencia por zona — solo zonas padre."""
-    return _fig_dwell_zonas_base(zonas_data, child_zones=child_zones, color_fn=_color_zona)
+    return _fig_dwell_zonas_base(
+        zonas_data, child_zones=child_zones, color_fn=_color_zona, primary_color=primary_color
+    )
 
 
-def _fig_embudo_conversion(zonas_data):
+def _fig_embudo_conversion(zonas_data, primary_color: str = "#0052CC"):
     """
     Embudo exterior → tienda → caja con tasa de conversión entre pasos.
     Requiere al menos dos zonas con roles distintos identificables.
     """
-    return _fig_embudo_conversion_base(zonas_data, color_fn=_color_zona)
+    return _fig_embudo_conversion_base(
+        zonas_data, color_fn=_color_zona, primary_color=primary_color
+    )
 
 
 def _render_zona_card(
@@ -271,6 +275,7 @@ def _render_zona_card(
     gap_actual=False,
     gap_anterior=False,
     zone_enum=None,
+    primary_color: str = "#0052CC",
 ):
     """Tarjeta de zona: % delta en grande (hero) + visitantes absolutos + sparkline."""
     try:
@@ -488,13 +493,20 @@ def _render_zona_card(
         style={
             "borderTop": f"3px solid {color}",
             "overflow": "visible",
-            **({"background": "rgba(0,82,204,0.04)"} if has_children else {}),
+            **({"background": f"rgba({_rgb_str(primary_color)},0.04)"} if has_children else {}),
         },
     )
 
 
 def _render_pm_questions(
-    df, zonas_data, fecha_max, uid, ventana="semana", child_zones=None, clima=None
+    df,
+    zonas_data,
+    fecha_max,
+    uid,
+    ventana="semana",
+    child_zones=None,
+    clima=None,
+    primary_color: str = "#0052CC",
 ):
     """
     Responde gráficamente las preguntas habituales de un PM sobre el tráfico.
@@ -549,7 +561,7 @@ def _render_pm_questions(
     if ventana == "mes":
         preguntas.append(
             (
-                _fig_semanas_mes(df, fecha_max),
+                _fig_semanas_mes(df, fecha_max, primary_color=primary_color),
                 f"q-semanas-{uid}",
                 "¿Cómo evolucionó el tráfico semana a semana?",
                 f"Visitantes por semana · sólido = {_periodo_corto} · translúcido = {_ant_lbl}",
@@ -559,42 +571,42 @@ def _render_pm_questions(
 
     preguntas += [
         (
-            _fig_dias_semana(df, fecha_max, dias=dias_v),
+            _fig_dias_semana(df, fecha_max, dias=dias_v, primary_color=primary_color),
             f"q-dias-{uid}",
             "¿Cuándo llegan los visitantes?",
             "Media por día · tono más oscuro = día pico · sólido = actual · translúcido = anterior",
             "165px",
         ),
         (
-            _fig_hora_pico(df_top, fecha_max=fecha_max, dias=dias_v),
+            _fig_hora_pico(df_top, fecha_max=fecha_max, dias=dias_v, primary_color=primary_color),
             f"q-hora-{uid}",
             "¿A qué hora llegan?",
             "Distribución horaria · barras = actual · línea punteada = anterior",
             "180px",
         ),
         (
-            _fig_finde_vs_laborable(df, fecha_max, dias=dias_v),
+            _fig_finde_vs_laborable(df, fecha_max, dias=dias_v, primary_color=primary_color),
             f"q-finde-{uid}",
             "¿Rinde mejor el fin de semana o entre semana?",
             f"Visitantes/día (media) · sólido = actual · translúcido = {_ant_lbl}",
             "180px",
         ),
         (
-            _fig_nuevos_ratio(df_top, fecha_max, dias=dias_v),
+            _fig_nuevos_ratio(df_top, fecha_max, dias=dias_v, primary_color=primary_color),
             f"q-nuevos-{uid}",
             "¿Cuántos visitantes son nuevos?",
             "% visitantes nuevos · línea azul = media actual · línea punteada tenue = media anterior",
             "180px",
         ),
         (
-            _fig_dwell_zonas(zonas_top, child_zones=_cz),
+            _fig_dwell_zonas(zonas_top, child_zones=_cz, primary_color=primary_color),
             f"q-dwell-{uid}",
             "¿Cuánto tiempo se quedan?",
             f"Tiempo medio de permanencia por zona principal · {_periodo_corto}",
             "180px",
         ),
         (
-            _fig_embudo_conversion(zonas_top),
+            _fig_embudo_conversion(zonas_top, primary_color=primary_color),
             f"q-embudo-{uid}",
             "¿Cuántos visitantes convierten?",
             f"Visitantes por etapa · {_periodo_corto} · % respecto al paso anterior",
@@ -605,7 +617,9 @@ def _render_pm_questions(
     # ── Gráficos de clima (si hay datos disponibles) ───────────────────────
     if clima:
         _ant_lbl_c = "28 días anteriores" if ventana == "mes" else "7 días anteriores"
-        fig_temp = _fig_temperatura_trafico(df, clima, fecha_max, dias=dias_v)
+        fig_temp = _fig_temperatura_trafico(
+            df, clima, fecha_max, dias=dias_v, primary_color=primary_color
+        )
         if fig_temp:
             preguntas.append(
                 (
@@ -616,7 +630,9 @@ def _render_pm_questions(
                     "190px",
                 )
             )
-        fig_lluvia = _fig_lluvia_trafico(df, clima, fecha_max, dias=dias_v)
+        fig_lluvia = _fig_lluvia_trafico(
+            df, clima, fecha_max, dias=dias_v, primary_color=primary_color
+        )
         if fig_lluvia:
             preguntas.append(
                 (
@@ -648,7 +664,7 @@ def _render_pm_questions(
                             "display": "inline-block",
                             "width": "10px",
                             "height": "10px",
-                            "background": "rgba(0,82,204,0.85)",
+                            "background": f"rgba({_rgb_str(primary_color)},0.85)",
                             "borderRadius": "2px",
                             "marginRight": "5px",
                             "flexShrink": "0",
@@ -665,8 +681,8 @@ def _render_pm_questions(
                             "display": "inline-block",
                             "width": "10px",
                             "height": "10px",
-                            "background": "rgba(0,82,204,0.14)",
-                            "border": "1px solid rgba(0,82,204,0.35)",
+                            "background": f"rgba({_rgb_str(primary_color)},0.14)",
+                            "border": f"1px solid rgba({_rgb_str(primary_color)},0.35)",
                             "borderRadius": "2px",
                             "marginRight": "5px",
                             "flexShrink": "0",
@@ -781,6 +797,21 @@ def _hex_rgba(hex_color: str, alpha: float) -> str:
     return f"rgba({r},{g},{b},{alpha})"
 
 
+def _rgb_str(hex_color: str) -> str:
+    """Devuelve 'R,G,B' para usar en rgba() de inline styles."""
+    h = hex_color.lstrip("#")
+    return f"{int(h[0:2],16)},{int(h[2:4],16)},{int(h[4:6],16)}"
+
+
+def _darken(hex_color: str, factor: float = 0.75) -> str:
+    """Oscurece un color HEX multiplicando RGB por factor."""
+    h = hex_color.lstrip("#")
+    r = int(int(h[0:2], 16) * factor)
+    g = int(int(h[2:4], 16) * factor)
+    b = int(int(h[4:6], 16) * factor)
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
 def _render_signal_yoy_chart(
     df_k,
     fk,
@@ -796,6 +827,7 @@ def _render_signal_yoy_chart(
     ventana="semana",
     tooltip_text="",
     icon_cls="fas fa-satellite-dish",
+    primary_color="#0052CC",
 ):
     """
     12-month bar chart (Ene-Dic completo) + año anterior translúcido.
@@ -1115,6 +1147,7 @@ def _render_cruceros_section(
     ventana: str = "semana",
     tooltip_text: str = "",
     fallback_feature_key: str = "",
+    primary_color: str = "#0052CC",
 ) -> html.Div | None:
     """Grouped bar: año anterior (ghost) vs año en curso (tier-colored), eje Ene-Dic."""
     try:
@@ -1349,7 +1382,7 @@ def _render_cruceros_section(
         y1=1,
         xref="x",
         yref="paper",
-        line=dict(color="rgba(0,82,204,0.45)", width=1.5, dash="dot"),
+        line=dict(color=f"rgba({_rgb_str(primary_color)},0.45)", width=1.5, dash="dot"),
     )
     fig.add_annotation(
         x=cur_mes_label,
@@ -1359,7 +1392,7 @@ def _render_cruceros_section(
         text="hoy",
         showarrow=False,
         yanchor="bottom",
-        font=dict(size=8, color="rgba(0,82,204,0.7)"),
+        font=dict(size=8, color=f"rgba({_rgb_str(primary_color)},0.7)"),
     )
 
     fig.update_layout(
@@ -1552,7 +1585,7 @@ def _render_cruceros_section(
 
 
 def _render_senal_contexto_modal(
-    location_uuid: str, uid: str, fecha_max, ventana: str = "semana"
+    location_uuid: str, uid: str, fecha_max, ventana: str = "semana", primary_color: str = "#0052CC"
 ) -> html.Div | None:
     """External signals modal: YoY bar charts per feature + events feed."""
     if not location_uuid:
@@ -1622,6 +1655,7 @@ def _render_senal_contexto_modal(
                 ventana=ventana,
                 tooltip_text=m["notas"],
                 icon_cls=m["icon_cls"],
+                primary_color=primary_color,
             )
             if c:
                 charts.append(c)
@@ -1632,7 +1666,12 @@ def _render_senal_contexto_modal(
     cruceros_fallback = _cr_meta.get("fallback_feature_key", "")
 
     cruceros_section = _render_cruceros_section(
-        location_uuid, fecha_max, ventana, cruceros_notas, cruceros_fallback
+        location_uuid,
+        fecha_max,
+        ventana,
+        cruceros_notas,
+        cruceros_fallback,
+        primary_color=primary_color,
     )
 
     if not charts and not cruceros_section:
@@ -1697,7 +1736,12 @@ def _funnel_connector_row(from_z: dict, to_z: dict) -> html.Div:
 
 
 def _render_zona_section_jerarquica(
-    zonas_data, zona_children_map, child_zone_names, uid, periodo_label
+    zonas_data,
+    zona_children_map,
+    child_zone_names,
+    uid,
+    periodo_label,
+    primary_color: str = "#0052CC",
 ) -> html.Div:
     """Zone cards: parent zones first (blue accent), children grouped below each parent."""
     parent_zones = sorted(
@@ -1735,6 +1779,7 @@ def _render_zona_section_jerarquica(
                     gap_actual=z.get("gap_actual", False),
                     gap_anterior=z.get("gap_anterior", False),
                     zone_enum=z.get("zone_enum"),
+                    primary_color=primary_color,
                 ),
                 xs=12,
                 sm=6,
@@ -1768,6 +1813,7 @@ def _render_zona_section_jerarquica(
                     gap_actual=pz.get("gap_actual", False),
                     gap_anterior=pz.get("gap_anterior", False),
                     zone_enum=pz.get("zone_enum"),
+                    primary_color=primary_color,
                 ),
                 xs=12,
                 sm=6,
@@ -1809,6 +1855,7 @@ def _render_zona_section_jerarquica(
             gap_actual=pz.get("gap_actual", False),
             gap_anterior=pz.get("gap_anterior", False),
             zone_enum=pz.get("zone_enum"),
+            primary_color=primary_color,
         )
 
         block = [dbc.Row([dbc.Col(parent_card, xs=12)], className="mb-2 g-2")]
@@ -1844,6 +1891,7 @@ def _render_zona_section_jerarquica(
                     gap_actual=cz.get("gap_actual", False),
                     gap_anterior=cz.get("gap_anterior", False),
                     zone_enum=cz.get("zone_enum"),
+                    primary_color=primary_color,
                 )
                 if gc_data:
                     gc_cols = [
@@ -1860,6 +1908,7 @@ def _render_zona_section_jerarquica(
                                 gap_actual=gz.get("gap_actual", False),
                                 gap_anterior=gz.get("gap_anterior", False),
                                 zone_enum=gz.get("zone_enum"),
+                                primary_color=primary_color,
                             ),
                             xs=12,
                             sm=6,
@@ -1909,7 +1958,14 @@ def _render_zona_section_jerarquica(
     return html.Div(sections)
 
 
-def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None, ventana="semana"):
+def generar_mensajes_salud(
+    df,
+    ubi,
+    zonas_seleccionadas=None,
+    location_uuid=None,
+    ventana="semana",
+    primary_color: str = "#0052CC",
+):
     if df.empty:
         return dbc.Alert("Ausencia de datos.", color="warning", className="rounded-4")
 
@@ -2087,7 +2143,9 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
             )
         ),
         className="border-0 rounded-4 mb-4 shadow-sm",
-        style={"background": "linear-gradient(135deg, #0052CC 0%, #003d99 100%)"},
+        style={
+            "background": f"linear-gradient(135deg, {primary_color} 0%, {_darken(primary_color)} 100%)"
+        },
     )
 
     # ── PDF header (print-only) ───────────────────────────────────────────
@@ -2145,7 +2203,12 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
                 style={"fontSize": "0.82rem"},
             ),
             _render_zona_section_jerarquica(
-                zonas_data, zona_children_map, child_zone_names, uid, periodo_label
+                zonas_data,
+                zona_children_map,
+                child_zone_names,
+                uid,
+                periodo_label,
+                primary_color=primary_color,
             ),
         ]
     )
@@ -2165,13 +2228,14 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
                 ventana=ventana,
                 child_zones=child_zone_names,
                 clima=clima,
+                primary_color=primary_color,
             ),
         ]
     )
 
-    sec_senales = _render_senal_contexto_modal(location_uuid, uid, fecha_max, ventana) or html.Div(
-        html.P("Sin datos de contexto externo disponibles.", className="text-muted")
-    )
+    sec_senales = _render_senal_contexto_modal(
+        location_uuid, uid, fecha_max, ventana, primary_color=primary_color
+    ) or html.Div(html.P("Sin datos de contexto externo disponibles.", className="text-muted"))
 
     mapa_contexto = generar_mapa_contexto(location_uuid, geo_vals_loc) if location_uuid else None
     sec_geo = (
@@ -2197,7 +2261,7 @@ def generar_mensajes_salud(df, ubi, zonas_seleccionadas=None, location_uuid=None
             dbc.AccordionItem(
                 sec_zona,
                 title=_acc_title(
-                    "fas fa-layer-group", f"Estado por zona  {_ventana_zona_lbl}", "#0052CC"
+                    "fas fa-layer-group", f"Estado por zona  {_ventana_zona_lbl}", primary_color
                 ),
                 item_id="zona",
             ),
@@ -2267,9 +2331,17 @@ def generar_panel_pm(df_completo, locs, zonas_sel, ventana="semana"):
     if not locs:
         return dbc.Alert("Selecciona una ubicación.", color="info", className="rounded-4")
 
+    from src.core.org_branding import get_branding_from_locs
+
+    primary_color = get_branding_from_locs(locs).primary
+
     paneles = []
     for ubi in df_completo[df_completo["location_id"].isin(locs)]["Ubicación"].unique():
         df_ubi = df_completo[df_completo["Ubicación"] == ubi]
         loc_uuid = df_ubi["location_id"].iloc[0] if "location_id" in df_ubi.columns else None
-        paneles.append(generar_mensajes_salud(df_ubi, ubi, zonas_sel, loc_uuid, ventana=ventana))
+        paneles.append(
+            generar_mensajes_salud(
+                df_ubi, ubi, zonas_sel, loc_uuid, ventana=ventana, primary_color=primary_color
+            )
+        )
     return html.Div(paneles)

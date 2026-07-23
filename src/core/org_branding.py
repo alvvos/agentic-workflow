@@ -71,18 +71,18 @@ _REGISTRY: dict[str, OrgBranding] = {
         primary="#E60012",
         secondary="#1A1A1A",
         # SVG placeholder incluido en assets/. Reemplaza con el logo oficial PNG si lo tienes.
-        logo_asset="/assets/logo_miniso.svg",
+        logo_asset="/assets/logo_miniso.png",
         palette=(
-            "#E60012",  # rojo Miniso — serie principal
-            "#1A1A1A",  # negro Miniso
-            "#FF6B6B",  # rojo claro
-            "#4D4D4D",  # gris oscuro
-            "#CC000F",  # rojo oscuro
-            "#808080",  # gris medio
-            "#FF3333",  # rojo vivo
-            "#B3B3B3",  # gris claro
-            "#FF9999",  # rojo pálido
-            "#666666",  # gris
+            "#E60012",  # rojo Miniso primario
+            "#1A1A1A",  # negro corporativo
+            "#F4811F",  # naranja terracota
+            "#8E44AD",  # violeta
+            "#16A085",  # verde jade
+            "#2980B9",  # azul acero
+            "#D35400",  # siena
+            "#6C3483",  # púrpura oscuro
+            "#148F77",  # verde oscuro
+            "#4D4D4D",  # gris carbón
         ),
     ),
 }
@@ -123,6 +123,11 @@ def branding_css(b: OrgBranding) -> str:
     """
     r, g, b_val = _hex_to_rgb(b.primary)
     r2, g2, b2 = _hex_to_rgb(b.secondary)
+    h = b.primary.lstrip("#")
+    rd = int(int(h[0:2], 16) * 0.75)
+    gd = int(int(h[2:4], 16) * 0.75)
+    bd = int(int(h[4:6], 16) * 0.75)
+    primary_dark = f"#{rd:02x}{gd:02x}{bd:02x}"
     return f"""
 :root {{
   --bs-primary:          {b.primary};
@@ -130,6 +135,10 @@ def branding_css(b: OrgBranding) -> str:
   --bs-link-color:       {b.primary};
   --bs-link-color-rgb:   {r},{g},{b_val};
   --bs-link-hover-color: {b.secondary};
+  --brand-primary:       {b.primary};
+  --brand-primary-rgb:   {r},{g},{b_val};
+  --brand-secondary:     {b.secondary};
+  --brand-dark:          {primary_dark};
 }}
 .text-primary  {{ color: {b.primary} !important; }}
 .bg-primary    {{ background-color: {b.primary} !important; }}

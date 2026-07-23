@@ -25,6 +25,13 @@ from src.core.theme import C_SUCCESS as _C_SUCCESS
 dias_corto = ["L", "M", "X", "J", "V", "S", "D"]
 
 
+def _rgba(hex_color: str, opacity: float) -> str:
+    """Convierte un color HEX a rgba(R,G,B,opacity) para usar en trazas Plotly."""
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r},{g},{b},{opacity:.2f})"
+
+
 # ── Shared helpers ────────────────────────────────────────────────────────────
 
 
@@ -118,7 +125,7 @@ def _fig_sparkline(dias_28, color):
 # ── Day-of-week distribution ──────────────────────────────────────────────────
 
 
-def _fig_dias_semana(df_todas_zonas, fecha_max, dias=28):
+def _fig_dias_semana(df_todas_zonas, fecha_max, dias=28, primary_color: str = _C_PRIMARY):
     """Distribución por día de la semana — período actual (sólido) vs anterior (translúcido)."""
     if df_todas_zonas.empty or "unique_visitors" not in df_todas_zonas.columns:
         return None
@@ -149,7 +156,7 @@ def _fig_dias_semana(df_todas_zonas, fecha_max, dias=28):
 
     max_v = max(vals_act.max(), vals_ant.max()) or 1
     ratios = vals_act.values / max_v
-    bar_colors = [f"rgba(0,82,204,{0.22 + 0.68 * r:.2f})" for r in ratios]
+    bar_colors = [_rgba(primary_color, 0.22 + 0.68 * r) for r in ratios]
     peak_idx = int(np.argmax(vals_act.values))
     text_labels = [
         f"<b>{int(v):,}</b>" if i == peak_idx else "" for i, v in enumerate(vals_act.values)
@@ -162,8 +169,8 @@ def _fig_dias_semana(df_todas_zonas, fecha_max, dias=28):
                 x=dias_corto,
                 y=vals_ant.values,
                 marker=dict(
-                    color="rgba(0,82,204,0.14)",
-                    line=dict(color="rgba(0,82,204,0.35)", width=1),
+                    color=_rgba(primary_color, 0.14),
+                    line=dict(color=_rgba(primary_color, 0.35), width=1),
                     cornerradius=5,
                 ),
                 hovertemplate="Anterior · %{x}: <b>%{y:,.0f}</b> visit./día<extra></extra>",
@@ -200,7 +207,7 @@ def _fig_dias_semana(df_todas_zonas, fecha_max, dias=28):
 # ── Weekend vs weekday ────────────────────────────────────────────────────────
 
 
-def _fig_finde_vs_laborable(df_todas_zonas, fecha_max, dias=28):
+def _fig_finde_vs_laborable(df_todas_zonas, fecha_max, dias=28, primary_color: str = _C_PRIMARY):
     """Promedio visitantes/día: entre semana vs fin de semana — actual (sólido) vs anterior (translúcido)."""
     if df_todas_zonas.empty or "unique_visitors" not in df_todas_zonas.columns:
         return None
@@ -230,9 +237,9 @@ def _fig_finde_vs_laborable(df_todas_zonas, fecha_max, dias=28):
         return None
 
     max_v = max(max(vals_act), max(vals_ant)) or 1
-    colors_act = [_C_PRIMARY, "#e67e22"]
-    colors_ant = ["rgba(0,82,204,0.15)", "rgba(230,126,34,0.15)"]
-    border_ant = [_C_PRIMARY, "#e67e22"]
+    colors_act = [primary_color, "#e67e22"]
+    colors_ant = [_rgba(primary_color, 0.15), "rgba(230,126,34,0.15)"]
+    border_ant = [primary_color, "#e67e22"]
 
     fig = go.Figure()
     fig.add_trace(
@@ -274,10 +281,12 @@ def _fig_finde_vs_laborable(df_todas_zonas, fecha_max, dias=28):
 # ── Dwell time by zone ────────────────────────────────────────────────────────
 
 
-def _fig_dwell_zonas(zonas_data, child_zones=None, color_fn: Callable | None = None):
+def _fig_dwell_zonas(
+    zonas_data, child_zones=None, color_fn: Callable | None = None, primary_color: str = _C_PRIMARY
+):
     """Tiempo medio de permanencia por zona — solo zonas padre."""
     _cz = child_zones or set()
-    _get_color = color_fn if color_fn is not None else (lambda z: _C_PRIMARY)
+    _get_color = color_fn if color_fn is not None else (lambda z: primary_color)
     data = [
         (z["zona"], z["r"]["estancia"], _get_color(z["zona"]))
         for z in zonas_data
@@ -319,12 +328,14 @@ def _fig_dwell_zonas(zonas_data, child_zones=None, color_fn: Callable | None = N
 # ── Conversion funnel ─────────────────────────────────────────────────────────
 
 
-def _fig_embudo_conversion(zonas_data, color_fn: Callable | None = None):
+def _fig_embudo_conversion(
+    zonas_data, color_fn: Callable | None = None, primary_color: str = _C_PRIMARY
+):
     """
     Embudo exterior → tienda → caja con tasa de conversión entre pasos.
     Requiere al menos dos zonas con roles distintos identificables.
     """
-    _get_color = color_fn if color_fn is not None else (lambda z: _C_PRIMARY)
+    _get_color = color_fn if color_fn is not None else (lambda z: primary_color)
 
     def _rol(z):
         ze = z.get("zone_enum")
@@ -404,7 +415,7 @@ def _parse_hourly_pm(val):
     return None
 
 
-def _fig_hora_pico(df_todas_zonas, fecha_max=None, dias=7):
+def _fig_hora_pico(df_todas_zonas, fecha_max=None, dias=7, primary_color: str = _C_PRIMARY):
     """Distribución horaria — período actual (barras) vs anterior (línea translúcida)."""
     if "hourly_visits" not in df_todas_zonas.columns:
         return None
@@ -443,7 +454,7 @@ def _fig_hora_pico(df_todas_zonas, fecha_max=None, dias=7):
     horas = [f"{h:02d}h" for h in range(24)]
     max_v = max(max(avg_act), max(avg_ant) if avg_ant else 0) or 1
     peak_h = int(np.argmax(avg_act))
-    colors = [f"rgba(0,82,204,{0.18 + 0.72 * v / max_v:.2f})" for v in avg_act]
+    colors = [_rgba(primary_color, 0.18 + 0.72 * v / max_v) for v in avg_act]
     texts = [f"<b>{int(v)}</b>" if i == peak_h else "" for i, v in enumerate(avg_act)]
 
     fig = go.Figure()
@@ -453,9 +464,9 @@ def _fig_hora_pico(df_todas_zonas, fecha_max=None, dias=7):
                 x=horas,
                 y=avg_ant,
                 mode="lines",
-                line=dict(color="rgba(0,82,204,0.28)", width=1.5, dash="dot"),
+                line=dict(color=_rgba(primary_color, 0.28), width=1.5, dash="dot"),
                 fill="tozeroy",
-                fillcolor="rgba(0,82,204,0.04)",
+                fillcolor=_rgba(primary_color, 0.04),
                 hovertemplate="Anterior · %{x}: <b>%{y:.0f}</b><extra></extra>",
                 showlegend=False,
             )
@@ -491,7 +502,7 @@ def _fig_hora_pico(df_todas_zonas, fecha_max=None, dias=7):
 # ── New visitor ratio ─────────────────────────────────────────────────────────
 
 
-def _fig_nuevos_ratio(df_todas_zonas, fecha_max, dias=7):
+def _fig_nuevos_ratio(df_todas_zonas, fecha_max, dias=7, primary_color: str = _C_PRIMARY):
     """% de visitantes nuevos — período actual con referencia del período anterior."""
     if (
         "new_visitors" not in df_todas_zonas.columns
@@ -534,10 +545,10 @@ def _fig_nuevos_ratio(df_todas_zonas, fecha_max, dias=7):
         fig.add_hline(
             y=media_ant,
             line_dash="dot",
-            line_color="rgba(0,82,204,0.30)",
+            line_color=_rgba(primary_color, 0.30),
             annotation_text=f"Ant. {media_ant:.0f}%",
             annotation_position="bottom right",
-            annotation_font=dict(size=10, color="rgba(0,82,204,0.55)"),
+            annotation_font=dict(size=10, color=_rgba(primary_color, 0.55)),
         )
     fig.add_trace(
         go.Scatter(
@@ -545,8 +556,8 @@ def _fig_nuevos_ratio(df_todas_zonas, fecha_max, dias=7):
             y=pd_act["pct"],
             mode="lines+markers",
             fill="tozeroy",
-            fillcolor="rgba(0,82,204,0.07)",
-            line=dict(color=_C_PRIMARY, width=2),
+            fillcolor=_rgba(primary_color, 0.07),
+            line=dict(color=primary_color, width=2),
             marker=dict(size=5),
             hovertemplate="%{x}: <b>%{y:.0f}%</b> nuevos<extra></extra>",
         )
@@ -574,7 +585,7 @@ def _fig_nuevos_ratio(df_todas_zonas, fecha_max, dias=7):
 # ── Weekly breakdown (month view) ─────────────────────────────────────────────
 
 
-def _fig_semanas_mes(df, fecha_max):
+def _fig_semanas_mes(df, fecha_max, primary_color: str = _C_PRIMARY):
     """Visitantes por semana — 4 semanas actuales (sólido) vs 4 anteriores (translúcido)."""
     if df.empty or "unique_visitors" not in df.columns:
         return None
@@ -609,7 +620,7 @@ def _fig_semanas_mes(df, fecha_max):
     hover_ant2 = hover_ant if len(hover_ant) == n else labels
 
     opacities = [0.28 + 0.72 * (i / max(n - 1, 1)) for i in range(n)]
-    colors_act = [f"rgba(0,82,204,{op:.2f})" for op in opacities]
+    colors_act = [_rgba(primary_color, op) for op in opacities]
     max_v = max(max(vals_act) if vals_act else 0, max(vals_ant) if vals_ant else 0) or 1
 
     fig = go.Figure()
@@ -619,8 +630,8 @@ def _fig_semanas_mes(df, fecha_max):
                 x=labels,
                 y=vals_ant,
                 marker=dict(
-                    color="rgba(0,82,204,0.14)",
-                    line=dict(color="rgba(0,82,204,0.35)", width=1),
+                    color=_rgba(primary_color, 0.14),
+                    line=dict(color=_rgba(primary_color, 0.35), width=1),
                     cornerradius=5,
                 ),
                 customdata=hover_ant2,
@@ -660,7 +671,9 @@ def _fig_semanas_mes(df, fecha_max):
 # ── Temperature vs traffic ────────────────────────────────────────────────────
 
 
-def _fig_temperatura_trafico(df, clima: dict, fecha_max, dias: int = 7):
+def _fig_temperatura_trafico(
+    df, clima: dict, fecha_max, dias: int = 7, primary_color: str = _C_PRIMARY
+):
     """Visitantes (barras, eje izq.) + temperatura máx (línea, eje der.). Actual vs anterior."""
     if not clima:
         return None
@@ -698,8 +711,8 @@ def _fig_temperatura_trafico(df, clima: dict, fecha_max, dias: int = 7):
             y=[d["vis"] for d in ant],
             name="Visitas ant.",
             marker=dict(
-                color="rgba(0,82,204,0.16)",
-                line=dict(color="rgba(0,82,204,0.32)", width=1),
+                color=_rgba(primary_color, 0.16),
+                line=dict(color=_rgba(primary_color, 0.32), width=1),
                 cornerradius=5,
             ),
             yaxis="y",
@@ -711,7 +724,7 @@ def _fig_temperatura_trafico(df, clima: dict, fecha_max, dias: int = 7):
             x=x_act,
             y=[d["vis"] for d in act],
             name="Visitas act.",
-            marker=dict(color="rgba(0,82,204,0.78)", cornerradius=5),
+            marker=dict(color=_rgba(primary_color, 0.78), cornerradius=5),
             yaxis="y",
             showlegend=False,
         )
@@ -768,7 +781,7 @@ def _fig_temperatura_trafico(df, clima: dict, fecha_max, dias: int = 7):
 # ── Rain vs traffic ───────────────────────────────────────────────────────────
 
 
-def _fig_lluvia_trafico(df, clima: dict, fecha_max, dias: int = 7):
+def _fig_lluvia_trafico(df, clima: dict, fecha_max, dias: int = 7, primary_color: str = _C_PRIMARY):
     """Visitantes (barras sólidas/translúcidas) + precipitación (área, eje der.). Actual vs anterior."""
     if not clima:
         return None
@@ -806,8 +819,8 @@ def _fig_lluvia_trafico(df, clima: dict, fecha_max, dias: int = 7):
             y=[d["vis"] for d in ant],
             name="Visitas ant.",
             marker=dict(
-                color="rgba(0,82,204,0.16)",
-                line=dict(color="rgba(0,82,204,0.32)", width=1),
+                color=_rgba(primary_color, 0.16),
+                line=dict(color=_rgba(primary_color, 0.32), width=1),
                 cornerradius=5,
             ),
             yaxis="y",
@@ -819,7 +832,7 @@ def _fig_lluvia_trafico(df, clima: dict, fecha_max, dias: int = 7):
             x=x_act,
             y=[d["vis"] for d in act],
             name="Visitas act.",
-            marker=dict(color="rgba(0,82,204,0.78)", cornerradius=5),
+            marker=dict(color=_rgba(primary_color, 0.78), cornerradius=5),
             yaxis="y",
             showlegend=False,
         )
