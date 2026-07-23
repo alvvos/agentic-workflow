@@ -181,7 +181,7 @@ def _build_child_section(locs, parent_name, seen_parents: set) -> list:
                     value=[],
                     inline=True,
                     input_class_name="btn-check",
-                    label_class_name="btn btn-outline-secondary mb-2 me-2 fw-bold shadow-sm rounded-3",
+                    label_class_name="btn btn-outline-secondary mb-2 me-2 fw-bold border-0 rounded-3",
                 ),
             ],
             className="ms-3 mb-3 border-start border-2 border-primary ps-3",
