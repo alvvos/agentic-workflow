@@ -62,7 +62,7 @@ def build_admin_content():
                 is_open=False,
                 size="lg",
                 centered=True,
-                contentClassName="border-0 rounded-4 shadow",
+                contentClassName="border-0 rounded-4 shadow admin-modal",
             ),
             # Modal edición jerarquía de zonas
             dbc.Modal(
@@ -102,7 +102,7 @@ def build_admin_content():
                 is_open=False,
                 size="lg",
                 centered=True,
-                contentClassName="border-0 rounded-4 shadow",
+                contentClassName="border-0 rounded-4 shadow admin-modal",
             ),
             # Modal de confirmación unificado (usuarios / ubicaciones / orgs)
             dbc.Modal(
@@ -138,7 +138,7 @@ def build_admin_content():
                 id="admin-delete-modal",
                 is_open=False,
                 centered=True,
-                contentClassName="border-0 rounded-4 shadow",
+                contentClassName="border-0 rounded-4 shadow admin-modal",
             ),
             dbc.Tabs(
                 id="admin-sub-tabs",
@@ -357,7 +357,7 @@ def build_admin_content():
                                 is_open=False,
                                 size="lg",
                                 centered=True,
-                                contentClassName="border-0 rounded-4 shadow",
+                                contentClassName="border-0 rounded-4 shadow admin-modal",
                             ),
                             # Selector de ubicación + botones de acción
                             dbc.Card(
@@ -629,6 +629,7 @@ def build_admin_content():
                 className="mb-3",
             ),
         ],
+        className="admin-chrome",
         style={"overflowY": "auto"},
     )
 

@@ -435,24 +435,6 @@ def _loc_row(loc: dict) -> html.Tr:
 
 
 def _render_locs_tree(orgs: list) -> html.Div:
-    n_locs = sum(len(o.get("locations", [])) for o in orgs)
-    n_zones = sum(len(loc.get("zones", [])) for o in orgs for loc in o.get("locations", []))
-
-    # ── Resumen en strip ─────────────────────────────────────────────────────
-    stats_strip = html.Div(
-        dbc.Row(
-            [
-                dbc.Col(
-                    _stat_pill(len(orgs), "Organizaciones", "fa-building", "text-primary"), xs=4
-                ),
-                dbc.Col(_stat_pill(n_locs, "Ubicaciones", "fa-store", "text-success"), xs=4),
-                dbc.Col(_stat_pill(n_zones, "Zonas", "fa-layer-group", "text-info"), xs=4),
-            ],
-            className="g-0",
-        ),
-        className="p-3 bg-light rounded-4 border-start border-primary border-4 shadow-sm mb-4",
-    )
-
     # ── Una card por organización ─────────────────────────────────────────────
     org_cards = []
     for org in orgs:
@@ -551,7 +533,7 @@ def _render_locs_tree(orgs: list) -> html.Div:
             )
         )
 
-    return html.Div([stats_strip, *org_cards])
+    return html.Div(org_cards)
 
 
 def _stat_pill(value, label, icon, color_cls) -> html.Div:

@@ -2,6 +2,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
     default: {
         function0: function(feature, latlng, ctx) {
             const c = feature.properties.color || '#3388ff';
+            const p = feature.properties;
             const icon = L.divIcon({
                 className: '',
                 html: '<svg width="22" height="32" viewBox="0 0 22 32" xmlns="http://www.w3.org/2000/svg">' +
@@ -12,15 +13,29 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                 iconAnchor: [11, 32],
                 popupAnchor: [0, -34]
             });
+            const tooltip = '<b>' + p.name + '</b>' +
+                (p.categoria ? ' <span style="opacity:.65;font-size:.85em">· ' + p.categoria + '</span>' : '');
+            const fuenteBadge = p.fuente ?
+                '<span style="background:#edf0f5;padding:1px 5px;border-radius:8px;font-size:.72em;color:#888">' +
+                p.fuente.replace(/_/g, ' ') + '</span>' :
+                '';
+            const popup = '<div style="min-width:160px;line-height:1.5">' +
+                '<b style="font-size:.95em">' + p.name + '</b>' +
+                (p.categoria ? '<br><span style="color:' + c + ';font-weight:600;font-size:.8em">' + p.categoria + '</span>' : '') +
+                (p.detalle ? '<br><span style="color:#555;font-size:.82em">' + p.detalle + '</span>' : '') +
+                (p.valor !== undefined ? '<br><span style="color:#999;font-size:.75em">Relevancia: ' + p.valor.toFixed(2) + '</span>' : '') +
+                (p.fuente ? '<br>' + fuenteBadge : '') +
+                '</div>';
             return L.marker(latlng, {
-                icon
-            }).bindTooltip(
-                '<b>' + feature.properties.name + '</b>' +
-                (feature.properties.detalle ? '<br>' + feature.properties.detalle : ''), {
+                    icon
+                })
+                .bindTooltip(tooltip, {
                     direction: 'top',
                     offset: [0, -30]
-                }
-            );
+                })
+                .bindPopup(popup, {
+                    maxWidth: 280
+                });
         },
         function1: function(feature, latlng, index, ctx) {
             const count = feature.properties.point_count;

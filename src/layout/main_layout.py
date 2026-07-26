@@ -260,7 +260,7 @@ def serve_layout():
                 is_open=False,
                 scrollable=True,
                 centered=False,
-                contentClassName="border-0 rounded-4",
+                contentClassName="border-0 rounded-4 admin-modal",
                 style={"boxShadow": "0 20px 60px rgba(0,0,0,0.15)"},
             ),
             dbc.Toast(

@@ -272,3 +272,33 @@
     font-size: 0.81em;
     font-family: monospace;
 }
+
+/* ── Admin panel — siempre colores Bootstrap neutros, sin tinte de org ────── */
+/* Estos selectores tienen mayor especificidad que los del branding dinámico   */
+/* (.admin-chrome X > X) y ganan aunque ambos usen !important.                */
+.admin-chrome .text-primary                        { color: #0d6efd !important; }
+.admin-chrome .bg-primary                          { background-color: #0d6efd !important; }
+.admin-chrome .border-primary                      { border-color: #0d6efd !important; }
+.admin-chrome .border-start.border-primary         { border-left-color: #0d6efd !important; }
+.admin-chrome .badge.bg-primary                    { background-color: #0d6efd !important; }
+.admin-chrome .btn-primary                         { background-color: #0d6efd !important; border-color: #0d6efd !important; color: #fff !important; }
+.admin-chrome .btn-primary:hover                   { background-color: #0b5ed7 !important; border-color: #0a58ca !important; }
+.admin-chrome .btn-outline-primary                 { color: #0d6efd !important; border-color: #0d6efd !important; background-color: transparent !important; }
+.admin-chrome .btn-outline-primary:hover           { background-color: #0d6efd !important; color: #fff !important; }
+.admin-chrome .btn-outline-danger                  { color: #dc3545 !important; border-color: #dc3545 !important; }
+.admin-chrome .accordion-button:not(.collapsed)    { color: #0d6efd !important; }
+/* Nav-links — el branding inyecta --bs-link-color globalmente, lo que pinta los <a> de org color */
+.admin-chrome .nav-link                            { color: #6c757d !important; }
+.admin-chrome .nav-link:hover                      { color: #495057 !important; }
+.admin-chrome .nav-tabs .nav-link.active           { color: #495057 !important; border-top-color: #dee2e6 !important; border-left-color: #dee2e6 !important; border-right-color: #dee2e6 !important; }
+/* Form controls focus */
+.admin-chrome .form-control:focus                  { border-color: #86b7fe !important; box-shadow: 0 0 0 0.25rem rgba(13,110,253,.25) !important; }
+.admin-chrome .form-select:focus                   { border-color: #86b7fe !important; box-shadow: 0 0 0 0.25rem rgba(13,110,253,.25) !important; }
+.admin-chrome .form-check-input:checked            { background-color: #0d6efd !important; border-color: #0d6efd !important; }
+.admin-chrome .form-check-input:focus              { border-color: #86b7fe !important; box-shadow: 0 0 0 0.25rem rgba(13,110,253,.25) !important; }
+/* Modal POIs — Bootstrap lo renderiza fuera del wrapper .admin-chrome, así que usamos clase propia */
+.admin-modal .text-primary                         { color: #0d6efd !important; }
+.admin-modal .btn-primary                          { background-color: #0d6efd !important; border-color: #0d6efd !important; }
+.admin-modal .btn-outline-primary                  { color: #0d6efd !important; border-color: #0d6efd !important; }
+.admin-modal .form-control:focus                   { border-color: #86b7fe !important; box-shadow: 0 0 0 0.25rem rgba(13,110,253,.25) !important; }
+.admin-modal .form-select:focus                    { border-color: #86b7fe !important; box-shadow: 0 0 0 0.25rem rgba(13,110,253,.25) !important; }

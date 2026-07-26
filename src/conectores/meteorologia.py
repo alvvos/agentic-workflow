@@ -24,7 +24,7 @@ def sync(ubicacion: dict, cfg: dict, verbose: bool = True) -> int:  # noqa: ARG0
     No llama a is_fresh() ni write_sync_marker() — los gestiona el orquestador.
     Devuelve el número de filas escritas.
     """
-    from src.db.queries import _cache_weather, _fetch_weather, _fetch_weather_forecast
+    from src.db.queries import cache_weather, fetch_weather, fetch_weather_forecast
 
     ubicacion_id = ubicacion["ubicacion_id"]
     lat, lon = ubicacion["lat"], ubicacion["lon"]
@@ -35,17 +35,17 @@ def sync(ubicacion: dict, cfg: dict, verbose: bool = True) -> int:  # noqa: ARG0
     arch_from = date(2024, 1, 1)
     n_arch = 0
     if arch_from <= arch_to:
-        df = _fetch_weather(lat, lon, str(arch_from), str(arch_to))
+        df = fetch_weather(lat, lon, str(arch_from), str(arch_to))
         if not df.empty:
-            _cache_weather(ubicacion_id, df, overwrite=False)
+            cache_weather(ubicacion_id, df, overwrite=False)
             n_arch = len(df)
 
-    df_fore = _fetch_weather_forecast(
+    df_fore = fetch_weather_forecast(
         lat, lon, past_days=WEATHER_ARCHIVE_LAG, forecast_days=WEATHER_FORECAST
     )
     n_fore = 0
     if not df_fore.empty:
-        _cache_weather(ubicacion_id, df_fore, overwrite=True)
+        cache_weather(ubicacion_id, df_fore, overwrite=True)
         n_fore = len(df_fore)
 
     if verbose:

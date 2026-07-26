@@ -14,7 +14,7 @@ def build_tab_bi():
             dcc.Store(id="zonas-activas-combined"),
             html.Div(
                 id="bi-status-visor",
-                className="mb-4 p-3 bg-light rounded-4 border-start border-primary border-4 shadow-sm",
+                className="mb-4 p-3 rounded-4 border-start border-primary border-4 shadow-sm",
             ),
             dbc.Row(
                 [
@@ -33,7 +33,7 @@ def build_tab_bi():
                                 value=[],
                                 inline=True,
                                 input_class_name="btn-check",
-                                label_class_name="btn btn-outline-primary mb-2 me-2 fw-bold shadow-sm rounded-3",
+                                label_class_name="btn mb-2 me-2 fw-bold shadow-sm rounded-3",
                             ),
                             html.Div(id="radar-child-zones-wrapper"),
                         ],

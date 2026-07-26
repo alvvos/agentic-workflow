@@ -2,6 +2,9 @@
 Callbacks de gestión de POIs (admin tab → sub-pestaña POIs).
 """
 
+import threading
+import traceback
+
 import dash
 import dash_bootstrap_components as dbc
 from dash import ALL, Input, Output, State, html, no_update
@@ -317,9 +320,11 @@ def _sync_esri_places(n, location_uuid):
     if not n or not location_uuid:
         return no_update, no_update, no_update, no_update
     try:
+        from src.data_ingestion.geo import actualizar_scores_poi
         from src.data_ingestion.sync_mensual import sync_esri_places_location
 
         n_upserted = sync_esri_places_location(location_uuid, verbose=False)
+        actualizar_scores_poi(location_uuid)
         msg = f"Esri Places: {n_upserted} POI(s) sincronizados."
         return msg, "success", True, _render_table(location_uuid)
     except ImportError:
@@ -340,20 +345,51 @@ def _sync_esri_places(n, location_uuid):
 def _sync_google_places(n, location_uuid):
     if not n or not location_uuid:
         return no_update, no_update, no_update, no_update
-    try:
-        from src.data_ingestion.geo import actualizar_scores_poi
-        from src.data_ingestion.sync_mensual import sync_google_places_location
 
-        n_upserted = sync_google_places_location(location_uuid, verbose=False)
-        actualizar_scores_poi(location_uuid)
-        msg = f"Google Places: {n_upserted} POI(s) sincronizados."
-        return msg, "success", True, _render_table(location_uuid)
-    except ImportError:
+    result: dict = {}
+
+    def _run():
+        try:
+            from src.data_ingestion.geo import actualizar_scores_poi
+            from src.data_ingestion.sync_mensual import sync_google_places_location
+
+            n_upserted = sync_google_places_location(location_uuid, verbose=True)
+            actualizar_scores_poi(location_uuid)
+            result["ok"] = n_upserted
+        except ImportError:
+            result["import_err"] = True
+        except Exception:
+            result["err"] = traceback.format_exc()
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    t.join(timeout=90)
+
+    if t.is_alive():
+        return (
+            "Google Places: la sincronización tardó más de 90 s y continúa en segundo plano. "
+            "Recarga la tabla en unos segundos.",
+            "warning",
+            True,
+            no_update,
+        )
+    if result.get("import_err"):
         return (
             "Módulo google_places no disponible — verifica GOOGLE_MAPS_API_KEY.",
             "warning",
             True,
             no_update,
         )
-    except Exception as e:
-        return f"Error Google Places: {e}", "danger", True, no_update
+    if "err" in result:
+        import logging
+
+        logging.getLogger(__name__).error("Google Places sync:\n%s", result["err"])
+        return "Error Google Places — revisa los logs del servidor.", "danger", True, no_update
+
+    n_upserted = result.get("ok", 0)
+    return (
+        f"Google Places: {n_upserted} POI(s) sincronizados.",
+        "success",
+        True,
+        _render_table(location_uuid),
+    )

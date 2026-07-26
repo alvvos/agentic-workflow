@@ -662,6 +662,45 @@ def crear_tarjeta_kpi_global(titulo, val_actual, val_hist, es_tiempo=False, es_r
     )
 
 
+def _kpi_inline(titulo, val, hist, es_tiempo=False, es_ratio=False):
+    suffix = "%" if es_ratio else (" min" if es_tiempo else "")
+    decimals = 2 if es_ratio else (1 if es_tiempo else 0)
+    txt = f"{val:,.{decimals}f}{suffix}"
+    delta = None
+    if hist is not None and hist > 0:
+        d = val - hist
+        pct = (d / hist) * 100
+        color = "text-success" if d > 0.01 else ("text-danger" if d < -0.01 else "text-muted")
+        flecha = "▲" if d > 0.01 else ("▼" if d < -0.01 else "◼")
+        etiq = f"{d:+.2f} pp" if es_ratio else f"{pct:+.1f}%"
+        delta = html.Span(
+            f"{flecha} {etiq}",
+            className=f"fw-bold {color}",
+            style={"fontSize": "0.65rem"},
+        )
+    return html.Div(
+        [
+            html.Div(
+                titulo,
+                style={
+                    "fontSize": "0.58rem",
+                    "color": "#8492a6",
+                    "textTransform": "uppercase",
+                    "fontWeight": "600",
+                    "letterSpacing": "0.4px",
+                    "marginBottom": "1px",
+                },
+            ),
+            html.Div(
+                [html.Span(txt, className="fw-bold text-dark", style={"fontSize": "1rem"})]
+                + ([delta] if delta else []),
+                className="d-flex align-items-baseline gap-1",
+            ),
+        ],
+        className="d-flex flex-column",
+    )
+
+
 def generar_panel_bi_completo(
     df_actual,
     df_hist,
@@ -748,46 +787,29 @@ def generar_panel_bi_completo(
             color_zona = mapa_colores.get(zona, "#34495e")
 
             cinta_hijos = [
-                html.H6(
+                html.Div(
                     [
-                        html.I(className="fas fa-bullseye me-2", style={"color": color_zona}),
-                        f"RENDIMIENTO DE ZONA: {zona}",
+                        html.Span(
+                            [
+                                html.I(
+                                    className="fas fa-circle me-2",
+                                    style={"color": color_zona, "fontSize": "0.5rem"},
+                                ),
+                                zona,
+                            ],
+                            className="fw-bold text-uppercase text-dark me-4 flex-shrink-0",
+                            style={"fontSize": "0.7rem", "letterSpacing": "0.5px"},
+                        ),
+                        _kpi_inline("Visitas", val_tv, hist_tv),
+                        _kpi_inline("Visitantes", val_uv, hist_uv),
+                        _kpi_inline("Nuevos", val_nv, hist_nv),
+                        _kpi_inline("Estancia", val_dt, hist_dt, es_tiempo=True),
                     ],
-                    className="fw-bold mb-3 text-dark text-uppercase small",
-                ),
-                dbc.Row(
-                    [
-                        dbc.Col(
-                            crear_tarjeta_kpi_global("Visitas Totales", val_tv, hist_tv),
-                            xs=6,
-                            xl=3,
-                            className="mb-2",
-                        ),
-                        dbc.Col(
-                            crear_tarjeta_kpi_global("Visitantes", val_uv, hist_uv),
-                            xs=6,
-                            xl=3,
-                            className="mb-2",
-                        ),
-                        dbc.Col(
-                            crear_tarjeta_kpi_global("Nuevos Visitantes", val_nv, hist_nv),
-                            xs=6,
-                            xl=3,
-                            className="mb-2",
-                        ),
-                        dbc.Col(
-                            crear_tarjeta_kpi_global(
-                                "Estancia Media", val_dt, hist_dt, es_tiempo=True
-                            ),
-                            xs=6,
-                            xl=3,
-                            className="mb-2",
-                        ),
-                    ]
-                ),
+                    className="d-flex flex-wrap align-items-end gap-4",
+                )
             ]
             cols_uv = [c for c in ["uv_7d", "uv_28d"] if c in df_z.columns]
-            if cols_uv:
+            if cols_uv and multi_mes:
                 uv_block = _seccion_uv_rolling(
                     df_z, df_zh, cols_uv, multi_mes, zona, color_zona, ubi
                 )
@@ -795,8 +817,8 @@ def generar_panel_bi_completo(
                     cinta_hijos.append(uv_block)
             cinta = html.Div(
                 cinta_hijos,
-                className="mb-4 p-3 bg-light rounded-4 border-start border-4 shadow-sm",
-                style={"borderLeftColor": f"{color_zona} !important"},
+                className="mb-2 py-2 px-3 bg-light rounded-3 border-start border-3",
+                style={"borderLeftColor": color_zona},
             )
 
             cintas_kpis_zonas.append(cinta)

@@ -15,7 +15,7 @@ The function:
   3. Computes es_festivo using the org's pais_codigo (ES or MX).
   4. Returns a DataFrame ready for ejecutar_auditoria_predictiva().
 
-Geo features are joined inside ml_predictivo.py via get_geo_snapshot_df().
+Geo features are joined inside ml_predictivo.py via geo_enrichment.get_geo_vals().
 """
 
 import json
@@ -97,7 +97,7 @@ def _es_festivo(fecha: date, pais_codigo: str, codigo_region: Optional[str] = No
 # ── Weather ───────────────────────────────────────────────────────────────────
 
 
-def _fetch_weather(lat: float, lon: float, fecha_min: str, fecha_max: str) -> pd.DataFrame:
+def fetch_weather(lat: float, lon: float, fecha_min: str, fecha_max: str) -> pd.DataFrame:
     """Open-Meteo archive API (datos históricos confirmados)."""
     url = (
         f"https://archive-api.open-meteo.com/v1/archive"
@@ -123,7 +123,7 @@ def _fetch_weather(lat: float, lon: float, fecha_min: str, fecha_max: str) -> pd
         return pd.DataFrame()
 
 
-def _fetch_weather_forecast(
+def fetch_weather_forecast(
     lat: float, lon: float, past_days: int = 7, forecast_days: int = 16
 ) -> pd.DataFrame:
     """Open-Meteo forecast API — cubre últimos past_days y próximos forecast_days (máx 16)."""
@@ -151,7 +151,7 @@ def _fetch_weather_forecast(
         return pd.DataFrame()
 
 
-def _cache_weather(ubicacion_id: str, df_weather: pd.DataFrame, overwrite: bool = False) -> None:
+def cache_weather(ubicacion_id: str, df_weather: pd.DataFrame, overwrite: bool = False) -> None:
     """
     Escribe filas de clima en valores_señales.
     overwrite=True → DO UPDATE (usar para datos de pronóstico que cambian).
@@ -220,9 +220,9 @@ def _get_weather(ubicacion_id: str, fechas: pd.Series) -> pd.DataFrame:
         coords = get_location_coords(ubicacion_id)
         if coords:
             lat, lon = coords
-            new_weather = _fetch_weather(lat, lon, str(missing[0]), str(missing[-1]))
+            new_weather = fetch_weather(lat, lon, str(missing[0]), str(missing[-1]))
             if not new_weather.empty:
-                _cache_weather(ubicacion_id, new_weather)
+                cache_weather(ubicacion_id, new_weather)
                 cached = pd.concat(
                     [cached, new_weather.rename(columns={"fecha": "fecha"})], ignore_index=True
                 )
@@ -372,34 +372,6 @@ def get_ultima_fecha_por_location() -> dict:
     return {r[0]: r[1] for r in rows}
 
 
-# ── Geo features ─────────────────────────────────────────────────────────────
-
-
-def get_geo_snapshot_df(ubicacion_id: str, fechas: pd.Series) -> pd.DataFrame:
-    """
-    Returns a DataFrame with one row per date in fechas, columns = geo feature keys.
-    All rows get the same (current) snapshot — monthly cadence, no temporal history.
-    Returns an empty DataFrame if no geo data exists.
-    """
-    snaps = (
-        get_conn()
-        .execute(
-            "SELECT señal_id, valor FROM snapshots_geo WHERE ubicacion_id = ?",
-            [ubicacion_id],
-        )
-        .fetchall()
-    )
-
-    if not snaps:
-        return pd.DataFrame()
-
-    geo_vals = {k: v for k, v in snaps}
-    result = pd.DataFrame(index=range(len(fechas)))
-    for col, val in geo_vals.items():
-        result[col] = val
-    return result
-
-
 # ── Dimension helpers (reemplazan lecturas directas de todas_las_ubicaciones.json) ──
 
 
@@ -512,27 +484,6 @@ def get_locations_with_coords() -> list[str]:
     ]
 
 
-def get_all_zones_flat() -> list[dict]:
-    """[{zona_id, ubicacion_id, nombre, tipo_zona, es_top_parent, es_ultima_zona}, ...] para todas las zonas visibles."""
-    return [
-        {
-            "zona_id": r[0],
-            "ubicacion_id": r[1],
-            "nombre": r[2],
-            "tipo_zona": r[3] or "",
-            "es_top_parent": bool(r[4]) if r[4] is not None else None,
-            "es_ultima_zona": bool(r[5]) if r[5] is not None else None,
-        }
-        for r in get_conn()
-        .execute(
-            "SELECT zona_id, ubicacion_id, nombre, tipo_zona, es_top_parent, es_ultima_zona "
-            "FROM zonas WHERE oculta = FALSE "
-            "ORDER BY es_top_parent DESC NULLS LAST, nombre"
-        )
-        .fetchall()
-    ]
-
-
 def get_active_ext_features(
     ubicacion_id: str,
     fecha_min: pd.Timestamp,
@@ -544,8 +495,6 @@ def get_active_ext_features(
 
     Forward-fill diario aplicado: señales mensuales (ICM) se propagan al resto del mes.
     """
-    from src.db.store import get_conn
-
     conn = get_conn()
 
     rows = conn.execute(
@@ -605,8 +554,6 @@ def get_señal_diaria(
     No filtra por status en activacion_señales — sirve tanto para 'active'
     como para 'contexto'.
     """
-    from src.db.store import get_conn
-
     conn = get_conn()
     full_idx = pd.date_range(fecha_min, fecha_max, freq="D")
 
