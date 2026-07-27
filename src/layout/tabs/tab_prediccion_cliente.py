@@ -78,7 +78,7 @@ def _zona_card(nombre: str, res: dict, color: str) -> dbc.Col:
     # Headline: primer día predicho
     primera_fecha = pd.to_datetime(fechas[0]) if fechas else None
     primera_val = predichos[0] if predichos else 0
-    dia_lbl = _DIAS_LARGO[primera_fecha.dayofweek] if primera_fecha else "—"
+    dia_lbl = _DIAS_LARGO[primera_fecha.dayofweek] if primera_fecha else ""
     fecha_lbl = primera_fecha.strftime("%d/%m") if primera_fecha else ""
 
     # Tendencia: predicho próximos 7 días vs reales 7 días anteriores disponibles

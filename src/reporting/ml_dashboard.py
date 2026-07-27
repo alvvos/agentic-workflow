@@ -571,7 +571,7 @@ def ejecutar_forecast_manana(n, locs, session_id):
                                 className="fw-bold text-dark",
                             ),
                             html.Small(
-                                f" — día siguiente al último dato disponible ({ultima_fecha_global.strftime('%d/%m/%Y')})",
+                                f"Día siguiente al último dato disponible ({ultima_fecha_global.strftime('%d/%m/%Y')})",
                                 className="text-muted ms-2",
                             ),
                         ],

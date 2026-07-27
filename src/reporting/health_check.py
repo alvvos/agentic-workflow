@@ -296,10 +296,10 @@ def _render_zona_card(
     dv = d["visitantes"]
     if gap_actual:
         sem_color, arrow = _C_MUTED, "fas fa-wifi"
-        pct_str = "—"
+        pct_str = "s/d"
     elif gap_anterior:
         sem_color, arrow = _C_AMBER, "fas fa-triangle-exclamation"
-        pct_str = "—"
+        pct_str = "s/d"
     elif dv >= 5:
         sem_color, arrow = _C_SUCCESS, "fas fa-arrow-up"
         pct_str = f"{dv:+.0f}%"

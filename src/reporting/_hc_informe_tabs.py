@@ -156,7 +156,7 @@ def _agg_señal(serie: pd.Series, method: str) -> float | int | None:
 
 def _fmt_val(val: float | int | None, suffix: str, method: str) -> str:
     if val is None:
-        return "—"
+        return "s/d"
     if method == "mean":
         return f"{val:.1f}{suffix}"
     return f"{int(val):,}{suffix}".replace(",", ".")
@@ -779,12 +779,11 @@ def _narrative_block(by_enum: dict[int, dict], ventana: str) -> html.Div:
             elif n_pos == len(deltas):
                 parts.append(
                     f"Crecimiento generalizado respecto a {lbl_sa}"
-                    f" — exterior {ext_s}, tienda {int_s}."
+                    f": exterior {ext_s}, tienda {int_s}."
                 )
             elif n_neg == len(deltas):
                 parts.append(
-                    f"Caída generalizada respecto a {lbl_sa}"
-                    f" — exterior {ext_s}, tienda {int_s}."
+                    f"Caída generalizada respecto a {lbl_sa}" f": exterior {ext_s}, tienda {int_s}."
                 )
             elif n_pos > n_neg:
                 parts.append(
@@ -806,8 +805,8 @@ def _narrative_block(by_enum: dict[int, dict], ventana: str) -> html.Div:
         caja = by_enum.get(0)
         if caja and caja["d_sa"] is not None and caja["d_sa"] < -20:
             parts.append(
-                f"La zona de caja registra una caída pronunciada ({caja['d_sa']:+.1f}%)"
-                " — revisar disponibilidad y atención en caja."
+                f"La zona de caja registra una caída pronunciada ({caja['d_sa']:+.1f}%)."
+                " Revisar disponibilidad y atención en caja."
             )
 
     # Dwell time comment

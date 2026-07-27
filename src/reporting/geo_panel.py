@@ -182,13 +182,13 @@ def _pct_of(num, denom):
 
 def _fmt_pct(v, decimals=0):
     if v is None:
-        return "—"
+        return "s/d"
     return f"{v:.{decimals}f}%"
 
 
 def _fmt_eur(v, decimals=0):
     if v is None:
-        return "—"
+        return "s/d"
     if v >= 1_000:
         return f"{v:,.{decimals}f} €"
     return f"{v:.{decimals}f} €"
@@ -734,7 +734,7 @@ _ENTORNO_META = {
         "icon": "fas fa-store",
         "color": "#DC3545",
         "unit": "tiendas de moda en 1200 m",
-        "tooltip": "Tiendas competidoras en radio 1200 m. Efecto cluster (calle comercial) también positivo — competencia alta puede indicar zona de alta demanda.",
+        "tooltip": "Tiendas competidoras en radio 1200 m. Efecto cluster (calle comercial) también positivo: competencia alta puede indicar zona de alta demanda.",
         "umbrales": (3, 10),
         "badge_bajo": "Competencia baja",
         "badge_medio": "Competencia media",
@@ -1324,7 +1324,7 @@ def _fig_gasto_comparativo(vals):
     fig.update_layout(
         xaxis=dict(
             title=dict(
-                text="€ por hogar / año — radio 800 m", font=dict(size=11, color=_C_MUTED, **_FONT)
+                text="€ por hogar / año, radio 800 m", font=dict(size=11, color=_C_MUTED, **_FONT)
             ),
             showgrid=True,
             gridcolor=_C_GRID,

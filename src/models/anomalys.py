@@ -481,7 +481,7 @@ def crear_mapa_calor_horario(df_zona, zona_nombre):
     )
     fig.update_layout(
         title=dict(
-            text=f"Visitas por hora — {zona_nombre}",
+            text=f"Visitas por hora, {zona_nombre}",
             font=dict(size=14, color="#2c3e50", family="Arial, sans-serif"),
         ),
         plot_bgcolor="white",
@@ -580,7 +580,7 @@ def _seccion_uv_rolling(df_z, df_zh, cols_uv, multi_mes, zona, color_zona, ubi="
                 )
         fig.update_layout(
             title=dict(
-                text=f"Visitantes únicos rolling por mes — {zona}",
+                text=f"Visitantes únicos rolling por mes, {zona}",
                 font=dict(size=13, color="#2c3e50", family="Arial, sans-serif"),
             ),
             plot_bgcolor="white",

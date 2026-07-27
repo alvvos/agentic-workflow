@@ -86,7 +86,6 @@ def build_sidebar(org_options=None):
                                 id="org-logo-img",
                                 src="",
                                 style={
-                                    "display": "none",
                                     "maxHeight": "32px",
                                     "maxWidth": "100%",
                                     "objectFit": "contain",
