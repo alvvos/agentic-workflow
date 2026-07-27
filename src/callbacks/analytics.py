@@ -23,7 +23,7 @@ from src.reporting.health_check import generar_panel_pm
         Output("panel-ejecutivo-content", "children"),
     ],
     [
-        Input("drop-locs", "value"),
+        Input("loc-loaded", "data"),
         Input("tipo-fecha", "value"),
         Input("date-rango", "start_date"),
         Input("date-rango", "end_date"),
@@ -34,7 +34,7 @@ from src.reporting.health_check import generar_panel_pm
         Input("data-version", "data"),
     ],
     [State("session-id", "data")],
-    prevent_initial_call=False,
+    prevent_initial_call=True,
 )
 def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, pm_ventana, _data_v, s_id):
     if not locs:

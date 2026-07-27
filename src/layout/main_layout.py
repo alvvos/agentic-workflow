@@ -140,6 +140,7 @@ def serve_layout():
             dcc.Store(id="data-version", data=0),
             dcc.Store(id="sync-trigger", data=0),
             dcc.Store(id="sidebar-open", data=True),
+            dcc.Store(id="loc-loaded", data=None),
             dcc.Store(id="org-branding-store", data=None),
             dcc.Store(id="org-brand-css", data=""),
             html.Div(id="org-brand-css-sink", style={"display": "none"}),

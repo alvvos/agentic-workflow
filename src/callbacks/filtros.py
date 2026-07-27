@@ -77,7 +77,8 @@ def actualizar_locs(org_uuid):
 @app.callback(
     Output("org-branding-store", "data"),
     Output("org-brand-css", "data"),
-    Output("sidebar-logo-img", "src"),
+    Output("org-logo-img", "src"),
+    Output("org-logo-wrapper", "style"),
     Output("sidebar-accent-bar", "style"),
     Input("drop-org", "value"),
 )
@@ -88,7 +89,6 @@ def aplicar_branding_org(org_id):
 
     b: OrgBranding = get_org_branding(org_id)
 
-    # Ruta absoluta del asset para comprobar existencia
     _assets_root = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         "assets",
@@ -99,6 +99,9 @@ def aplicar_branding_org(org_id):
         if os.path.exists(os.path.join(_assets_root, logo_filename))
         else "/assets/logo.png"
     )
+
+    has_org_logo = org_id and logo_src != "/assets/logo.png"
+    org_logo_wrapper_style = {"display": "block"} if has_org_logo else {"display": "none"}
 
     accent_style = {
         "width": "3px",
@@ -111,6 +114,7 @@ def aplicar_branding_org(org_id):
         {"org_id": b.org_id, "primary": b.primary, "secondary": b.secondary},
         branding_css(b),
         logo_src,
+        org_logo_wrapper_style,
         accent_style,
     )
 
@@ -222,6 +226,20 @@ def combine_zones(parent_zones, child_zones_all):
         if child_list:
             combined.extend(child_list)
     return list(dict.fromkeys(combined))  # preserves order, deduplicates
+
+
+@app.callback(
+    Output("loc-loaded", "data"),
+    Input("btn-cargar-ubicacion", "n_clicks"),
+    State("drop-locs", "value"),
+    prevent_initial_call=True,
+)
+def confirmar_ubicacion(n, locs):
+    if not n or not locs:
+        from dash import no_update
+
+        return no_update
+    return locs
 
 
 # Refresca las opciones del dropdown de orgs cuando el admin modifica el árbol.

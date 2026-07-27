@@ -965,19 +965,13 @@ def _tab_contexto_exterior(
     df: pd.DataFrame | None = None,
     zonas_data: list[dict] | None = None,
 ) -> html.Div:
-    dias_v = 28 if ventana == "mes" else 7
-
-    ap_act = _dias_apertura(fmin_p, fecha_max, festivos)
-    ap_sa = _dias_apertura(fmin_sama, fmax_sama, festivos)
-    ap_msa = _dias_apertura(fmin_msaa, fmax_msaa, festivos)
-
     # ── Tráfico exterior ──────────────────────────────────────────────────────
     traffic = (
         _visitor_blocks(zonas_data, {2}, df, fmin_msaa, fmax_msaa, ventana) if zonas_data else []
     )
 
-    # ── Señales externas + días apertura ─────────────────────────────────────
-    sentences = [_sentence_dias_apertura(ap_act, dias_v, ap_sa, ap_msa, ventana)]
+    # ── Señales externas ──────────────────────────────────────────────────────
+    sentences = []
 
     if location_uuid:
         try:

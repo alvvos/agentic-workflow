@@ -81,9 +81,31 @@ def build_sidebar(org_options=None):
                             placeholder="Selecciona…",
                             className="mb-3",
                         ),
+                        html.Div(
+                            html.Img(
+                                id="org-logo-img",
+                                src="",
+                                style={
+                                    "display": "none",
+                                    "maxHeight": "32px",
+                                    "maxWidth": "100%",
+                                    "objectFit": "contain",
+                                },
+                            ),
+                            id="org-logo-wrapper",
+                            className="text-center mt-2 mb-1",
+                            style={"display": "none"},
+                        ),
                         # ── Ubicaciones ──────────────────────────────────────
                         _section_label("fas fa-map-marker-alt", "Ubicaciones"),
                         dcc.Dropdown(id="drop-locs", className="mb-2"),
+                        dbc.Button(
+                            [html.I(className="fas fa-play me-2"), "Cargar ubicación"],
+                            id="btn-cargar-ubicacion",
+                            color="primary",
+                            size="sm",
+                            className="w-100 fw-bold rounded-3 mb-3",
+                        ),
                         # ── Período ───────────────────────────────────────────
                         html.Div(
                             id="sidebar-periodo-wrapper",
