@@ -69,7 +69,7 @@ def serve_layout():
                         html.Div(
                             [
                                 dbc.Button(
-                                    [html.I(className="fas fa-sync-alt me-2"), "Sincronizar"],
+                                    "Sincronizar",
                                     id="btn-sync",
                                     color="primary",
                                     outline=True,
@@ -78,7 +78,7 @@ def serve_layout():
                                 ),
                                 (
                                     dbc.Button(
-                                        [html.I(className="fas fa-shield-halved me-1"), "Admin"],
+                                        "Admin",
                                         id="btn-admin-panel",
                                         color="secondary",
                                         outline=True,
@@ -90,10 +90,7 @@ def serve_layout():
                                 ),
                                 (
                                     html.A(
-                                        [
-                                            html.I(className="fas fa-user-circle me-1"),
-                                            session_id,
-                                        ],
+                                        session_id,
                                         href="/logout",
                                         className="btn btn-outline-secondary btn-sm fw-bold rounded-3 shadow-sm",
                                     )

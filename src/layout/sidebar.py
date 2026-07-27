@@ -100,7 +100,7 @@ def build_sidebar(org_options=None):
                         _section_label("fas fa-map-marker-alt", "Ubicaciones"),
                         dcc.Dropdown(id="drop-locs", className="mb-2"),
                         dbc.Button(
-                            [html.I(className="fas fa-play me-2"), "Cargar ubicación"],
+                            "Cargar ubicación",
                             id="btn-cargar-ubicacion",
                             color="primary",
                             size="sm",

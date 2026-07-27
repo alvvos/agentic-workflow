@@ -320,7 +320,7 @@ def _render_zona_card(
     if gap_actual:
         gap_ui = html.Div(
             dbc.Badge(
-                [html.I(className="fas fa-wifi me-1"), "Sin datos suficientes"],
+                "Sin datos suficientes",
                 color="warning",
                 text_color="dark",
                 pill=True,
@@ -467,7 +467,7 @@ def _render_zona_card(
                         html.Div(
                             [
                                 html.Span(
-                                    [html.I(className="fas fa-sitemap me-1"), "Subzonas: "],
+                                    "Subzonas: ",
                                     style={"fontSize": "0.63rem", "color": _C_MUTED},
                                 ),
                                 *[
@@ -2344,12 +2344,13 @@ def generar_mensajes_salud(
     cuerpo_superior = (
         dbc.Row(
             [
-                dbc.Col(_correlacion_card, xs=12, lg=6, className="mb-3 mb-lg-0"),
                 dbc.Col(
-                    [_calendario_card, html.Div(className="mb-3"), mapa_contexto],
+                    [_correlacion_card, html.Div(className="mb-3"), _calendario_card],
                     xs=12,
                     lg=6,
+                    className="mb-3 mb-lg-0",
                 ),
+                dbc.Col(mapa_contexto, xs=12, lg=6),
             ],
             className="mb-3 align-items-start",
         )

@@ -1240,10 +1240,7 @@ def render_periodo_calendar(
         dbc.CardBody(
             [
                 html.H6(
-                    [
-                        html.I(className="fas fa-calendar-alt me-2", style={"color": "#E67E22"}),
-                        "Calendario del período",
-                    ],
+                    "Calendario del período",
                     className="fw-bold mb-2",
                     style={"fontSize": "0.88rem", "color": "#1e293b"},
                 ),

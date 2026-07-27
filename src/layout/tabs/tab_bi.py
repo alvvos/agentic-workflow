@@ -21,10 +21,7 @@ def build_tab_bi():
                     dbc.Col(
                         [
                             html.Label(
-                                [
-                                    html.I(className="fas fa-filter me-2 text-primary"),
-                                    "Zonas activas:",
-                                ],
+                                "Zonas activas:",
                                 className="fw-bold mb-3 text-secondary",
                             ),
                             dbc.Checklist(
@@ -47,10 +44,7 @@ def build_tab_bi():
                     dbc.Col(
                         [
                             dbc.Button(
-                                [
-                                    html.I(className="fas fa-file-archive me-2"),
-                                    "Descargar todos (.png)",
-                                ],
+                                "Descargar todos (.png)",
                                 id="btn-download-all-bi",
                                 color="secondary",
                                 outline=True,
@@ -74,7 +68,7 @@ def build_tab_bi():
                 [
                     dbc.Col(
                         dbc.Button(
-                            [html.I(className="fas fa-file-excel me-2"), "Descargar Excel"],
+                            "Descargar Excel",
                             id="btn-dl-auditoria",
                             color="success",
                             outline=True,
