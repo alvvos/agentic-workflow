@@ -23,11 +23,8 @@ _SECTION_DIVIDER_STYLE = {
 }
 
 
-def _section_label(icon_cls, text):
-    return html.Div(
-        [html.I(className=f"{icon_cls} text-primary"), html.Span(text)],
-        style=_LABEL_STYLE,
-    )
+def _section_label(text):
+    return html.Div(html.Span(text), style=_LABEL_STYLE)
 
 
 def build_sidebar(org_options=None):
@@ -73,7 +70,7 @@ def build_sidebar(org_options=None):
                             className="d-flex align-items-center gap-2 mb-4",
                         ),
                         # ── Organización ─────────────────────────────────────
-                        _section_label("fas fa-building", "Organización"),
+                        _section_label("Organización"),
                         dcc.Dropdown(
                             id="drop-org",
                             options=org_options,
@@ -82,7 +79,7 @@ def build_sidebar(org_options=None):
                             className="mb-3",
                         ),
                         # ── Ubicaciones ──────────────────────────────────────
-                        _section_label("fas fa-map-marker-alt", "Ubicaciones"),
+                        _section_label("Ubicaciones"),
                         dcc.Dropdown(id="drop-locs", className="mb-2"),
                         dbc.Button(
                             "Cargar ubicación",
@@ -96,7 +93,7 @@ def build_sidebar(org_options=None):
                             id="sidebar-periodo-wrapper",
                             children=[
                                 html.Div(style=_SECTION_DIVIDER_STYLE),
-                                _section_label("fas fa-calendar-alt", "Período"),
+                                _section_label("Período"),
                                 dbc.RadioItems(
                                     id="tipo-fecha",
                                     options=[
@@ -139,7 +136,7 @@ def build_sidebar(org_options=None):
                             style={"display": "none"},
                             children=[
                                 html.Div(style=_SECTION_DIVIDER_STYLE),
-                                _section_label("fas fa-chart-bar", "Ventana"),
+                                _section_label("Ventana"),
                                 dbc.RadioItems(
                                     id="pm-ventana",
                                     options=[
@@ -163,7 +160,7 @@ def build_sidebar(org_options=None):
                             style={"display": "none"},
                             children=[
                                 html.Div(style=_SECTION_DIVIDER_STYLE),
-                                _section_label("fas fa-exchange-alt", "Comparativa"),
+                                _section_label("Comparativa"),
                                 dbc.RadioItems(
                                     id="bi-comparativa",
                                     options=[

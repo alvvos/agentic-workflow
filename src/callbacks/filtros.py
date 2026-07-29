@@ -176,7 +176,7 @@ def _build_child_section(locs, parent_name, seen_parents: set) -> list:
         html.Div(
             [
                 html.Label(
-                    [html.I(className="fas fa-sitemap me-1"), f"Subzonas — {parent_name}"],
+                    f"Subzonas — {parent_name}",
                     className="fw-bold small text-secondary mb-2 ms-1",
                 ),
                 dbc.Checklist(

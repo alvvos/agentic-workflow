@@ -221,7 +221,6 @@ def _zona_card(nombre: str, res: dict, color: str) -> dbc.Col:
 def _empty_state(msg: str = "") -> html.Div:
     return html.Div(
         [
-            html.I(className="fas fa-chart-line fa-2x text-muted mb-3"),
             html.P(
                 msg or "Selecciona una ubicación en el panel izquierdo para ver la previsión.",
                 className="text-muted",
@@ -250,7 +249,6 @@ def _zona_card_insuficiente(nombre: str, color: str) -> dbc.Col:
                     ),
                     html.Div(
                         [
-                            html.I(className="fas fa-circle-info me-2 text-muted"),
                             html.Span(
                                 "Datos insuficientes para generar previsión.",
                                 className="text-muted small",
@@ -280,10 +278,6 @@ def _loc_section(loc_nombre: str, zona_cols: list) -> html.Div:
         [
             html.Div(
                 [
-                    html.I(
-                        className="fas fa-location-dot me-2 text-primary",
-                        style={"fontSize": "0.9rem"},
-                    ),
                     html.Span(
                         loc_nombre, className="fw-bold text-dark", style={"fontSize": "1rem"}
                     ),
@@ -312,12 +306,7 @@ def build_tab_prediccion_cliente():
                             dbc.Col(
                                 [
                                     html.H4(
-                                        [
-                                            html.I(
-                                                className="fas fa-wand-magic-sparkles me-2 text-primary"
-                                            ),
-                                            "Previsión de visitas",
-                                        ],
+                                        "Previsión de visitas",
                                         className="fw-bold mb-1 text-dark",
                                     ),
                                     html.P(
@@ -366,7 +355,8 @@ def actualizar_prediccion_publica(tab, locs, session_id):
     falso_hoy = datetime.today().strftime("%Y-%m-%d")
     secciones = []
 
-    for loc_uuid in locs or []:
+    locs_list = [locs] if isinstance(locs, str) else (locs or [])
+    for loc_uuid in locs_list:
         df_e = get_df_enriquecido(loc_uuid, session_id=session_id or "")
         if df_e.empty:
             continue
@@ -395,10 +385,6 @@ def actualizar_prediccion_publica(tab, locs, session_id):
             # Nota metodológica discreta
             html.Div(
                 [
-                    html.I(
-                        className="fas fa-circle-info me-1 text-muted",
-                        style={"fontSize": "0.75rem"},
-                    ),
                     html.Span(
                         "Las previsiones se basan en el histórico disponible y factores como climatología, "
                         "festivos y patrones de comportamiento. Son orientativas.",

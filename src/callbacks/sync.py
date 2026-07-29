@@ -2,7 +2,7 @@ import threading
 from datetime import datetime, timedelta
 
 import dash
-from dash import Input, Output, State, html
+from dash import Input, Output, State
 
 from src.core.config import app
 from src.data_ingestion.sincronizador import actualizar_datos
@@ -57,7 +57,7 @@ def _run_sync(session_id, locs):
     Input("drop-locs", "value"),
 )
 def actualizar_alerta_sync(session_id, _data_v, _tick, locs):
-    _normal = ([html.I(className="fas fa-sync-alt me-2"), "Sincronizar"], "primary", True)
+    _normal = ("Sincronizar", "primary", True)
     if not locs:
         return _normal
     try:
@@ -66,7 +66,7 @@ def actualizar_alerta_sync(session_id, _data_v, _tick, locs):
         ultima_por_loc = get_ultima_fecha_por_location()
         if not ultima_por_loc:
             return (
-                [html.I(className="fas fa-exclamation-circle me-2"), "Sin datos — sincronizar"],
+                "Sin datos — sincronizar",
                 "danger",
                 False,
             )
@@ -74,7 +74,7 @@ def actualizar_alerta_sync(session_id, _data_v, _tick, locs):
         fechas_locs = [ultima_por_loc[loc] for loc in locs_list if loc in ultima_por_loc]
         if not fechas_locs:
             return (
-                [html.I(className="fas fa-exclamation-circle me-2"), "Sin datos — sincronizar"],
+                "Sin datos — sincronizar",
                 "danger",
                 False,
             )
@@ -83,10 +83,7 @@ def actualizar_alerta_sync(session_id, _data_v, _tick, locs):
         dias = (ayer - fecha_mas_atrasada).days
         if dias > 1:
             return (
-                [
-                    html.I(className="fas fa-exclamation-triangle me-2"),
-                    f"Sincronizar · {dias}d sin datos",
-                ],
+                f"Sincronizar · {dias}d sin datos",
                 "primary",
                 False,
             )
