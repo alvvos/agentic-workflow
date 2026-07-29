@@ -58,6 +58,20 @@ def serve_layout():
                                     ],
                                     className="d-flex flex-column justify-content-center",
                                 ),
+                                html.Div(
+                                    html.Img(
+                                        id="org-logo-img",
+                                        src="",
+                                        style={
+                                            "maxHeight": "28px",
+                                            "maxWidth": "120px",
+                                            "objectFit": "contain",
+                                        },
+                                    ),
+                                    id="org-logo-wrapper",
+                                    className="ms-3",
+                                    style={"display": "none"},
+                                ),
                             ],
                             className="d-flex align-items-center",
                         ),

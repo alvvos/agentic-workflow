@@ -81,20 +81,6 @@ def build_sidebar(org_options=None):
                             placeholder="Selecciona…",
                             className="mb-3",
                         ),
-                        html.Div(
-                            html.Img(
-                                id="org-logo-img",
-                                src="",
-                                style={
-                                    "maxHeight": "32px",
-                                    "maxWidth": "100%",
-                                    "objectFit": "contain",
-                                },
-                            ),
-                            id="org-logo-wrapper",
-                            className="text-center mt-2 mb-1",
-                            style={"display": "none"},
-                        ),
                         # ── Ubicaciones ──────────────────────────────────────
                         _section_label("fas fa-map-marker-alt", "Ubicaciones"),
                         dcc.Dropdown(id="drop-locs", className="mb-2"),

@@ -59,6 +59,8 @@ def _load_cached_model(location_uuid, zone_uuid, features):
         age_days = (datetime.now() - datetime.fromisoformat(meta["trained_at"])).days
         if age_days > 7:
             return None, {}, None
+        if meta.get("q_conf") is None:
+            return None, {}, None
         modelo = xgb.XGBRegressor()
         modelo.load_model(model_path)
         return modelo, meta.get("metrics", {}), meta.get("q_conf")

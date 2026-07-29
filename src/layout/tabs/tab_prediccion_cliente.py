@@ -5,7 +5,6 @@ import pandas as pd
 import plotly.graph_objects as go
 from dash import Input, Output, State, callback, dcc, html, no_update
 
-from src.core.config import MODO_DESARROLLO
 from src.core.data_master import mapa_tiendas
 from src.db.queries import get_df_enriquecido, get_zones_for_loc
 from src.layout.components.loaders import loading_section
@@ -113,7 +112,7 @@ def _zona_card(nombre: str, res: dict, color: str) -> dbc.Col:
     y_ceil = max(max_v, max(uppers) if uppers else 0) * 1.50
     fig = go.Figure()
 
-    if MODO_DESARROLLO and lowers and uppers:
+    if lowers and uppers:
         fig.add_trace(
             go.Scatter(
                 x=x_labels + x_labels[::-1],
@@ -180,6 +179,18 @@ def _zona_card(nombre: str, res: dict, color: str) -> dbc.Col:
                                     f"{primera_val:,}",
                                     className="fw-bold text-dark lh-1",
                                     style={"fontSize": "1.9rem"},
+                                ),
+                                *(
+                                    [
+                                        html.Div(
+                                            f"{lowers[0]:,}–{uppers[0]:,}",
+                                            className="text-muted",
+                                            style={"fontSize": "0.68rem"},
+                                            title="Intervalo de confianza 90%",
+                                        )
+                                    ]
+                                    if lowers and uppers
+                                    else []
                                 ),
                                 html.Div(
                                     "visitas previstas",
