@@ -231,6 +231,50 @@ def _empty_state(msg: str = "") -> html.Div:
     )
 
 
+def _zona_card_insuficiente(nombre: str, color: str) -> dbc.Col:
+    return dbc.Col(
+        dbc.Card(
+            dbc.CardBody(
+                [
+                    html.Div(
+                        html.Span(
+                            nombre,
+                            className="fw-bold text-dark",
+                            style={
+                                "fontSize": "0.82rem",
+                                "textTransform": "uppercase",
+                                "letterSpacing": "0.6px",
+                            },
+                        ),
+                        className="mb-3",
+                    ),
+                    html.Div(
+                        [
+                            html.I(className="fas fa-circle-info me-2 text-muted"),
+                            html.Span(
+                                "Datos insuficientes para generar previsión.",
+                                className="text-muted small",
+                            ),
+                        ]
+                    ),
+                    html.P(
+                        "Se necesitan al menos 30 días de historial.",
+                        className="text-muted",
+                        style={"fontSize": "0.72rem"},
+                    ),
+                ],
+                className="p-3",
+            ),
+            className="border-0 shadow-sm rounded-4 h-100 bg-white",
+            style={"borderLeft": f"3px solid {color}"},
+        ),
+        xs=12,
+        sm=6,
+        lg=4,
+        className="mb-3",
+    )
+
+
 def _loc_section(loc_nombre: str, zona_cols: list) -> html.Div:
     return html.Div(
         [
@@ -334,6 +378,7 @@ def actualizar_prediccion_publica(tab, locs, session_id):
         for idx, z in enumerate(zonas_ordenadas):
             res = ejecutar_auditoria_predictiva(df_e, loc_uuid, z["zona_id"], falso_hoy, 7)
             if res.get("status") != "success":
+                zona_cols.append(_zona_card_insuficiente(z["nombre"], _color_zona(idx)))
                 continue
             zona_cols.append(_zona_card(z["nombre"], res, _color_zona(idx)))
 
