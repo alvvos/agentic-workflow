@@ -21,11 +21,7 @@ from src.db.store import get_conn
 ALLOWED_ORG_IDS: frozenset[str] = frozenset(
     {
         "5c13b57d-782d-4458-911b-64cd40eebb55",  # Miniso España
-        "5345a134-3495-4884-a780-c9b37a50df20",  # Kiosko MX
         "5001d2e8-8c4e-4177-abc2-577c48dbcfee",  # S69 TSE Showroom HQ — Madrid Showroom
-        "5211a2a2-331a-4999-8756-6e37f2db206d",  # TSE Showroom Geneva - GBS
-        "60df0bbb-2b07-4028-8854-1ec4ea14d5f1",  # TSE Showroom MX - ShopeakMedia
-        "bf5ae186-47dd-4ae4-aba7-5aad965f2a66",  # TSE Showroom MX Barracuda Media
     }
 )
 
