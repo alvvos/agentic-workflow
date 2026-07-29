@@ -62,26 +62,43 @@ _DEFAULT = OrgBranding(
 
 _REGISTRY: dict[str, OrgBranding] = {
     # ── Miniso España ─────────────────────────────────────────────────────────
-    # UUID de org extraído de db/seed.py (Miniso España org).
-    # Coloca el logo en assets/logo_miniso.png (PNG 400×120 px aprox., fondo blanco/transparente).
     "5c13b57d-782d-4458-911b-64cd40eebb55": OrgBranding(
         org_id="5c13b57d-782d-4458-911b-64cd40eebb55",
         nombre="Miniso",
-        # Rojo corporativo Miniso — Pantone 2347 C
         primary="#E60012",
         secondary="#1A1A1A",
         logo_asset="/assets/logo_miniso.png",
         palette=(
-            "#E60012",  # rojo Miniso primario
-            "#1A1A1A",  # negro corporativo
-            "#F4811F",  # naranja terracota
-            "#8E44AD",  # violeta
-            "#16A085",  # verde jade
-            "#2980B9",  # azul acero
-            "#D35400",  # siena
-            "#6C3483",  # púrpura oscuro
-            "#148F77",  # verde oscuro
-            "#4D4D4D",  # gris carbón
+            "#E60012",
+            "#1A1A1A",
+            "#F4811F",
+            "#8E44AD",
+            "#16A085",
+            "#2980B9",
+            "#D35400",
+            "#6C3483",
+            "#148F77",
+            "#4D4D4D",
+        ),
+    ),
+    # ── S69 TSE Showroom HQ ───────────────────────────────────────────────────
+    "5001d2e8-8c4e-4177-abc2-577c48dbcfee": OrgBranding(
+        org_id="5001d2e8-8c4e-4177-abc2-577c48dbcfee",
+        nombre="TSE Showroom",
+        primary="#1a1a2e",
+        secondary="#0052CC",
+        logo_asset="",
+        palette=(
+            "#1a1a2e",
+            "#0052CC",
+            "#E67E22",
+            "#27AE60",
+            "#8E44AD",
+            "#E74C3C",
+            "#17A2B8",
+            "#F39C12",
+            "#2ECC71",
+            "#9B59B6",
         ),
     ),
 }

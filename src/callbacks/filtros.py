@@ -109,10 +109,14 @@ def aplicar_branding_org(org_id):
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         "assets",
     )
-    logo_filename = b.logo_asset.removeprefix("/assets/")
-    logo_src = b.logo_asset if os.path.exists(os.path.join(_assets_root, logo_filename)) else ""
+    _is_custom_logo = bool(b.logo_asset and b.logo_asset != "/assets/logo.png")
+    if _is_custom_logo:
+        logo_filename = b.logo_asset.removeprefix("/assets/")
+        logo_src = b.logo_asset if os.path.exists(os.path.join(_assets_root, logo_filename)) else ""
+    else:
+        logo_src = ""
 
-    has_org_logo = bool(logo_src and logo_src != "/assets/logo.png")
+    has_org_logo = bool(logo_src)
     org_logo_wrapper_style = {"display": "block"} if has_org_logo else {"display": "none"}
 
     accent_style = {

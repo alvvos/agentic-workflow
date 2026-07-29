@@ -740,8 +740,26 @@ def _build_by_enum(
     return by_enum
 
 
+def _kpi_stat(label: str, value: str, delta: float | None = None) -> html.Div:
+    """Compact inline stat chip for the blue callout KPI row."""
+    children = [
+        html.Span(label, style={"fontSize": "0.68rem", "color": "#64748b", "display": "block"}),
+        html.Span(value, style={"fontSize": "1.05rem", "fontWeight": "700", "color": "#1e293b"}),
+    ]
+    if delta is not None:
+        col = _C_POS if delta > 0 else _C_NEG if delta < 0 else _C_NEU
+        arrow = "▲" if delta > 0 else "▼" if delta < 0 else "="
+        children.append(
+            html.Span(
+                f" {arrow} {delta:+.1f}%",
+                style={"fontSize": "0.72rem", "fontWeight": "600", "color": col},
+            )
+        )
+    return html.Div(children, style={"paddingRight": "20px"})
+
+
 def _narrative_block(by_enum: dict[int, dict], ventana: str) -> html.Div:
-    """Blue callout box with 2-3 interpretive sentences at the top of Resumen."""
+    """Blue callout box with KPI row + 2-3 interpretive sentences at the top of Resumen."""
     _, lbl_sa, _ = _periodo_labels(ventana)
 
     ext = by_enum.get(2)
@@ -841,21 +859,69 @@ def _narrative_block(by_enum: dict[int, dict], ventana: str) -> html.Div:
     if not parts:
         return html.Div()
 
+    # ── KPI row ───────────────────────────────────────────────────────────────
+    kpi_items = []
+
+    # Total visitas: exterior si existe, sino suma de todas las zonas
+    ref_zone = ext or (next(iter(by_enum.values()), None) if by_enum else None)
+    if ref_zone:
+        vis_total = ref_zone["vis_act"]
+        delta_vis = ref_zone.get("d_sa")
+        zone_lbl = "Visitas ext." if ext else "Visitas"
+        kpi_items.append(_kpi_stat(zone_lbl, f"{vis_total:,.0f}".replace(",", "."), delta_vis))
+
+    # Visitas tienda (si hay exterior separado)
+    if ext and int_ and int_["vis_act"] > 0:
+        kpi_items.append(
+            _kpi_stat(
+                "Visitas tienda", f"{int_['vis_act']:,.0f}".replace(",", "."), int_.get("d_sa")
+            )
+        )
+
+    # Estancia media
+    dwell_grp = int_ or ref_zone
+    if dwell_grp and dwell_grp.get("est_mean", 0) > 0:
+        est = dwell_grp["est_mean"]
+        est_sa = dwell_grp.get("est_sa_mean", 0)
+        delta_est = ((est - est_sa) / est_sa * 100) if est_sa > 0 else None
+        kpi_items.append(_kpi_stat("Estancia media", f"{est:.1f} min", delta_est))
+
+    # Ratio conversión exterior → tienda
+    if ext and int_ and ext["vis_act"] > 0 and int_["vis_act"] > 0:
+        ratio = int_["vis_act"] / ext["vis_act"] * 100
+        ratio_sa = (int_["vis_sa"] / ext["vis_sa"] * 100) if ext.get("vis_sa", 0) > 0 else None
+        delta_ratio = (ratio - ratio_sa) if ratio_sa is not None else None
+        kpi_items.append(_kpi_stat("Conversión", f"{ratio:.0f}%", delta_ratio))
+
+    kpi_row = html.Div(
+        kpi_items,
+        style={
+            "display": "flex",
+            "flexWrap": "wrap",
+            "marginBottom": "10px",
+            "paddingBottom": "10px",
+            "borderBottom": "1px solid rgba(0,82,204,0.15)",
+        },
+    )
+
     return html.Div(
-        html.P(
-            " ".join(parts),
-            style={
-                "fontSize": _SZ_PROSE,
-                "marginBottom": "0",
-                "lineHeight": "1.7",
-                "color": "#1e293b",
-            },
-        ),
+        [
+            kpi_row,
+            html.P(
+                " ".join(parts),
+                style={
+                    "fontSize": _SZ_PROSE,
+                    "marginBottom": "0",
+                    "lineHeight": "1.7",
+                    "color": "#1e293b",
+                },
+            ),
+        ],
         style={
             "backgroundColor": "#f0f4fb",
             "borderLeft": "3px solid #0052CC",
             "borderRadius": "0 6px 6px 0",
-            "padding": "10px 14px",
+            "padding": "12px 16px",
             "marginBottom": "16px",
         },
     )

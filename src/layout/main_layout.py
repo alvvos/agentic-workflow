@@ -69,7 +69,7 @@ def serve_layout():
                                         },
                                     ),
                                     id="org-logo-wrapper",
-                                    className="ms-3 flex-shrink-0 d-none d-sm-block",
+                                    className="ms-3 flex-shrink-0",
                                     style={"display": "none"},
                                 ),
                             ],
