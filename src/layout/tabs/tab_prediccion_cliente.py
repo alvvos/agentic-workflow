@@ -18,6 +18,12 @@ _DIAS_LARGO = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", 
 _CFG = {"displayModeBar": False, "staticPlot": True}
 
 
+def _rgba(hex_color: str, alpha: float) -> str:
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 
@@ -102,49 +108,63 @@ def _zona_card(nombre: str, res: dict, color: str) -> dbc.Col:
                     style={"color": col_t, "fontSize": "0.72rem", "fontWeight": "600"},
                 )
 
-    # Mini gráfico 7 días
+    # Mini gráfico 7 días — línea + banda de confianza
     x_labels = []
     for f in fechas:
         dt = pd.to_datetime(f)
         x_labels.append(f"{_DIAS_ES[dt.dayofweek]}<br>{dt.strftime('%d')}")
 
     max_v = max(predichos, default=1) or 1
-    y_ceil = (max(uppers) * 1.30) if uppers else (max_v * 1.80)
+    band_top = max(uppers) if uppers else max_v
+    y_ceil = band_top * 1.45
+    y_floor = max(0, min(lowers) * 0.6) if lowers else 0
+
     fig = go.Figure()
 
-    error_y_cfg = None
+    # Banda IC90% sombreada
     if lowers and uppers:
-        error_y_cfg = dict(
-            type="data",
-            symmetric=False,
-            array=[u - p for u, p in zip(uppers, predichos)],
-            arrayminus=[max(0, p - lo) for p, lo in zip(predichos, lowers)],
-            color=color,
-            thickness=2,
-            width=6,
+        fig.add_trace(
+            go.Scatter(
+                x=x_labels + x_labels[::-1],
+                y=uppers + lowers[::-1],
+                fill="toself",
+                fillcolor=_rgba(color, 0.12),
+                line=dict(width=0),
+                hoverinfo="skip",
+                showlegend=False,
+            )
         )
 
+    # Línea principal de predicción
     fig.add_trace(
-        go.Bar(
+        go.Scatter(
             x=x_labels,
             y=predichos,
-            marker=dict(color=color, opacity=0.85, cornerradius=5),
+            mode="lines+markers+text",
+            line=dict(color=color, width=2, shape="spline", smoothing=0.8),
+            marker=dict(color="white", size=7, symbol="circle", line=dict(color=color, width=2)),
             text=[f"{v:,}" for v in predichos],
-            textposition="inside",
-            textfont=dict(size=8, color="white"),
-            error_y=error_y_cfg,
+            textposition="top center",
+            textfont=dict(size=8, color=_C_DARK, family="monospace"),
             hovertemplate="%{x}: <b>%{y:,}</b> visitas<extra></extra>",
+            showlegend=False,
         )
     )
+
     fig.update_layout(
-        height=160,
-        margin=dict(t=22, b=4, l=4, r=4),
+        height=170,
+        margin=dict(t=28, b=4, l=4, r=4),
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(showgrid=False, tickfont=dict(size=9, color=_C_DARK), fixedrange=True),
-        yaxis=dict(visible=False, fixedrange=True, range=[0, y_ceil]),
+        xaxis=dict(
+            showgrid=False,
+            tickfont=dict(size=9, color=_C_DARK),
+            fixedrange=True,
+            showline=False,
+            zeroline=False,
+        ),
+        yaxis=dict(visible=False, fixedrange=True, range=[y_floor, y_ceil]),
         showlegend=False,
-        bargap=0.25,
     )
 
     return dbc.Col(
@@ -214,7 +234,7 @@ def _zona_card(nombre: str, res: dict, color: str) -> dbc.Col:
                         ),
                         # Mini gráfico
                         dcc.Graph(
-                            figure=fig, config=_CFG, style={"height": "160px", "marginX": "-4px"}
+                            figure=fig, config=_CFG, style={"height": "170px", "marginX": "-4px"}
                         ),
                     ],
                     className="p-3",
