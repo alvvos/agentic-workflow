@@ -109,20 +109,19 @@ def _zona_card(nombre: str, res: dict, color: str) -> dbc.Col:
         x_labels.append(f"{_DIAS_ES[dt.dayofweek]}<br>{dt.strftime('%d')}")
 
     max_v = max(predichos, default=1) or 1
-    y_ceil = max_v * 1.80
+    y_ceil = (max(uppers) * 1.30) if uppers else (max_v * 1.80)
     fig = go.Figure()
 
+    error_y_cfg = None
     if lowers and uppers:
-        fig.add_trace(
-            go.Scatter(
-                x=x_labels + x_labels[::-1],
-                y=uppers + lowers[::-1],
-                fill="toself",
-                fillcolor="rgba(0,82,204,0.18)",
-                line=dict(color="rgba(0,82,204,0.35)", width=1),
-                hoverinfo="skip",
-                showlegend=False,
-            )
+        error_y_cfg = dict(
+            type="data",
+            symmetric=False,
+            array=[u - p for u, p in zip(uppers, predichos)],
+            arrayminus=[max(0, p - lo) for p, lo in zip(predichos, lowers)],
+            color=color,
+            thickness=2,
+            width=6,
         )
 
     fig.add_trace(
@@ -130,10 +129,11 @@ def _zona_card(nombre: str, res: dict, color: str) -> dbc.Col:
             x=x_labels,
             y=predichos,
             marker=dict(color=color, opacity=0.85, cornerradius=5),
-            text=[f"<b>{v:,}</b>" for v in predichos],
-            textposition="outside",
-            textfont=dict(size=8, color=_C_DARK),
-            hovertemplate="%{x}: <b>%{y:,}</b> visitas previstas<extra></extra>",
+            text=[f"{v:,}" for v in predichos],
+            textposition="inside",
+            textfont=dict(size=8, color="white"),
+            error_y=error_y_cfg,
+            hovertemplate="%{x}: <b>%{y:,}</b> visitas<extra></extra>",
         )
     )
     fig.update_layout(
@@ -182,11 +182,22 @@ def _zona_card(nombre: str, res: dict, color: str) -> dbc.Col:
                                 ),
                                 *(
                                     [
-                                        html.Div(
-                                            f"{lowers[0]:,}–{uppers[0]:,}",
-                                            className="text-muted",
-                                            style={"fontSize": "0.68rem"},
-                                            title="Intervalo de confianza 90%",
+                                        dbc.Badge(
+                                            f"IC90%  {lowers[0]:,} – {uppers[0]:,}",
+                                            color="light",
+                                            text_color="primary",
+                                            className="border border-primary-subtle fw-normal mt-1",
+                                            style={
+                                                "fontSize": "0.63rem",
+                                                "cursor": "default",
+                                                "letterSpacing": "0.3px",
+                                            },
+                                            title=(
+                                                "Intervalo de confianza conformal al 90 %.\n"
+                                                "El modelo estima que el número real de visitas caerá\n"
+                                                "dentro de este rango en 9 de cada 10 días.\n"
+                                                "Se calcula a partir de los residuos históricos del propio modelo."
+                                            ),
                                         )
                                     ]
                                     if lowers and uppers

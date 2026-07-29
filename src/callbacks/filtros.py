@@ -87,6 +87,22 @@ def aplicar_branding_org(org_id):
 
     from src.core.org_branding import OrgBranding, branding_css, get_org_branding
 
+    _default_accent = {
+        "width": "3px",
+        "height": "18px",
+        "backgroundColor": "#0052CC",
+        "borderRadius": "2px",
+        "flexShrink": 0,
+    }
+    if not org_id:
+        return (
+            {"org_id": None, "primary": "#0052CC", "secondary": "#6c757d"},
+            "",
+            "",
+            {"display": "none"},
+            _default_accent,
+        )
+
     b: OrgBranding = get_org_branding(org_id)
 
     _assets_root = os.path.join(
@@ -94,13 +110,9 @@ def aplicar_branding_org(org_id):
         "assets",
     )
     logo_filename = b.logo_asset.removeprefix("/assets/")
-    logo_src = (
-        b.logo_asset
-        if os.path.exists(os.path.join(_assets_root, logo_filename))
-        else "/assets/logo.png"
-    )
+    logo_src = b.logo_asset if os.path.exists(os.path.join(_assets_root, logo_filename)) else ""
 
-    has_org_logo = org_id and logo_src != "/assets/logo.png"
+    has_org_logo = bool(logo_src and logo_src != "/assets/logo.png")
     org_logo_wrapper_style = {"display": "block"} if has_org_logo else {"display": "none"}
 
     accent_style = {
