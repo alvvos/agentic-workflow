@@ -29,7 +29,7 @@ def build_chat_fab() -> html.Div:
     return html.Div(
         dbc.Button(
             [
-                html.Span("Asistente", className="ms-2 fw-bold", style={"fontSize": "0.85rem"}),
+                html.Span("Asistente", className="fw-bold", style={"fontSize": "0.85rem"}),
             ],
             id="chat-fab",
             n_clicks=0,

@@ -109,7 +109,7 @@ def _zona_card(nombre: str, res: dict, color: str) -> dbc.Col:
         x_labels.append(f"{_DIAS_ES[dt.dayofweek]}<br>{dt.strftime('%d')}")
 
     max_v = max(predichos, default=1) or 1
-    y_ceil = max(max_v, max(uppers) if uppers else 0) * 1.50
+    y_ceil = max_v * 1.80
     fig = go.Figure()
 
     if lowers and uppers:
@@ -118,8 +118,8 @@ def _zona_card(nombre: str, res: dict, color: str) -> dbc.Col:
                 x=x_labels + x_labels[::-1],
                 y=uppers + lowers[::-1],
                 fill="toself",
-                fillcolor="rgba(0,82,204,0.10)",
-                line=dict(color="rgba(0,0,0,0)"),
+                fillcolor="rgba(0,82,204,0.18)",
+                line=dict(color="rgba(0,82,204,0.35)", width=1),
                 hoverinfo="skip",
                 showlegend=False,
             )
