@@ -22,18 +22,18 @@ from src.reporting.health_check import generar_panel_pm
         Output("audit-results", "children"),
         Output("panel-ejecutivo-content", "children"),
     ],
+    [Input("loc-loaded", "data")],
     [
-        Input("loc-loaded", "data"),
-        Input("tipo-fecha", "value"),
-        Input("date-rango", "start_date"),
-        Input("date-rango", "end_date"),
-        Input("date-dia", "date"),
-        Input("zonas-activas-combined", "data"),
-        Input("bi-comparativa", "value"),
-        Input("pm-ventana", "value"),
-        Input("data-version", "data"),
+        State("tipo-fecha", "value"),
+        State("date-rango", "start_date"),
+        State("date-rango", "end_date"),
+        State("date-dia", "date"),
+        State("zonas-activas-combined", "data"),
+        State("bi-comparativa", "value"),
+        State("pm-ventana", "value"),
+        State("data-version", "data"),
+        State("session-id", "data"),
     ],
-    [State("session-id", "data")],
     prevent_initial_call=True,
 )
 def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, pm_ventana, _data_v, s_id):
@@ -96,9 +96,9 @@ def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, pm_ventana
         df_bi_hist["dwell_time"] /= 60.0
 
     comparativa_txt = {
-        "wow": "vs. Semana Anterior",
-        "mom": "vs. Mes Anterior",
-        "yoy": "vs. Año Anterior",
+        "wow": "vs. 7 días anteriores",
+        "mom": "vs. 28 días anteriores",
+        "yoy": "vs. año anterior",
         "none": "",
     }[comp]
     visor_children = [

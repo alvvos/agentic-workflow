@@ -373,7 +373,7 @@ def build_tab_prediccion_cliente():
 @callback(
     Output("pred-publica-content", "children"),
     Input("tabs-panel", "value"),
-    Input("drop-locs", "value"),
+    Input("loc-loaded", "data"),
     State("session-id", "data"),
     prevent_initial_call=True,
 )

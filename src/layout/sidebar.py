@@ -82,7 +82,7 @@ def build_sidebar(org_options=None):
                         _section_label("Ubicaciones"),
                         dcc.Dropdown(id="drop-locs", className="mb-2"),
                         dbc.Button(
-                            "Cargar ubicación",
+                            "Aplicar",
                             id="btn-cargar-ubicacion",
                             color="primary",
                             size="sm",
@@ -165,9 +165,9 @@ def build_sidebar(org_options=None):
                                     id="bi-comparativa",
                                     options=[
                                         {"label": "Ninguna", "value": "none"},
-                                        {"label": "vs. Semana Ant. (WoW)", "value": "wow"},
-                                        {"label": "vs. Mes Ant. (MoM)", "value": "mom"},
-                                        {"label": "vs. Año Ant. (YoY)", "value": "yoy"},
+                                        {"label": "vs. 7 días anteriores", "value": "wow"},
+                                        {"label": "vs. 28 días anteriores", "value": "mom"},
+                                        {"label": "vs. mismo período año anterior", "value": "yoy"},
                                     ],
                                     value="none",
                                     className="mb-2",

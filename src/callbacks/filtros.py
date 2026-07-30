@@ -80,9 +80,11 @@ def actualizar_locs(org_uuid):
     Output("org-logo-img", "src"),
     Output("org-logo-wrapper", "style"),
     Output("sidebar-accent-bar", "style"),
-    Input("drop-org", "value"),
+    Input("btn-cargar-ubicacion", "n_clicks"),
+    State("drop-org", "value"),
+    prevent_initial_call=True,
 )
-def aplicar_branding_org(org_id):
+def aplicar_branding_org(_n, org_id):
     import os
 
     from src.core.org_branding import OrgBranding, branding_css, get_org_branding
