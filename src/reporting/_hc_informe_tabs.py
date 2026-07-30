@@ -442,7 +442,7 @@ def _sentence_dias_apertura(
     inicio = [
         _t(f"{per_cap} hubo "),
         _bold(f"{ap_act} de {dias_v}"),
-        _t(" días de apertura posibles"),
+        _t(" días comerciales posibles"),
     ]
     return _sp(
         _assemble(
@@ -1107,7 +1107,7 @@ def _tab_contexto_exterior(
             pass
 
     señales_header = (
-        [_sub_header("fas fa-cloud-sun", "Señales externas", "#E67E22")]
+        [_sub_header("fas fa-cloud-sun", "Datos externos", "#E67E22")]
         if sentences and traffic
         else []
     )
