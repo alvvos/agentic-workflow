@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+/* ── Page setup ─────────────────────────────────────── */
+@page { size: A4; margin: 0; }
+@page content {
+  size: A4;
+  margin: 14mm 16mm 16mm 16mm;
+  @bottom-left   { content: element(footer-left);  }
+  @bottom-center { content: element(footer-center); }
+  @bottom-right  { content: element(footer-right);  }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: #fff; }
+
+/* ── Running footer ─────────────────────────────────── */
+#footer-left   { position: running(footer-left);   font-size: 6.5pt; color: #aaa; padding-top: 2.5mm; border-top: 1px solid #e8e8e8; }
+#footer-center { position: running(footer-center); font-size: 6.5pt; color: #aaa; padding-top: 2.5mm; border-top: 1px solid #e8e8e8; text-align: center; }
+#footer-right  { position: running(footer-right);  font-size: 6.5pt; color: #aaa; padding-top: 2.5mm; border-top: 1px solid #e8e8e8; text-align: right; }
+#footer-left strong { color: #E60012; font-weight: 700; }
+
+/* ── PORTADA ─────────────────────────────────────────── */
+.cover {
+  page: cover;
+  width: 210mm; height: 297mm;
+  background: #111;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 18mm 20mm 20mm 26mm;
+  page-break-after: always;
+  position: relative;
+}
+.cover-stripe { position: absolute; top: 0; left: 0; width: 5mm; height: 100%; background: #E60012; }
+
+.cover-top { display: flex; align-items: center; gap: 10px; }
+.cover-logo { height: 44px; object-fit: contain; }
+.cover-org { font-size: 13pt; font-weight: 800; color: #fff; letter-spacing: 1px; text-transform: uppercase; }
+
+.cover-mid {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding-bottom: 10mm;
+}
+.cover-eyebrow { font-size: 7pt; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: #E60012; margin-bottom: 5mm; }
+.cover-title   { font-size: 28pt; font-weight: 800; color: #fff; line-height: 1.1; margin-bottom: 4mm; }
+.cover-period  { font-size: 14pt; font-weight: 300; color: #ccc; margin-bottom: 10mm; }
+.cover-meta    { font-size: 8pt; color: #777; line-height: 1.8; }
+.cover-meta strong { color: #aaa; }
+.cover-rule    { width: 100%; height: 1px; background: #E60012; margin-top: 8mm; }
+
+/* ── ÍNDICE ──────────────────────────────────────────── */
+.index-page { page: content; }
+.index-title { font-size: 18pt; font-weight: 800; color: #111; margin-bottom: 2mm; }
+.index-subtitle { font-size: 9pt; color: #888; margin-bottom: 10mm; }
+.index-list { width: 100%; }
+.index-row {
+  display: flex;
+  align-items: center;
+  padding: 4mm 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+.index-row:last-child { border-bottom: none; }
+.index-num { font-size: 20pt; font-weight: 800; color: #ebebeb; width: 18mm; flex-shrink: 0; line-height: 1; }
+.index-content { flex: 1; }
+.index-section { font-size: 10pt; font-weight: 700; color: #1a1a1a; }
+.index-desc    { font-size: 7.5pt; color: #888; margin-top: 1mm; }
+.index-pg      { font-size: 9pt; font-weight: 700; color: #ccc; width: 10mm; text-align: right; }
+
+/* ── SHARED CONTENT STYLES ───────────────────────────── */
+.content-page { page: content; }
+.page-break   { page-break-before: always; }
+
+.sec-header {
+  display: flex; align-items: center; gap: 5px;
+  margin-bottom: 4mm;
+  page-break-after: avoid;
+}
+.sec-bar { width: 3px; height: 14px; background: #E60012; border-radius: 2px; flex-shrink: 0; }
+.sec-num { font-size: 7.5pt; font-weight: 700; color: #E60012; margin-right: 1mm; }
+.sec-title { font-size: 9pt; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; color: #111; }
+
+.rule { border: none; border-top: 1px solid #ebebeb; margin: 6mm 0; }
+
+/* ── PERIOD CHIPS ────────────────────────────────────── */
+.period-chips {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 6mm;
+  flex-wrap: wrap;
+}
+.chip {
+  display: inline-block;
+  padding: 2mm 4mm;
+  border-radius: 20px;
+  font-size: 7.5pt;
+  font-weight: 600;
+  line-height: 1;
+}
+.chip-current { background: #E60012; color: #fff; }
+.chip-prev    { background: #f0f0f0; color: #555; }
+.chip-sep     { color: #bbb; font-size: 8pt; }
+
+/* ── KPI GRID ────────────────────────────────────────── */
+.kpi-grid { display: flex; gap: 3.5mm; margin-bottom: 6mm; }
+.kpi-card {
+  flex: 1;
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-top: 3px solid #E60012;
+  border-radius: 5px;
+  padding: 4mm 4mm;
+}
+.kpi-label  { font-size: 6.5pt; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: #999; margin-bottom: 2mm; }
+.kpi-value  { font-size: 19pt; font-weight: 800; color: #111; line-height: 1.1; margin-bottom: 1.5mm; }
+.kpi-delta  { font-size: 8pt; font-weight: 700; }
+.kpi-ref    { font-size: 6.5pt; color: #bbb; margin-top: 0.5mm; }
+.d-pos      { color: #16a34a; }
+.d-neg      { color: #dc2626; }
+.d-neu      { color: #999; }
+
+/* ── CHART ───────────────────────────────────────────── */
+.chart-wrap { margin-bottom: 5mm; page-break-inside: avoid; }
+.chart-header { margin-bottom: 2mm; }
+.chart-title    { font-size: 8.5pt; font-weight: 700; color: #1a1a1a; }
+.chart-subtitle { font-size: 7pt; color: #999; margin-top: 0.5mm; }
+.chart-wrap img { width: 100%; display: block; border-radius: 3px; }
+
+.chart-row { display: flex; gap: 4mm; page-break-inside: avoid; }
+.chart-half { flex: 1; }
+
+/* ── ZONE TABLE ──────────────────────────────────────── */
+.zone-table { width: 100%; border-collapse: collapse; font-size: 8pt; page-break-inside: avoid; margin-bottom: 6mm; }
+.zone-table thead tr { background: #1a1a1a; color: #fff; }
+.zone-table thead th {
+  padding: 2.5mm 3mm; font-size: 7pt; font-weight: 600;
+  letter-spacing: 0.3px; text-align: left;
+}
+.zone-table thead th:not(:first-child) { text-align: right; }
+.zone-table tbody tr { border-bottom: 1px solid #f2f2f2; }
+.zone-table tbody td { padding: 2.5mm 3mm; color: #222; }
+.zone-table tbody td:not(:first-child) { text-align: right; }
+.zone-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+.zt-pos { color: #16a34a; font-weight: 700; }
+.zt-neg { color: #dc2626; font-weight: 700; }
+.zt-neu { color: #999; }
+
+/* ── CHAPTER HEADER ─────────────────────────────────── */
+.chapter-header {
+  margin-bottom: 5mm;
+  border-left: 4px solid #E60012;
+  padding-left: 5mm;
+}
+.chapter-eyebrow { font-size: 6.5pt; font-weight: 700; color: #E60012; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 1mm; }
+.chapter-title   { font-size: 20pt; font-weight: 800; color: #111; line-height: 1.1; }
+
+/* ── WEEKLY ANALYSIS ─────────────────────────────────── */
+.weeks-table { margin-bottom: 4mm; }
+.week-row {
+  padding: 2.5mm 0;
+  border-bottom: 1px solid #f2f2f2;
+}
+.week-row:last-child { border-bottom: none; }
+.week-header { display: flex; align-items: baseline; gap: 4mm; margin-bottom: 1mm; }
+.week-label  { font-size: 8pt; font-weight: 800; color: #E60012; flex-shrink: 0; width: 26mm; }
+.week-stats  { font-size: 7.5pt; font-weight: 600; color: #333; }
+.week-texto  { font-size: 7.5pt; color: #666; line-height: 1.55; padding-left: 30mm; }
+.week-stat-vis  { color: #111; }
+.week-stat-temp { color: #E60012; margin-left: 4px; }
+.week-stat-rain { color: #2980B9; margin-left: 4px; }
+.week-stat-cruc { color: #D35400; font-weight: 700; margin-left: 4px; }
+
+/* ── INSIGHT LIST ────────────────────────────────────── */
+.insight-row {
+  display: flex; align-items: flex-start; gap: 4mm;
+  padding: 3mm 0; border-bottom: 1px solid #f5f5f5;
+  page-break-inside: avoid;
+}
+.insight-row:last-child { border-bottom: none; }
+.insight-num { font-size: 9pt; font-weight: 800; color: #e8e8e8; width: 6mm; flex-shrink: 0; line-height: 1.4; }
+.insight-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 3px; flex-shrink: 0; }
+.id-success { background: #16a34a; }
+.id-warning { background: #d97706; }
+.id-danger  { background: #dc2626; }
+.id-primary { background: #E60012; }
+.id-secondary { background: #aaa; }
+.insight-text { font-size: 8pt; line-height: 1.6; color: #333; }
+</style>
+</head>
+<body>
+
+<!-- Running footer elements (invisible in flow) -->
+<div id="footer-left"><strong>{{ org_nombre | upper }}</strong> · {{ loc_nombre }}</div>
+<div id="footer-center">{{ period_short }} · vs {{ prev_short }}</div>
+<div id="footer-right">Generado el {{ date_generated }}</div>
+
+<!-- ══ PORTADA ════════════════════════════════════════ -->
+<div class="cover">
+  <div class="cover-stripe"></div>
+
+  <div class="cover-top">
+    {% if logo_b64 %}
+    <img class="cover-logo" src="data:image/png;base64,{{ logo_b64 }}" alt="{{ org_nombre }}">
+    {% endif %}
+    <span class="cover-org">{{ org_nombre }}</span>
+  </div>
+
+  <div class="cover-mid">
+    <div class="cover-eyebrow">Informe de afluencia &nbsp;·&nbsp; {{ tipo_periodo | upper }}</div>
+    <div class="cover-title">{{ loc_nombre }}</div>
+    <div class="cover-period">{{ period_short }}{% if ciudad %} &nbsp;·&nbsp; {{ ciudad }}{% endif %}</div>
+    <div class="cover-meta">
+      <strong>Período analizado</strong> &nbsp;{{ period_full }}<br>
+      <strong>Comparado con</strong> &nbsp;{{ prev_full }}<br>
+      <strong>Generado el</strong> &nbsp;{{ date_generated }}
+    </div>
+    <div class="cover-rule"></div>
+  </div>
+</div>
+
+<!-- ══ ÍNDICE ═════════════════════════════════════════ -->
+<div class="index-page">
+  <div class="index-title">Índice</div>
+  <div class="index-subtitle">{{ period_short }} &nbsp;·&nbsp; {{ loc_nombre }}</div>
+
+  <div class="index-list">
+    {% for sec in index_sections %}
+    <div class="index-row">
+      <div class="index-num">0{{ loop.index }}</div>
+      <div class="index-content">
+        <div class="index-section">{{ sec.title }}</div>
+        <div class="index-desc">{{ sec.desc }}</div>
+      </div>
+      <div class="index-pg">p.{{ sec.page }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- ══ PÁGINA 1 — Conclusiones + KPIs ════════════════ -->
+<div class="content-page page-break">
+
+  <div class="sec-header">
+    <div class="sec-bar"></div>
+    <span class="sec-num">01</span>
+    <span class="sec-title">Conclusiones del período</span>
+  </div>
+
+  {% for ins in insights %}
+  <div class="insight-row">
+    <div class="insight-num">{{ "%02d" % loop.index }}</div>
+    <div class="insight-dot id-{{ ins.level }}"></div>
+    <div class="insight-text">{{ ins.text }}</div>
+  </div>
+  {% endfor %}
+  {% if not insights %}
+  <div class="insight-row">
+    <div class="insight-num">01</div>
+    <div class="insight-dot id-secondary"></div>
+    <div class="insight-text">No hay suficientes datos para generar conclusiones automáticas en este período.</div>
+  </div>
+  {% endif %}
+
+  <hr class="rule">
+
+  <div class="sec-header">
+    <div class="sec-bar"></div>
+    <span class="sec-num">02</span>
+    <span class="sec-title">Resumen ejecutivo</span>
+  </div>
+
+  <div class="period-chips">
+    <span class="chip chip-current">● &nbsp;{{ period_short }}</span>
+    <span class="chip-sep">vs</span>
+    <span class="chip chip-prev">○ &nbsp;{{ prev_short }}</span>
+  </div>
+
+  <div class="kpi-grid">
+    {% for kpi in kpis %}
+    <div class="kpi-card">
+      <div class="kpi-label">{{ kpi.label }}</div>
+      <div class="kpi-value">{{ kpi.value }}</div>
+      <div class="kpi-delta {{ kpi.delta_class }}">{{ kpi.delta }}</div>
+      {% if kpi.ref %}<div class="kpi-ref">{{ kpi.ref }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+</div>
+
+<!-- ══ PÁGINA 2 — Tráfico + Distribución ════════════ -->
+<div class="content-page page-break">
+
+  <div class="sec-header">
+    <div class="sec-bar"></div>
+    <span class="sec-num">03</span>
+    <span class="sec-title">Tráfico por período</span>
+  </div>
+
+  <div class="chart-wrap">
+    <div class="chart-header">
+      <div class="chart-title">Visitas únicas · {{ period_short }}</div>
+      <div class="chart-subtitle">Fila superior: zona exterior · Fila inferior: zonas interiores · Cada fila con su propia escala</div>
+    </div>
+    <img src="data:image/png;base64,{{ chart_trafico_b64 }}" alt="Tráfico diario">
+  </div>
+
+  <hr class="rule">
+
+  <div class="sec-header">
+    <div class="sec-bar"></div>
+    <span class="sec-num">04</span>
+    <span class="sec-title">Distribución por día de semana</span>
+  </div>
+
+  <div class="chart-wrap">
+    <div class="chart-header">
+      <div class="chart-title">Visitas medias por día de semana</div>
+      <div class="chart-subtitle">
+        <span style="color:#E60012">■</span> {{ period_short }}
+        &nbsp;&nbsp;
+        <span style="color:#ccc">■</span> {{ prev_short }}
+      </div>
+    </div>
+    <img src="data:image/png;base64,{{ chart_dias_b64 }}" alt="Distribución semanal">
+  </div>
+
+</div>
+
+<!-- ══ PÁGINA 3 — Análisis por zona + Embudo ════════ -->
+<div class="content-page page-break">
+
+  <div class="sec-header">
+    <div class="sec-bar"></div>
+    <span class="sec-num">05</span>
+    <span class="sec-title">Análisis por zona</span>
+  </div>
+
+  <table class="zone-table">
+    <thead>
+      <tr>
+        <th>Zona</th>
+        <th>Visitas</th>
+        <th>Var.</th>
+        <th>Vis./día</th>
+        <th>Estancia</th>
+        <th>Días activos</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for z in zonas_tabla %}
+      <tr>
+        <td><span class="zone-dot" style="background:{{ z.color }}"></span>{{ z.nombre }}</td>
+        <td>{{ z.visitas }}</td>
+        <td class="{{ z.delta_class }}">{{ z.delta_short }}</td>
+        <td>{{ z.visitas_dia }}</td>
+        <td>{{ z.estancia }}</td>
+        <td>{{ z.dias_activos }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if chart_embudo_b64 %}
+  <hr class="rule">
+  <div class="sec-header">
+    <div class="sec-bar"></div>
+    <span class="sec-num">06</span>
+    <span class="sec-title">Embudo de conversión</span>
+  </div>
+  <div class="chart-wrap">
+    <div class="chart-header">
+      <div class="chart-title">Embudo: Exterior, Tienda, Caja</div>
+      <div class="chart-subtitle">Proporción de visitantes que avanzan por cada etapa del recorrido</div>
+    </div>
+    <img src="data:image/png;base64,{{ chart_embudo_b64 }}" alt="Embudo">
+  </div>
+  {% endif %}
+
+</div>
+
+<!-- ══ PÁGINA CLIMA Y CRUCEROS (condicional) ══════════ -->
+{% if tiene_clima %}
+<div class="content-page page-break">
+
+  {% if chart_temp_b64 %}
+  <div class="sec-header">
+    <div class="sec-bar"></div>
+    <span class="sec-num">07</span>
+    <span class="sec-title">Temperatura del período</span>
+  </div>
+  <div class="chart-wrap">
+    <div class="chart-header">
+      <div class="chart-title">Temperatura máxima y mínima · {{ period_short }}</div>
+      <div class="chart-subtitle">
+        <span style="color:#E60012">■</span> Temp. máx. &nbsp;&nbsp;
+        <span style="color:#2980B9">■</span> Temp. mín. &nbsp;&nbsp;
+        Área sombreada: rango diario
+      </div>
+    </div>
+    <img src="data:image/png;base64,{{ chart_temp_b64 }}" alt="Temperatura">
+  </div>
+  {% endif %}
+
+  {% if chart_cruc_b64 %}
+  {% if chart_temp_b64 %}<hr class="rule">{% endif %}
+  <div class="sec-header">
+    <div class="sec-bar"></div>
+    <span class="sec-num">{% if chart_temp_b64 %}08{% else %}07{% endif %}</span>
+    <span class="sec-title">Cruceros en el Puerto de Málaga</span>
+  </div>
+  <div class="chart-wrap">
+    <div class="chart-header">
+      <div class="chart-title">Pasajeros de crucero · {{ period_short }}</div>
+      <div class="chart-subtitle">Pasajeros totales desembarcados por período · fuente: Puertos del Estado + scraper diario</div>
+    </div>
+    <img src="data:image/png;base64,{{ chart_cruc_b64 }}" alt="Cruceros">
+  </div>
+  {% endif %}
+
+</div>
+{% endif %}
+
+<!-- ══ CAPÍTULOS MENSUALES ════════════════════════════ -->
+{% for cap in capitulos %}
+<div class="content-page page-break">
+
+  <div class="chapter-header">
+    <div class="chapter-eyebrow">Capítulo {{ cap.num }} de {{ cap.total }}</div>
+    <div class="chapter-title">{{ cap.mes_label | upper }}</div>
+  </div>
+
+  <!-- KPIs del mes -->
+  <div class="sec-header">
+    <div class="sec-bar"></div>
+    <span class="sec-title">Resumen del mes</span>
+  </div>
+  <div class="kpi-grid" style="margin-bottom:5mm">
+    {% for kpi in cap.kpis %}
+    <div class="kpi-card">
+      <div class="kpi-label">{{ kpi.label }}</div>
+      <div class="kpi-value">{{ kpi.value }}</div>
+      <div class="kpi-delta {{ kpi.delta_class }}">{{ kpi.delta }}</div>
+      {% if kpi.ref %}<div class="kpi-ref">{{ kpi.ref }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Tráfico diario del mes -->
+  {% if cap.chart_b64 %}
+  <div class="sec-header">
+    <div class="sec-bar"></div>
+    <span class="sec-title">Tráfico diario</span>
+  </div>
+  <div class="chart-wrap">
+    <div class="chart-header">
+      <div class="chart-title">Visitas únicas por día · {{ cap.mes_label }}</div>
+      <div class="chart-subtitle">Fila superior: zona exterior · Fila inferior: zonas interiores</div>
+    </div>
+    <img src="data:image/png;base64,{{ cap.chart_b64 }}" alt="Tráfico {{ cap.mes_label }}">
+  </div>
+  {% endif %}
+
+  <!-- Cruceros del mes -->
+  {% if cap.chart_cruc_b64 %}
+  <div class="chart-wrap" style="margin-top:3mm">
+    <div class="chart-header">
+      <div class="chart-title">Pasajeros de crucero · {{ cap.mes_label }}</div>
+      <div class="chart-subtitle">Desembarcos diarios en el Puerto de Málaga</div>
+    </div>
+    <img src="data:image/png;base64,{{ cap.chart_cruc_b64 }}" alt="Cruceros {{ cap.mes_label }}">
+  </div>
+  {% endif %}
+
+  <!-- Análisis semanal -->
+  {% if cap.semanas %}
+  <hr class="rule">
+  <div class="sec-header">
+    <div class="sec-bar"></div>
+    <span class="sec-title">Análisis semana a semana</span>
+  </div>
+  <div class="weeks-table">
+    {% for sem in cap.semanas %}
+    <div class="week-row">
+      <div class="week-header">
+        <span class="week-label">{{ sem.label }}</span>
+        <span class="week-stats">
+          <span class="week-stat-vis">{{ sem.visitas }} visitas</span>
+          {% if sem.temp %}<span class="week-stat-temp">· {{ sem.temp }}</span>{% endif %}
+          {% if sem.lluvia > 0 %}<span class="week-stat-rain">· {{ sem.lluvia }} día{% if sem.lluvia > 1 %}s{% endif %} lluvia</span>{% endif %}
+          {% if sem.cruc_total %}<span class="week-stat-cruc">· Crucero: {{ sem.cruc_total }} pax</span>{% endif %}
+        </span>
+      </div>
+      <div class="week-texto">{{ sem.texto }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Conclusiones del mes -->
+  {% if cap.insights %}
+  <hr class="rule">
+  <div class="sec-header">
+    <div class="sec-bar"></div>
+    <span class="sec-title">Conclusiones de {{ cap.mes_label }}</span>
+  </div>
+  {% for ins in cap.insights %}
+  <div class="insight-row">
+    <div class="insight-num">{{ "%02d" % loop.index }}</div>
+    <div class="insight-dot id-{{ ins.level }}"></div>
+    <div class="insight-text">{{ ins.text }}</div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+</div>
+{% endfor %}
+
+</body>
+</html>

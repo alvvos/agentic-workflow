@@ -11,6 +11,7 @@ from src.core.config import MODO_DESARROLLO
 from src.layout.sidebar import build_sidebar
 from src.layout.tabs.tab_admin import build_admin_content
 from src.layout.tabs.tab_bi import build_tab_bi
+from src.layout.tabs.tab_informes import build_tab_informes
 from src.layout.tabs.tab_pm import build_tab_pm
 from src.layout.tabs.tab_prediccion_cliente import build_tab_prediccion_cliente
 
@@ -133,6 +134,7 @@ def serve_layout():
                                     build_tab_pm(),
                                     build_tab_bi(),
                                     build_tab_prediccion_cliente(role=role),
+                                    *([build_tab_informes()] if role == "admin" else []),
                                 ],
                             )
                         ]
