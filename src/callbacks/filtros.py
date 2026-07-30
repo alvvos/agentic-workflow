@@ -151,9 +151,11 @@ def _funnel_key(z):
 
 @app.callback(
     [Output("radar-drop-zonas", "options"), Output("radar-drop-zonas", "value")],
-    [Input("drop-locs", "value")],
+    Input("btn-cargar-ubicacion", "n_clicks"),
+    State("drop-locs", "value"),
+    prevent_initial_call=True,
 )
-def auto_fill_zonas(locs):
+def auto_fill_zonas(_n, locs):
     data_master.reload_if_changed()
     if not locs:
         return [], []
@@ -216,9 +218,11 @@ def _build_child_section(locs, parent_name, seen_parents: set) -> list:
 
 @app.callback(
     Output("radar-child-zones-wrapper", "children"),
-    [Input("drop-locs", "value"), Input("radar-drop-zonas", "value")],
+    Input("radar-drop-zonas", "value"),
+    State("drop-locs", "value"),
+    prevent_initial_call=True,
 )
-def render_child_zone_selectors(locs, selected_parents):
+def render_child_zone_selectors(selected_parents, locs):
     data_master.reload_if_changed()
     if not locs or not selected_parents:
         return []
