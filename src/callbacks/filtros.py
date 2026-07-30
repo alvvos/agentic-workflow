@@ -33,7 +33,7 @@ def apply_sidebar_state(is_open):
 
 @app.callback(Output("sidebar-periodo-wrapper", "style"), Input("tabs-panel", "value"))
 def toggle_periodo_sidebar(tab):
-    if tab in ("tab-ejecutivo", "tab-ml", "tab-admin", "tab-prediccion-publica"):
+    if tab in ("tab-ejecutivo", "tab-admin", "tab-prediccion-publica"):
         return {"display": "none"}
     return {}
 

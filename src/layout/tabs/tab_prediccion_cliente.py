@@ -324,46 +324,94 @@ def _loc_section(loc_nombre: str, zona_cols: list) -> html.Div:
 # ── Layout ─────────────────────────────────────────────────────────────────────
 
 
-def build_tab_prediccion_cliente():
+def build_tab_prediccion_cliente(role: str = "viewer"):
+    is_admin = role == "admin"
+
+    if is_admin:
+        tab_content = html.Div(
+            [
+                dbc.Row(
+                    [
+                        dbc.Col(
+                            [
+                                html.H4(
+                                    "Previsión de visitas",
+                                    className="fw-bold mb-1 text-dark",
+                                ),
+                                html.P(
+                                    "Próximos 7 días · pulsa Aplicar tras seleccionar ubicación.",
+                                    className="text-muted small mb-0",
+                                ),
+                            ],
+                            width=12,
+                        ),
+                    ],
+                    className="mb-4",
+                ),
+                loading_section(
+                    html.Div(
+                        id="pred-publica-content",
+                        children=_empty_state(),
+                        style={"minHeight": "60vh"},
+                    ),
+                    label="Calculando previsión...",
+                    overlay_id="pred-render-overlay",
+                    min_height="60vh",
+                ),
+            ],
+            className="p-3",
+        )
+    else:
+        tab_content = html.Div(
+            [
+                html.Div(id="pred-publica-content", style={"display": "none"}),
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.Div(
+                                    style={
+                                        "width": "48px",
+                                        "height": "4px",
+                                        "backgroundColor": _C_PRIMARY,
+                                        "borderRadius": "2px",
+                                        "margin": "0 auto 24px",
+                                    }
+                                ),
+                                html.H5(
+                                    "Predicción de afluencia",
+                                    className="fw-bold text-dark mb-2",
+                                ),
+                                html.P(
+                                    "Esta funcionalidad está en desarrollo.",
+                                    className="text-muted mb-1",
+                                    style={"fontSize": "0.95rem"},
+                                ),
+                                html.P(
+                                    "Próximamente dispondrás de previsiones de visitas para los próximos 7 días "
+                                    "con intervalos de confianza basados en histórico, climatología y festivos.",
+                                    className="text-muted",
+                                    style={
+                                        "fontSize": "0.82rem",
+                                        "maxWidth": "420px",
+                                        "margin": "0 auto",
+                                    },
+                                ),
+                            ],
+                            className="text-center",
+                        )
+                    ],
+                    className="d-flex align-items-center justify-content-center",
+                    style={"minHeight": "55vh"},
+                ),
+            ]
+        )
+
     return dcc.Tab(
         label="Predicción",
         value="tab-prediccion-publica",
         className="fw-bold",
-        children=[
-            html.Div(
-                [
-                    dbc.Row(
-                        [
-                            dbc.Col(
-                                [
-                                    html.H4(
-                                        "Previsión de visitas",
-                                        className="fw-bold mb-1 text-dark",
-                                    ),
-                                    html.P(
-                                        "Próximos 7 días · se calcula automáticamente al seleccionar ubicación.",
-                                        className="text-muted small mb-0",
-                                    ),
-                                ],
-                                width=12,
-                            ),
-                        ],
-                        className="mb-4",
-                    ),
-                    loading_section(
-                        html.Div(
-                            id="pred-publica-content",
-                            children=_empty_state(),
-                            style={"minHeight": "60vh"},
-                        ),
-                        label="Calculando previsión...",
-                        overlay_id="pred-render-overlay",
-                        min_height="60vh",
-                    ),
-                ],
-                className="p-3",
-            )
-        ],
+        children=[tab_content],
     )
 
 

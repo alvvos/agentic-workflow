@@ -11,7 +11,6 @@ from src.core.config import MODO_DESARROLLO
 from src.layout.sidebar import build_sidebar
 from src.layout.tabs.tab_admin import build_admin_content
 from src.layout.tabs.tab_bi import build_tab_bi
-from src.layout.tabs.tab_ml import build_tab_ml
 from src.layout.tabs.tab_pm import build_tab_pm
 from src.layout.tabs.tab_prediccion_cliente import build_tab_prediccion_cliente
 
@@ -133,8 +132,7 @@ def serve_layout():
                                 children=[
                                     build_tab_pm(),
                                     build_tab_bi(),
-                                    build_tab_prediccion_cliente(),
-                                    *([] if role != "admin" else [build_tab_ml()]),
+                                    build_tab_prediccion_cliente(role=role),
                                 ],
                             )
                         ]
