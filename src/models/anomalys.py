@@ -791,13 +791,20 @@ def generar_panel_bi_completo(
                     [
                         html.Span(
                             [
-                                html.I(
-                                    className="fas fa-circle me-2",
-                                    style={"color": color_zona, "fontSize": "0.5rem"},
+                                html.Span(
+                                    style={
+                                        "display": "inline-block",
+                                        "width": "8px",
+                                        "height": "8px",
+                                        "borderRadius": "50%",
+                                        "backgroundColor": color_zona,
+                                        "marginRight": "8px",
+                                        "flexShrink": 0,
+                                    }
                                 ),
                                 zona,
                             ],
-                            className="fw-bold text-uppercase text-dark me-4 flex-shrink-0",
+                            className="fw-bold text-uppercase text-dark me-4 flex-shrink-0 d-flex align-items-center",
                             style={"fontSize": "0.7rem", "letterSpacing": "0.5px"},
                         ),
                         _kpi_inline("Visitas", val_tv, hist_tv),
@@ -868,10 +875,7 @@ def generar_panel_bi_completo(
                         className="d-flex justify-content-between align-items-end border-bottom pb-2 mb-3 mt-4",
                         children=[
                             html.H5(
-                                [
-                                    html.I(className="fas fa-filter me-2 text-primary"),
-                                    "Conversión y Atracción (Funnel)",
-                                ],
+                                "Conversión y Atracción (Funnel)",
                                 className="fw-bold mb-0 text-dark",
                             ),
                         ],
@@ -1059,10 +1063,7 @@ def generar_panel_bi_completo(
                 html.Div(
                     [
                         html.H5(
-                            [
-                                html.I(className="fas fa-th me-2 text-primary"),
-                                "Intensidad Horaria por Día de la Semana",
-                            ],
+                            "Intensidad Horaria por Día de la Semana",
                             className="fw-bold mb-0 text-dark",
                         ),
                     ],
@@ -1075,7 +1076,7 @@ def generar_panel_bi_completo(
             html.Div(
                 [
                     html.H4(
-                        [html.I(className="fas fa-map-marker-alt me-2 text-danger"), ubi],
+                        ubi,
                         className="fw-bold mb-4 mt-3 text-secondary border-bottom pb-2",
                     ),
                     html.Div(cintas_kpis_zonas),

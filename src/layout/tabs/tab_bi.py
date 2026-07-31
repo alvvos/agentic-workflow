@@ -12,10 +12,7 @@ def build_tab_bi():
         children=[
             html.Br(),
             dcc.Store(id="zonas-activas-combined"),
-            html.Div(
-                id="bi-status-visor",
-                className="mb-4 p-3 rounded-4 border-start border-primary border-4 shadow-sm",
-            ),
+            html.Div(id="bi-status-visor", className="mb-4"),
             dbc.Row(
                 [
                     dbc.Col(

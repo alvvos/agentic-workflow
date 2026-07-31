@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta
 
 import dash
@@ -14,6 +15,19 @@ from src.data_processing.data_radar import generar_tabla_auditoria
 from src.db.queries import get_df_visitas
 from src.models.anomalys import generar_panel_bi_completo
 from src.reporting.health_check import generar_panel_pm
+
+_ASSETS_ROOT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets"
+)
+
+
+def _find_loc_image(loc_uuid: str | None) -> str | None:
+    if not loc_uuid:
+        return None
+    for ext in (".jpg", ".jpeg", ".png", ".webp"):
+        if os.path.exists(os.path.join(_ASSETS_ROOT, "locations", f"{loc_uuid}{ext}")):
+            return f"/assets/locations/{loc_uuid}{ext}"
+    return None
 
 
 @app.callback(
@@ -119,41 +133,67 @@ def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, pm_ventana
     )
     _meta_parts = [_zones_lbl] + ([_comp_lbl] if _comp_lbl else [])
 
+    _hero_src = _find_loc_image(locs[0]) if len(locs) == 1 else None
+    _text_block = html.Div(
+        [
+            html.P(
+                "ANALÍTICA",
+                className="mb-1 text-uppercase fw-bold",
+                style={
+                    "fontSize": "0.6rem",
+                    "letterSpacing": "1.5px",
+                    "color": "rgba(255,255,255,0.72)",
+                },
+            ),
+            html.H4(
+                _loc_nombre,
+                className="fw-bold mb-1",
+                style={"color": "white", "fontSize": "1.35rem"},
+            ),
+            html.P(
+                _date_lbl,
+                className="mb-0",
+                style={
+                    "fontSize": "0.82rem",
+                    "color": "rgba(255,255,255,0.85)",
+                    "fontWeight": "500",
+                },
+            ),
+            html.P(
+                " · ".join(_meta_parts),
+                className="mb-0 mt-1",
+                style={"fontSize": "0.75rem", "color": "rgba(255,255,255,0.65)"},
+            ),
+        ],
+        style={"marginTop": "auto"},
+    )
+    _card_inner = (
+        dbc.Row(
+            [
+                dbc.Col(_text_block, style={"display": "flex", "flexDirection": "column"}),
+                dbc.Col(
+                    html.Img(
+                        src=_hero_src,
+                        style={
+                            "width": "100%",
+                            "height": "130px",
+                            "objectFit": "cover",
+                            "borderRadius": "0 12px 12px 0",
+                            "opacity": "0.82",
+                        },
+                    ),
+                    xs=4,
+                    className="p-0",
+                ),
+            ],
+            className="g-0 h-100",
+        )
+        if _hero_src
+        else _text_block
+    )
     visor = dbc.Card(
         dbc.CardBody(
-            html.Div(
-                [
-                    html.P(
-                        "ANALÍTICA",
-                        className="mb-1 text-uppercase fw-bold",
-                        style={
-                            "fontSize": "0.6rem",
-                            "letterSpacing": "1.5px",
-                            "color": "rgba(255,255,255,0.72)",
-                        },
-                    ),
-                    html.H4(
-                        _loc_nombre,
-                        className="fw-bold mb-1",
-                        style={"color": "white", "fontSize": "1.35rem"},
-                    ),
-                    html.P(
-                        _date_lbl,
-                        className="mb-0",
-                        style={
-                            "fontSize": "0.82rem",
-                            "color": "rgba(255,255,255,0.85)",
-                            "fontWeight": "500",
-                        },
-                    ),
-                    html.P(
-                        " · ".join(_meta_parts),
-                        className="mb-0 mt-1",
-                        style={"fontSize": "0.75rem", "color": "rgba(255,255,255,0.65)"},
-                    ),
-                ],
-                style={"marginTop": "auto"},
-            ),
+            _card_inner,
             style={
                 "display": "flex",
                 "flexDirection": "column",
@@ -161,7 +201,7 @@ def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, pm_ventana
                 "minHeight": "130px",
             },
         ),
-        className="border-0 rounded-4 mb-4 shadow",
+        className="border-0 rounded-4 mb-4 shadow overflow-hidden",
         style={"background": f"linear-gradient(135deg, {_primary} 0%, {_darken(_primary)} 100%)"},
     )
 

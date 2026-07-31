@@ -218,11 +218,12 @@ def _build_child_section(locs, parent_name, seen_parents: set) -> list:
 
 @app.callback(
     Output("radar-child-zones-wrapper", "children"),
-    Input("radar-drop-zonas", "value"),
+    Input("btn-cargar-ubicacion", "n_clicks"),
+    State("radar-drop-zonas", "value"),
     State("drop-locs", "value"),
     prevent_initial_call=True,
 )
-def render_child_zone_selectors(selected_parents, locs):
+def render_child_zone_selectors(_n, selected_parents, locs):
     data_master.reload_if_changed()
     if not locs or not selected_parents:
         return []
