@@ -9,6 +9,7 @@ from dash import Input, Output, State, ctx, html
 from src.core import data_master
 from src.core.config import app
 from src.core.data_master import mapa_tiendas, mapa_zonas
+from src.core.org_branding import get_branding_from_locs
 from src.data_processing.data_radar import generar_tabla_auditoria
 from src.db.queries import get_df_visitas
 from src.models.anomalys import generar_panel_bi_completo
@@ -95,33 +96,74 @@ def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, pm_ventana
     if not df_bi_hist.empty and "dwell_time" in df_bi_hist.columns:
         df_bi_hist["dwell_time"] /= 60.0
 
-    comparativa_txt = {
+    _comp_lbl = {
         "wow": "vs. 7 días anteriores",
         "mom": "vs. 28 días anteriores",
         "yoy": "vs. año anterior",
         "none": "",
     }[comp]
-    visor_children = [
-        html.Span(
-            [
-                html.I(className="fas fa-calendar-day me-2"),
-                f"{start.strftime('%d %b')} - {end.strftime('%d %b')}",
-            ],
-            className="badge bg-white text-primary me-2 shadow-sm fs-6",
+    _primary = get_branding_from_locs(locs).primary
+
+    def _darken(h, f=0.75):
+        c = h.lstrip("#")
+        return f"#{int(int(c[0:2], 16) * f):02x}{int(int(c[2:4], 16) * f):02x}{int(int(c[4:6], 16) * f):02x}"
+
+    _loc_nombre = (
+        mapa_tiendas.get(locs[0], locs[0]) if len(locs) == 1 else f"{len(locs)} ubicaciones"
+    )
+    _date_lbl = f"{start.strftime('%d %b')} – {end.strftime('%d %b %Y')}"
+    _zones_lbl = (
+        f"{len(zones_bi)} zona{'s' if len(zones_bi) != 1 else ''}"
+        if zones_bi
+        else "Todas las zonas"
+    )
+    _meta_parts = [_zones_lbl] + ([_comp_lbl] if _comp_lbl else [])
+
+    visor = dbc.Card(
+        dbc.CardBody(
+            html.Div(
+                [
+                    html.P(
+                        "ANALÍTICA",
+                        className="mb-1 text-uppercase fw-bold",
+                        style={
+                            "fontSize": "0.6rem",
+                            "letterSpacing": "1.5px",
+                            "color": "rgba(255,255,255,0.72)",
+                        },
+                    ),
+                    html.H4(
+                        _loc_nombre,
+                        className="fw-bold mb-1",
+                        style={"color": "white", "fontSize": "1.35rem"},
+                    ),
+                    html.P(
+                        _date_lbl,
+                        className="mb-0",
+                        style={
+                            "fontSize": "0.82rem",
+                            "color": "rgba(255,255,255,0.85)",
+                            "fontWeight": "500",
+                        },
+                    ),
+                    html.P(
+                        " · ".join(_meta_parts),
+                        className="mb-0 mt-1",
+                        style={"fontSize": "0.75rem", "color": "rgba(255,255,255,0.65)"},
+                    ),
+                ],
+                style={"marginTop": "auto"},
+            ),
+            style={
+                "display": "flex",
+                "flexDirection": "column",
+                "padding": "20px 24px",
+                "minHeight": "130px",
+            },
         ),
-        html.Span(
-            [
-                html.I(className="fas fa-layer-group me-2"),
-                f"{len(zones_bi) if zones_bi else 'Todas las'} Zonas",
-            ],
-            className="badge bg-white text-secondary me-2 shadow-sm fs-6",
-        ),
-    ]
-    if comparativa_txt:
-        visor_children.append(
-            html.Span(comparativa_txt, className="badge bg-primary text-white shadow-sm fs-6")
-        )
-    visor = html.Div(visor_children)
+        className="border-0 rounded-4 mb-4 shadow",
+        style={"background": f"linear-gradient(135deg, {_primary} 0%, {_darken(_primary)} 100%)"},
+    )
 
     child_zone_names: set = set()
     funnel_step_map: dict[str, int] = {}

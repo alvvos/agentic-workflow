@@ -1007,20 +1007,20 @@ def _build_insights(
                     }
                 )
 
-    # ── 5. Fin de semana vs días laborables ───────────────────────────────────
+    # ── 5. Fin de semana vs días comerciales ───────────────────────────────────
     act2 = act.copy()
     act2["dow"] = act2["fecha"].dt.dayofweek
     finde = act2[act2["dow"] >= 5]["unique_visitors"].mean()
     laboral = act2[act2["dow"] < 5]["unique_visitors"].mean()
     if finde and laboral and laboral > 0:
         ratio = finde / laboral
-        mayor = "fin de semana" if ratio >= 1 else "días laborables"
-        menor = "días laborables" if ratio >= 1 else "fin de semana"
+        mayor = "fin de semana" if ratio >= 1 else "días comerciales"
+        menor = "días comerciales" if ratio >= 1 else "fin de semana"
         dif_pct = abs(ratio - 1) * 100
         items.append(
             {
                 "level": "secondary",
-                "text": f"Media de visitas: {int(finde):,} en fin de semana frente a {int(laboral):,} en días laborables. "
+                "text": f"Media de visitas: {int(finde):,} en fin de semana frente a {int(laboral):,} en días comerciales. "
                 f"El {mayor} concentra {dif_pct:.0f}% más afluencia que el {menor}.",
             }
         )
@@ -1111,7 +1111,7 @@ def _build_insights(
         except Exception:
             pass
 
-    # ── 8. Festivos: mencionar y comparar con días laborables ────────────────
+    # ── 8. Festivos: mencionar y comparar con días comerciales ────────────────
     festivos = _get_festivos(d0, d1)
     if festivos and ext_zones:
         try:
@@ -1134,11 +1134,11 @@ def _build_insights(
             if n_fest > 0 and vis_work.size > 0 and vis_work.mean() > 0 and vis_fest.size > 0:
                 ratio = vis_fest.mean() / vis_work.mean()
                 if ratio >= 1.05:
-                    concl = f"registraron de media un {(ratio-1)*100:.0f}% más de visitas que los días laborables habituales"
+                    concl = f"registraron de media un {(ratio-1)*100:.0f}% más de visitas que los días comerciales habituales"
                 elif ratio <= 0.95:
-                    concl = f"registraron de media un {(1-ratio)*100:.0f}% menos visitas que los días laborables habituales"
+                    concl = f"registraron de media un {(1-ratio)*100:.0f}% menos visitas que los días comerciales habituales"
                 else:
-                    concl = "no mostraron diferencias destacables respecto a los días laborables"
+                    concl = "no mostraron diferencias destacables respecto a los días comerciales"
                 items.append(
                     {
                         "level": "secondary",

@@ -80,14 +80,7 @@ def build_sidebar(org_options=None):
                         ),
                         # ── Ubicaciones ──────────────────────────────────────
                         _section_label("Ubicaciones"),
-                        dcc.Dropdown(id="drop-locs", className="mb-2"),
-                        dbc.Button(
-                            "Aplicar",
-                            id="btn-cargar-ubicacion",
-                            color="primary",
-                            size="sm",
-                            className="w-100 fw-bold rounded-3 mb-3",
-                        ),
+                        dcc.Dropdown(id="drop-locs", className="mb-3"),
                         # ── Período ───────────────────────────────────────────
                         html.Div(
                             id="sidebar-periodo-wrapper",
@@ -174,6 +167,15 @@ def build_sidebar(org_options=None):
                                     style={"fontSize": "0.87rem"},
                                 ),
                             ],
+                        ),
+                        # ── Aplicar ──────────────────────────────────────────
+                        html.Div(style=_SECTION_DIVIDER_STYLE),
+                        dbc.Button(
+                            "Aplicar",
+                            id="btn-cargar-ubicacion",
+                            color="primary",
+                            size="sm",
+                            className="w-100 fw-bold rounded-3",
                         ),
                     ],
                     style={"padding": "20px 18px"},
