@@ -212,7 +212,7 @@ def _get_weather(ubicacion_id: str, fechas: pd.Series) -> pd.DataFrame:
         [ubicacion_id],
     ).df()
 
-    need = set(pd.to_datetime(fechas).dt.date)
+    need = {d.date() for d in pd.to_datetime(fechas)}
     have = set(pd.to_datetime(cached["fecha"]).dt.date) if not cached.empty else set()
     missing = sorted(need - have)
 
