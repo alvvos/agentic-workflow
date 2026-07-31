@@ -6,11 +6,13 @@ Flujo: datos DB → Plotly figs → PNG vía Kaleido → Jinja2 → WeasyPrint P
 from __future__ import annotations
 
 import base64
+import math
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _ASSETS_DIR = Path(__file__).parent.parent.parent / "assets"
@@ -33,8 +35,6 @@ _MESES_LARGO = [
 _DIAS_ES = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"]
 
 _C_RED = "#E60012"
-_C_DARK = "#1a1a1a"
-_C_MUTED = "#aaa"
 
 _PALETTE = ["#E60012", "#1a1a1a", "#D35400", "#6C3483", "#148F77", "#2980B9", "#8E44AD", "#4D4D4D"]
 
@@ -151,8 +151,6 @@ def _get_festivos(d0: pd.Timestamp, d1: pd.Timestamp, pais: str = "ES", region: 
 def _chart_trafico(
     df_v: pd.DataFrame, zonas_info: list[dict], date_from: str, date_to: str
 ) -> go.Figure:
-    from plotly.subplots import make_subplots
-
     if df_v.empty:
         return go.Figure()
 
@@ -453,8 +451,6 @@ def _chart_embudo(zonas_info: list[dict], df_v: pd.DataFrame, date_from: str, da
 
     # Escala √ para los anchos visuales: mantiene forma de embudo y garantiza que
     # todos los pasos sean visibles aunque el ratio de conversión sea muy bajo.
-    import math
-
     visual_x = [math.sqrt(max(v, 1)) for v in values]
 
     conv_texts = [f"{values[0]:,}<br>100 %"]
@@ -652,8 +648,6 @@ def _chart_cruceros_mes(
 def _chart_trafico_diario_mes(
     df_v: pd.DataFrame, zonas_info: list[dict], d0_mes: pd.Timestamp, d1_mes: pd.Timestamp
 ) -> go.Figure:
-    from plotly.subplots import make_subplots
-
     df = df_v[(df_v["fecha"] >= d0_mes) & (df_v["fecha"] <= d1_mes)].copy()
     if df.empty:
         return go.Figure()
@@ -870,14 +864,6 @@ def _select_chart_zones(zonas_info: list[dict]) -> list[dict]:
             tops.append(z)
             seen.add(z["zona_id"])
     return tops[:8]
-
-
-def _pct_text(pct: float) -> str:
-    """Natural language for a percentage change — no arrows or symbols."""
-    if abs(pct) < 1:
-        return "sin variación significativa"
-    dir_ = "subida" if pct > 0 else "caída"
-    return f"{dir_} del {abs(pct):.0f}%"
 
 
 def _build_insights(
