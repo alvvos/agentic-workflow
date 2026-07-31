@@ -5,7 +5,7 @@ import dash
 import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.graph_objects as go
-from dash import Input, Output, State, ctx, html
+from dash import ALL, Input, Output, State, ctx, html
 
 from src.core import data_master
 from src.core.config import app
@@ -43,7 +43,8 @@ def _find_loc_image(loc_uuid: str | None) -> str | None:
         State("date-rango", "start_date"),
         State("date-rango", "end_date"),
         State("date-dia", "date"),
-        State("zonas-activas-combined", "data"),
+        State("radar-drop-zonas", "value"),
+        State({"type": "child-zone-checklist", "index": ALL}, "value"),
         State("bi-comparativa", "value"),
         State("pm-ventana", "value"),
         State("data-version", "data"),
@@ -51,7 +52,12 @@ def _find_loc_image(loc_uuid: str | None) -> str | None:
     ],
     prevent_initial_call=True,
 )
-def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, pm_ventana, _data_v, s_id):
+def master_reactive_analytics(
+    locs, t_f, sd, ed, dia, parent_zones, child_zones_all, comp, pm_ventana, _data_v, s_id
+):
+    parent_zones = parent_zones or []
+    child_zones = [z for lst in (child_zones_all or []) for z in (lst or [])]
+    zones_bi = list(dict.fromkeys(parent_zones + child_zones))
     if not locs:
         return html.Div(), "Esperando selección de ubicación...", html.Div(), html.Div()
     if isinstance(locs, str):
@@ -134,75 +140,81 @@ def master_reactive_analytics(locs, t_f, sd, ed, dia, zones_bi, comp, pm_ventana
     _meta_parts = [_zones_lbl] + ([_comp_lbl] if _comp_lbl else [])
 
     _hero_src = _find_loc_image(locs[0]) if len(locs) == 1 else None
-    _text_block = html.Div(
-        [
-            html.P(
-                "ANALÍTICA",
-                className="mb-1 text-uppercase fw-bold",
-                style={
-                    "fontSize": "0.6rem",
-                    "letterSpacing": "1.5px",
-                    "color": "rgba(255,255,255,0.72)",
-                },
+    _txt_shadow = "0 1px 4px rgba(0,0,0,0.55)" if _hero_src else "none"
+
+    def _hex_to_rgb(h):
+        c = h.lstrip("#")
+        return f"{int(c[0:2],16)},{int(c[2:4],16)},{int(c[4:6],16)}"
+
+    if _hero_src:
+        _rgb = _hex_to_rgb(_primary)
+        _header_bg = {
+            "backgroundImage": (
+                f"linear-gradient(160deg, rgba({_rgb},0.62) 0%, rgba(0,0,0,0.08) 45%, rgba(0,0,0,0.74) 100%), "
+                f"url('{_hero_src}')"
             ),
-            html.H4(
-                _loc_nombre,
-                className="fw-bold mb-1",
-                style={"color": "white", "fontSize": "1.35rem"},
-            ),
-            html.P(
-                _date_lbl,
-                className="mb-0",
-                style={
-                    "fontSize": "0.82rem",
-                    "color": "rgba(255,255,255,0.85)",
-                    "fontWeight": "500",
-                },
-            ),
-            html.P(
-                " · ".join(_meta_parts),
-                className="mb-0 mt-1",
-                style={"fontSize": "0.75rem", "color": "rgba(255,255,255,0.65)"},
-            ),
-        ],
-        style={"marginTop": "auto"},
-    )
-    _card_inner = (
-        dbc.Row(
-            [
-                dbc.Col(_text_block, style={"display": "flex", "flexDirection": "column"}),
-                dbc.Col(
-                    html.Img(
-                        src=_hero_src,
-                        style={
-                            "width": "100%",
-                            "height": "130px",
-                            "objectFit": "cover",
-                            "borderRadius": "0 12px 12px 0",
-                            "opacity": "0.82",
-                        },
-                    ),
-                    xs=4,
-                    className="p-0",
-                ),
-            ],
-            className="g-0 h-100",
-        )
-        if _hero_src
-        else _text_block
-    )
+            "backgroundSize": "cover",
+            "backgroundPosition": "center",
+        }
+    else:
+        _header_bg = {
+            "background": f"linear-gradient(135deg, {_primary} 0%, {_darken(_primary)} 100%)"
+        }
+
     visor = dbc.Card(
         dbc.CardBody(
-            _card_inner,
+            html.Div(
+                [
+                    html.P(
+                        "ANALÍTICA",
+                        className="mb-1 text-uppercase fw-bold",
+                        style={
+                            "fontSize": "0.6rem",
+                            "letterSpacing": "1.5px",
+                            "color": "rgba(255,255,255,0.72)",
+                            "textShadow": _txt_shadow,
+                        },
+                    ),
+                    html.H4(
+                        _loc_nombre,
+                        className="fw-bold mb-1",
+                        style={
+                            "color": "white",
+                            "fontSize": "1.35rem",
+                            "textShadow": "0 2px 10px rgba(0,0,0,0.60)" if _hero_src else "none",
+                        },
+                    ),
+                    html.P(
+                        _date_lbl,
+                        className="mb-0",
+                        style={
+                            "fontSize": "0.82rem",
+                            "color": "rgba(255,255,255,0.85)",
+                            "fontWeight": "500",
+                            "textShadow": _txt_shadow,
+                        },
+                    ),
+                    html.P(
+                        " · ".join(_meta_parts),
+                        className="mb-0 mt-1",
+                        style={
+                            "fontSize": "0.75rem",
+                            "color": "rgba(255,255,255,0.65)",
+                            "textShadow": _txt_shadow,
+                        },
+                    ),
+                ],
+                style={"marginTop": "auto"},
+            ),
             style={
                 "display": "flex",
                 "flexDirection": "column",
                 "padding": "20px 24px",
-                "minHeight": "130px",
+                "minHeight": "175px",
             },
         ),
-        className="border-0 rounded-4 mb-4 shadow overflow-hidden",
-        style={"background": f"linear-gradient(135deg, {_primary} 0%, {_darken(_primary)} 100%)"},
+        className="border-0 rounded-4 mb-4 shadow",
+        style=_header_bg,
     )
 
     child_zone_names: set = set()
