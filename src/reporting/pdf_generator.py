@@ -133,6 +133,18 @@ def _get_cruceros(loc_uuid: str, d0: pd.Timestamp, d1: pd.Timestamp) -> pd.Serie
         return pd.Series(0.0, index=pd.date_range(d0, d1, freq="D"), name="cruceros")
 
 
+def _get_festivos(d0: pd.Timestamp, d1: pd.Timestamp, pais: str = "ES", region: str = "AN") -> dict:
+    """Returns {date: name} for public holidays (national + Andalucía) in the period."""
+    try:
+        import holidays as hol_lib
+
+        years = list(range(d0.year, d1.year + 1))
+        h = hol_lib.country_holidays(pais, subdiv=region, years=years)
+        return {k: v for k, v in h.items() if d0.date() <= k <= d1.date()}
+    except Exception:
+        return {}
+
+
 # ── Chart 1: Tráfico — diario/semanal/mensual según rango ───────────────────
 
 
@@ -298,8 +310,9 @@ def _chart_trafico(
                 col=1,
             )
 
+    dyn_h = max(340, 120 + 60 * (len(ext_zones) + len(int_zones)))
     fig.update_layout(
-        height=290,
+        height=dyn_h,
         barmode="group",
         margin=dict(t=26, b=42, l=60, r=14),
         plot_bgcolor="rgba(0,0,0,0)",
@@ -436,47 +449,39 @@ def _chart_embudo(zonas_info: list[dict], df_v: pd.DataFrame, date_from: str, da
 
     labels = [s[1][0] for s in steps]
     values = [s[1][1] for s in steps]
-
-    # Barras horizontales independientes — cada zona tiene escala propia para que
-    # todas sean visibles aunque los ratios de conversión sean muy bajos.
     colors = [_rgba(_C_RED, 1.0 - 0.28 * i) for i in range(len(labels))]
 
-    fig = go.Figure()
-    for i, (label, value) in enumerate(zip(labels, values)):
-        pct_ref = value / values[0] * 100 if values[0] else 0
-        pct_prev = value / values[i - 1] * 100 if i > 0 and values[i - 1] else 100.0
-        label_prev = f"{pct_prev:.1f}% del paso anterior" if i > 0 else "100% referencia"
-        fig.add_trace(
-            go.Bar(
-                y=[label],
-                x=[value],
-                orientation="h",
-                marker_color=colors[i],
-                text=f"  {value:,}   ({pct_ref:.1f}% del total exterior · {label_prev})",
-                textposition="outside",
-                textfont=dict(size=10, color="#444"),
-                cliponaxis=False,
-            )
-        )
+    # Escala √ para los anchos visuales: mantiene forma de embudo y garantiza que
+    # todos los pasos sean visibles aunque el ratio de conversión sea muy bajo.
+    import math
+
+    visual_x = [math.sqrt(max(v, 1)) for v in values]
+
+    conv_texts = [f"{values[0]:,}<br>100 %"]
+    for i in range(1, len(values)):
+        pct_total = values[i] / values[0] * 100 if values[0] else 0
+        pct_prev = values[i] / values[i - 1] * 100 if values[i - 1] else 0
+        conv_texts.append(f"{values[i]:,}<br>{pct_total:.1f} % total · {pct_prev:.1f} % anterior")
 
     n = len(labels)
+    fig = go.Figure(
+        go.Funnel(
+            y=labels,
+            x=visual_x,
+            text=conv_texts,
+            textinfo="text",
+            textfont=dict(size=11, color="white"),
+            marker=dict(color=colors, line=dict(color="white", width=1)),
+            connector=dict(line=dict(color="#e8e8e8", width=1)),
+        )
+    )
     fig.update_layout(
-        height=max(160, 60 * n + 40),
-        barmode="overlay",
+        height=max(200, 70 * n + 40),
         showlegend=False,
-        margin=dict(t=8, b=8, l=70, r=14),
+        margin=dict(t=8, b=14, l=80, r=14),
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
         font=_FONT,
-        xaxis=dict(
-            showgrid=False, showticklabels=False, zeroline=False, range=[0, values[0] * 1.55]
-        ),
-        yaxis=dict(
-            showgrid=False,
-            tickfont=dict(size=12, color="#333"),
-            categoryorder="array",
-            categoryarray=labels[::-1],
-        ),
     )
     return fig
 
@@ -697,8 +702,9 @@ def _chart_trafico_diario_mes(
             row=row,
             col=1,
         )
+    dyn_h_mes = max(300, 120 + 60 * (len(ext_zones) + len(int_zones)))
     fig.update_layout(
-        height=260,
+        height=dyn_h_mes,
         barmode="group",
         margin=dict(t=26, b=40, l=60, r=14),
         plot_bgcolor="rgba(0,0,0,0)",
@@ -1119,6 +1125,51 @@ def _build_insights(
         except Exception:
             pass
 
+    # ── 8. Festivos: mencionar y comparar con días laborables ────────────────
+    festivos = _get_festivos(d0, d1)
+    if festivos and ext_zones:
+        try:
+            festivos_ts = {pd.Timestamp(k): v for k, v in festivos.items()}
+            dias_rng_f = pd.date_range(d0, d1, freq="D")
+            ez_id = ext_zones[0]["zona_id"]
+            vis_ext_dia = (
+                act[act["zona_id"] == ez_id]
+                .groupby("fecha")["unique_visitors"]
+                .sum()
+                .reindex(dias_rng_f, fill_value=0)
+            )
+            fest_days = [d for d in dias_rng_f if d in festivos_ts]
+            work_days = [d for d in dias_rng_f if d not in festivos_ts and d.dayofweek < 5]
+            vis_fest = vis_ext_dia[vis_ext_dia.index.isin(fest_days)].values
+            vis_work = vis_ext_dia[vis_ext_dia.index.isin(work_days)].values
+            nombres = ", ".join(sorted(set(festivos_ts.values())))
+            n_fest = len(fest_days)
+            plural = "s" if n_fest > 1 else ""
+            if n_fest > 0 and vis_work.size > 0 and vis_work.mean() > 0 and vis_fest.size > 0:
+                ratio = vis_fest.mean() / vis_work.mean()
+                if ratio >= 1.05:
+                    concl = f"registraron de media un {(ratio-1)*100:.0f}% más de visitas que los días laborables habituales"
+                elif ratio <= 0.95:
+                    concl = f"registraron de media un {(1-ratio)*100:.0f}% menos visitas que los días laborables habituales"
+                else:
+                    concl = "no mostraron diferencias destacables respecto a los días laborables"
+                items.append(
+                    {
+                        "level": "secondary",
+                        "text": f"El período incluye {n_fest} día{plural} festivo{plural}: {nombres}. "
+                        f"Esos días {concl} en «{ext_zones[0]['nombre']}».",
+                    }
+                )
+            elif n_fest > 0:
+                items.append(
+                    {
+                        "level": "secondary",
+                        "text": f"El período incluye {n_fest} día{plural} festivo{plural}: {nombres}.",
+                    }
+                )
+        except Exception:
+            pass
+
     return items
 
 
@@ -1171,6 +1222,9 @@ def _build_semanas_mes(
             if "llueve" in w_sem.columns:
                 n_lluvia = int(w_sem["llueve"].fillna(0).sum())
 
+        # Festivos
+        festivos_sem = _get_festivos(ws_eff, we_eff)
+
         # Tasa de conversión calle→tienda
         conv_text = ""
         if ext_zones and int_zones:
@@ -1191,6 +1245,10 @@ def _build_semanas_mes(
             f"Pico el {_DIAS_ES[pico_d.dayofweek]} {pico_d.day}/{pico_d.month} "
             f"({pico_vis:,} vis., {(pico_vis-media_vis)/media_vis*100:+.0f}% sobre la media de la semana)."
         ]
+        if festivos_sem:
+            nombres_fest = ", ".join(sorted(set(festivos_sem.values())))
+            plural = "s" if len(festivos_sem) > 1 else ""
+            texto_parts.append(f"Festivo{plural}: {nombres_fest}.")
         if n_lluvia > 0:
             texto_parts.append(f"Días de lluvia: {n_lluvia}.")
         if temp_media:
@@ -1236,7 +1294,8 @@ def _build_capitulos(
         kpis_mes = _build_kpis(df_v, d0_mes.isoformat()[:10], d1_mes.isoformat()[:10])
 
         fig_mes = _chart_trafico_diario_mes(df_v, zonas_info, d0_mes, d1_mes)
-        chart_mes_b64 = _fig_to_b64(fig_mes, width=900, height=260) if fig_mes.data else ""
+        mes_h = fig_mes.layout.height or 300
+        chart_mes_b64 = _fig_to_b64(fig_mes, width=900, height=mes_h) if fig_mes.data else ""
 
         df_w_mes = (
             df_weather[(df_weather["fecha"] >= d0_mes) & (df_weather["fecha"] <= d1_mes)].copy()
@@ -1353,7 +1412,10 @@ def generar_pdf_informe(
     fig_temp = _chart_temperatura(df_weather, date_from, date_to) if not df_weather.empty else None
     fig_cruc = _chart_cruceros(s_cruceros, date_from, date_to) if tiene_cruceros else None
 
-    chart_trafico_b64 = _fig_to_b64(fig_trafico, width=900, height=290)
+    trafico_h = fig_trafico.layout.height or 340
+    chart_trafico_b64 = (
+        _fig_to_b64(fig_trafico, width=900, height=trafico_h) if fig_trafico.data else ""
+    )
     chart_dias_b64 = _fig_to_b64(fig_dias, width=900, height=240)
     chart_embudo_b64 = (
         _fig_to_b64(fig_embudo, width=900, height=fig_embudo.layout.height) if fig_embudo else ""
