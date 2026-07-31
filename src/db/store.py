@@ -498,6 +498,18 @@ _DDL: list[str] = [
         creado_en       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS report_schedules (
+        id               SERIAL PRIMARY KEY,
+        loc_uuid         TEXT NOT NULL UNIQUE,
+        tipo_periodo     TEXT NOT NULL CHECK (tipo_periodo IN ('semanal', 'mensual', 'fecha')),
+        fecha_concreta   DATE,
+        emails           TEXT NOT NULL DEFAULT '[]',
+        activo           BOOLEAN NOT NULL DEFAULT TRUE,
+        creado_en        TIMESTAMPTZ DEFAULT NOW(),
+        ultima_ejecucion TIMESTAMPTZ
+    )
+    """,
 ]
 
 _VISITAS_COLS = [

@@ -1,8 +1,8 @@
 """
 Tab Informes — solo visible para rol admin.
 
-Panel de generación de informes PDF por período y ubicación.
-Futuro: configuración de envío automático por email.
+Panel de generación de informes PDF por período y ubicación,
+con configuración de envío automático por email.
 """
 
 from datetime import date, timedelta
@@ -12,7 +12,7 @@ from dash import Input, Output, State, dcc, html, no_update
 
 from src.core.config import app
 
-_C_ACCENT = "#495057"  # gris Bootstrap secondary — nunca colores de org
+_C_ACCENT = "#495057"
 _C_DARK = "#2c3e50"
 _C_MUTED = "#8492a6"
 _C_BORDER = "#edf0f5"
@@ -77,10 +77,9 @@ def build_tab_informes():
                 ),
                 className="mb-4",
             ),
-            # ── Formulario ────────────────────────────────────────────────────
+            # ── Formulario de generación ───────────────────────────────────────
             dbc.Row(
                 [
-                    # Columna izquierda: configuración
                     dbc.Col(
                         dbc.Card(
                             dbc.CardBody(
@@ -142,7 +141,6 @@ def build_tab_informes():
                         lg=4,
                         xl=3,
                     ),
-                    # Columna derecha: contenido del informe
                     dbc.Col(
                         dbc.Card(
                             dbc.CardBody(
@@ -165,43 +163,113 @@ def build_tab_informes():
                 ],
                 className="g-3",
             ),
-            # ── Sección futura: programación automática ────────────────────────
+            # ── Envío automático ───────────────────────────────────────────────
             dbc.Row(
                 dbc.Col(
                     dbc.Card(
                         dbc.CardBody(
                             [
-                                html.Div(
+                                _section_header("Envío automático por email"),
+                                # Estado actual (se rellena con callback)
+                                html.Div(id="inf-schedule-status", className="mb-3"),
+                                dbc.Row(
                                     [
-                                        html.I(
-                                            className="fas fa-clock me-2 text-secondary",
+                                        # Frecuencia
+                                        dbc.Col(
+                                            [
+                                                _section_label("Frecuencia"),
+                                                dbc.RadioItems(
+                                                    id="inf-sched-tipo",
+                                                    options=[
+                                                        {
+                                                            "label": "Semanal — cada lunes 08:00",
+                                                            "value": "semanal",
+                                                        },
+                                                        {
+                                                            "label": "Mensual — día 1 de cada mes",
+                                                            "value": "mensual",
+                                                        },
+                                                        {
+                                                            "label": "Fecha concreta",
+                                                            "value": "fecha",
+                                                        },
+                                                    ],
+                                                    value="semanal",
+                                                    style={"fontSize": "0.87rem"},
+                                                ),
+                                                html.Div(
+                                                    id="inf-sched-fecha-wrapper",
+                                                    style={"display": "none"},
+                                                    children=[
+                                                        dcc.DatePickerSingle(
+                                                            id="inf-sched-fecha",
+                                                            min_date_allowed=date.today().isoformat(),
+                                                            display_format="DD/MM/YYYY",
+                                                            className="mt-2",
+                                                        )
+                                                    ],
+                                                ),
+                                            ],
+                                            md=5,
                                         ),
-                                        html.Span(
-                                            "Envío automático",
-                                            className="fw-bold text-dark",
-                                            style={"fontSize": "0.85rem"},
-                                        ),
-                                        dbc.Badge(
-                                            "Próximamente",
-                                            color="light",
-                                            text_color="secondary",
-                                            className="ms-2 border",
-                                            style={"fontSize": "0.62rem"},
+                                        # Destinatarios
+                                        dbc.Col(
+                                            [
+                                                _section_label(
+                                                    "Destinatarios (separados por coma)"
+                                                ),
+                                                dbc.Input(
+                                                    id="inf-sched-emails",
+                                                    placeholder="email1@empresa.com, email2@empresa.com",
+                                                    type="text",
+                                                    size="sm",
+                                                    className="mb-3",
+                                                    style={"fontSize": "0.87rem"},
+                                                ),
+                                                dbc.Row(
+                                                    [
+                                                        dbc.Col(
+                                                            dbc.Button(
+                                                                [
+                                                                    html.I(
+                                                                        className="fas fa-clock me-2"
+                                                                    ),
+                                                                    "Guardar programación",
+                                                                ],
+                                                                id="inf-sched-btn-guardar",
+                                                                color="dark",
+                                                                outline=True,
+                                                                size="sm",
+                                                                className="w-100 fw-bold rounded-3",
+                                                            ),
+                                                            xs=8,
+                                                        ),
+                                                        dbc.Col(
+                                                            dbc.Button(
+                                                                html.I(className="fas fa-trash"),
+                                                                id="inf-sched-btn-eliminar",
+                                                                color="danger",
+                                                                outline=True,
+                                                                size="sm",
+                                                                className="w-100 rounded-3",
+                                                                title="Eliminar programación",
+                                                            ),
+                                                            xs=4,
+                                                        ),
+                                                    ],
+                                                    className="g-2",
+                                                ),
+                                            ],
+                                            md=7,
                                         ),
                                     ],
-                                    className="d-flex align-items-center mb-2",
+                                    className="g-3",
                                 ),
-                                html.P(
-                                    "Configura el envío periódico por email: informe semanal cada lunes, "
-                                    "mensual el día 1, o en fechas concretas para campañas.",
-                                    className="text-muted mb-0",
-                                    style={"fontSize": "0.82rem"},
-                                ),
+                                html.Div(id="inf-sched-status", className="mt-3"),
                             ],
-                            className="p-3",
+                            style={"padding": "20px 18px"},
                         ),
                         className="border-0 shadow-sm rounded-4",
-                        style={"opacity": "0.65"},
                     )
                 ),
                 className="mt-3",
@@ -295,6 +363,48 @@ def _preview_summary(period_label: str, loc_nombre: str, n_zonas: int) -> html.D
     )
 
 
+def _schedule_status_badge(sched: dict | None) -> html.Div:
+    if not sched:
+        return html.Div(
+            [
+                html.I(className="fas fa-circle-xmark me-2 text-secondary"),
+                html.Span("Sin programación activa", className="text-muted small"),
+            ],
+            className="d-flex align-items-center",
+        )
+    tipo_label = {
+        "semanal": "Semanal · lunes 08:00",
+        "mensual": "Mensual · día 1",
+        "fecha": f"Fecha: {sched.get('fecha_concreta', '')}",
+    }
+    emails_str = ", ".join(sched.get("emails") or [])
+    ultima = sched.get("ultima_ejecucion")
+    ultima_txt = f" · último envío {ultima[:10]}" if ultima else ""
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.I(className="fas fa-circle-check me-2", style={"color": "#198754"}),
+                    html.Span(
+                        f"Activo — {tipo_label.get(sched['tipo_periodo'], sched['tipo_periodo'])}{ultima_txt}",
+                        className="fw-bold small text-dark",
+                    ),
+                ],
+                className="d-flex align-items-center mb-1",
+            ),
+            html.Div(
+                [
+                    html.I(className="fas fa-envelope me-2 text-muted"),
+                    html.Span(emails_str, className="text-muted small"),
+                ],
+                className="d-flex align-items-center",
+            ),
+        ],
+        className="p-2 rounded-3",
+        style={"background": "#f0faf4", "borderLeft": "3px solid #198754"},
+    )
+
+
 # ── Callbacks ─────────────────────────────────────────────────────────────────
 
 
@@ -304,6 +414,110 @@ def _preview_summary(period_label: str, loc_nombre: str, n_zonas: int) -> html.D
 )
 def toggle_rango(tipo):
     return {"display": "block"} if tipo == "rango" else {"display": "none"}
+
+
+@app.callback(
+    Output("inf-sched-fecha-wrapper", "style"),
+    Input("inf-sched-tipo", "value"),
+)
+def toggle_sched_fecha(tipo):
+    return {"display": "block"} if tipo == "fecha" else {"display": "none"}
+
+
+@app.callback(
+    Output("inf-schedule-status", "children"),
+    Output("inf-sched-tipo", "value"),
+    Output("inf-sched-emails", "value"),
+    Output("inf-sched-fecha", "date"),
+    Input("loc-loaded", "data"),
+)
+def load_schedule(locs):
+    if not locs:
+        return _schedule_status_badge(None), "semanal", "", None
+    loc_uuid = locs[0] if isinstance(locs, list) else locs
+    try:
+        from src.db.queries import get_report_schedule
+
+        sched = get_report_schedule(loc_uuid)
+    except Exception:
+        sched = None
+    if not sched:
+        return _schedule_status_badge(None), "semanal", "", None
+    emails_str = ", ".join(sched.get("emails") or [])
+    return (
+        _schedule_status_badge(sched),
+        sched["tipo_periodo"],
+        emails_str,
+        sched.get("fecha_concreta"),
+    )
+
+
+@app.callback(
+    Output("inf-schedule-status", "children", allow_duplicate=True),
+    Output("inf-sched-status", "children"),
+    Input("inf-sched-btn-guardar", "n_clicks"),
+    State("inf-sched-tipo", "value"),
+    State("inf-sched-emails", "value"),
+    State("inf-sched-fecha", "date"),
+    State("loc-loaded", "data"),
+    prevent_initial_call=True,
+)
+def guardar_schedule(n_clicks, tipo, emails_raw, fecha_concreta, locs):
+    if not locs:
+        return no_update, dbc.Alert(
+            "Primero carga una ubicación.", color="warning", className="small py-2 rounded-3"
+        )
+    loc_uuid = locs[0] if isinstance(locs, list) else locs
+    emails = [e.strip() for e in (emails_raw or "").split(",") if e.strip()]
+    if not emails:
+        return no_update, dbc.Alert(
+            "Introduce al menos un email.", color="warning", className="small py-2 rounded-3"
+        )
+    if tipo == "fecha" and not fecha_concreta:
+        return no_update, dbc.Alert(
+            "Selecciona la fecha de envío.", color="warning", className="small py-2 rounded-3"
+        )
+    try:
+        from src.db.queries import get_report_schedule, upsert_report_schedule
+
+        upsert_report_schedule(loc_uuid, tipo, emails, fecha_concreta if tipo == "fecha" else None)
+        sched = get_report_schedule(loc_uuid)
+        return _schedule_status_badge(sched), dbc.Alert(
+            [html.I(className="fas fa-circle-check me-2 text-success"), "Programación guardada."],
+            color="light",
+            className="small py-2 rounded-3",
+            style={"borderLeft": "3px solid #198754"},
+        )
+    except Exception as exc:
+        return no_update, dbc.Alert(
+            f"Error: {exc}", color="danger", className="small py-2 rounded-3"
+        )
+
+
+@app.callback(
+    Output("inf-schedule-status", "children", allow_duplicate=True),
+    Output("inf-sched-status", "children", allow_duplicate=True),
+    Input("inf-sched-btn-eliminar", "n_clicks"),
+    State("loc-loaded", "data"),
+    prevent_initial_call=True,
+)
+def eliminar_schedule(n_clicks, locs):
+    if not locs:
+        return no_update, no_update
+    loc_uuid = locs[0] if isinstance(locs, list) else locs
+    try:
+        from src.db.queries import delete_report_schedule
+
+        delete_report_schedule(loc_uuid)
+        return _schedule_status_badge(None), dbc.Alert(
+            [html.I(className="fas fa-trash me-2"), "Programación eliminada."],
+            color="light",
+            className="small py-2 rounded-3",
+        )
+    except Exception as exc:
+        return no_update, dbc.Alert(
+            f"Error: {exc}", color="danger", className="small py-2 rounded-3"
+        )
 
 
 @app.callback(

@@ -692,3 +692,97 @@ def upsert_poi(
             fuente,
         ],
     )
+
+
+# ── Report schedules ──────────────────────────────────────────────────────────
+
+
+def get_report_schedule(loc_uuid: str) -> dict | None:
+    row = (
+        get_conn()
+        .execute(
+            "SELECT id, loc_uuid, tipo_periodo, fecha_concreta, emails, activo, ultima_ejecucion "
+            "FROM report_schedules WHERE loc_uuid = ? AND activo = TRUE",
+            [loc_uuid],
+        )
+        .fetchone()
+    )
+    if not row:
+        return None
+    import json
+
+    return {
+        "id": row[0],
+        "loc_uuid": row[1],
+        "tipo_periodo": row[2],
+        "fecha_concreta": str(row[3]) if row[3] else None,
+        "emails": json.loads(row[4]),
+        "activo": row[5],
+        "ultima_ejecucion": str(row[6]) if row[6] else None,
+    }
+
+
+def upsert_report_schedule(
+    loc_uuid: str,
+    tipo_periodo: str,
+    emails: list[str],
+    fecha_concreta: str | None = None,
+) -> None:
+    import json
+
+    get_conn().execute(
+        """INSERT INTO report_schedules (loc_uuid, tipo_periodo, fecha_concreta, emails, activo)
+           VALUES (?, ?, ?, ?, TRUE)
+           ON CONFLICT (loc_uuid) DO UPDATE
+           SET tipo_periodo     = excluded.tipo_periodo,
+               fecha_concreta   = excluded.fecha_concreta,
+               emails           = excluded.emails,
+               activo           = TRUE,
+               ultima_ejecucion = NULL""",
+        [loc_uuid, tipo_periodo, fecha_concreta, json.dumps(emails)],
+    )
+
+
+def delete_report_schedule(loc_uuid: str) -> None:
+    get_conn().execute("UPDATE report_schedules SET activo = FALSE WHERE loc_uuid = ?", [loc_uuid])
+
+
+def get_active_schedules(tipo_periodo: str, fecha: str | None = None) -> list[dict]:
+    import json
+
+    if tipo_periodo == "fecha":
+        rows = (
+            get_conn()
+            .execute(
+                "SELECT id, loc_uuid, tipo_periodo, fecha_concreta, emails FROM report_schedules "
+                "WHERE activo = TRUE AND tipo_periodo = 'fecha' AND fecha_concreta = ?::date",
+                [fecha],
+            )
+            .fetchall()
+        )
+    else:
+        rows = (
+            get_conn()
+            .execute(
+                "SELECT id, loc_uuid, tipo_periodo, fecha_concreta, emails FROM report_schedules "
+                "WHERE activo = TRUE AND tipo_periodo = ?",
+                [tipo_periodo],
+            )
+            .fetchall()
+        )
+    return [
+        {
+            "id": r[0],
+            "loc_uuid": r[1],
+            "tipo_periodo": r[2],
+            "fecha_concreta": str(r[3]) if r[3] else None,
+            "emails": json.loads(r[4]),
+        }
+        for r in rows
+    ]
+
+
+def mark_schedule_executed(schedule_id: int) -> None:
+    get_conn().execute(
+        "UPDATE report_schedules SET ultima_ejecucion = NOW() WHERE id = ?", [schedule_id]
+    )

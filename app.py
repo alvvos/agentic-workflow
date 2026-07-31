@@ -12,5 +12,9 @@ from src.layout.main_layout import serve_layout
 
 app.layout = serve_layout
 
+from src.reporting.scheduler import start_scheduler  # noqa: E402
+
+start_scheduler()
+
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False, host="0.0.0.0", port=8051)
