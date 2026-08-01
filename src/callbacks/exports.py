@@ -1,42 +1,12 @@
-import io
 from datetime import datetime, timedelta
 
 import dash
 import pandas as pd
-import plotly.graph_objects as go
 from dash import Input, Output, State, dcc
 
 from src.core.config import app
 from src.core.data_master import mapa_tiendas, mapa_zonas
 from src.db.queries import get_df_visitas
-
-
-@app.callback(
-    Output("download-bi-zip", "data"),
-    Input("btn-download-all-bi", "n_clicks"),
-    State({"type": "bi-graph", "index": dash.ALL}, "figure"),
-    State({"type": "bi-graph", "index": dash.ALL}, "id"),
-    prevent_initial_call=True,
-)
-def descargar_todos_graficos_bi(n, figures, ids):
-    if not n or not figures:
-        return dash.no_update
-    import zipfile as zf
-
-    buf = io.BytesIO()
-    with zf.ZipFile(buf, "w", zf.ZIP_DEFLATED) as z:
-        for fig_dict, gid in zip(figures, ids):
-            if not fig_dict:
-                continue
-            try:
-                fig = go.Figure(fig_dict)
-                img_bytes = fig.to_image(format="png", width=1400, height=600, scale=2)
-                nombre = (gid["index"] if isinstance(gid, dict) else str(gid))[:80]
-                z.writestr(f"{nombre}.png", img_bytes)
-            except Exception:
-                continue
-    buf.seek(0)
-    return dcc.send_bytes(buf.getvalue(), "graficos_bi.zip")
 
 
 @app.callback(

@@ -177,7 +177,6 @@ def auto_fill_zonas(_n, locs):
 
 
 def _build_child_section(locs, parent_name, seen_parents: set) -> list:
-    """Recursively build child zone selector blocks for parent_name."""
     if parent_name in seen_parents:
         return []
     seen_parents.add(parent_name)
@@ -195,20 +194,45 @@ def _build_child_section(locs, parent_name, seen_parents: set) -> list:
     blocks = [
         html.Div(
             [
-                html.Label(
-                    f"Subzonas — {parent_name}",
-                    className="fw-bold small text-secondary mb-2 ms-1",
+                html.Div(
+                    [
+                        html.Span(
+                            "└",
+                            style={
+                                "fontFamily": "monospace",
+                                "fontSize": "0.9rem",
+                                "color": "#ced4da",
+                                "marginRight": "6px",
+                                "userSelect": "none",
+                                "flexShrink": 0,
+                            },
+                        ),
+                        html.Span(
+                            parent_name,
+                            className="fw-semibold",
+                            style={
+                                "fontSize": "0.72rem",
+                                "color": "#6c757d",
+                                "letterSpacing": "0.2px",
+                            },
+                        ),
+                    ],
+                    className="d-flex align-items-center mb-2",
                 ),
-                dbc.Checklist(
-                    id={"type": "child-zone-checklist", "index": parent_name},
-                    options=child_zones,
-                    value=[],
-                    inline=True,
-                    input_class_name="btn-check",
-                    label_class_name="btn btn-outline-secondary mb-2 me-2 fw-bold border-0 rounded-3",
+                html.Div(
+                    dbc.Checklist(
+                        id={"type": "child-zone-checklist", "index": parent_name},
+                        options=child_zones,
+                        value=[],
+                        inline=True,
+                        input_class_name="btn-check",
+                        label_class_name="btn btn-outline-secondary btn-sm fw-semibold rounded-pill px-3 py-1 mb-2 me-2",
+                    ),
+                    className="ps-3 border-start border-2",
+                    style={"borderColor": "#dee2e6"},
                 ),
             ],
-            className="ms-3 mb-3 border-start border-2 border-primary ps-3",
+            className="ms-3 mt-2 mb-2",
         )
     ]
     for z in child_zones:

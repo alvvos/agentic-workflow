@@ -13,46 +13,35 @@ def build_tab_bi():
             html.Br(),
             dcc.Store(id="zonas-activas-combined"),
             html.Div(id="bi-status-visor", className="mb-4"),
-            dbc.Row(
+            html.Div(
                 [
-                    dbc.Col(
-                        [
-                            html.Label(
-                                "Zonas activas:",
-                                className="fw-bold mb-3 text-secondary",
-                            ),
-                            dbc.Checklist(
-                                id="radar-drop-zonas",
-                                options=[],
-                                value=[],
-                                inline=True,
-                                input_class_name="btn-check",
-                                label_class_name="btn mb-2 me-2 fw-bold shadow-sm rounded-3",
-                            ),
-                            html.Div(id="radar-child-zones-wrapper"),
-                        ],
-                        width=12,
-                    )
+                    html.Div(
+                        html.Span(
+                            "ZONAS ACTIVAS",
+                            className="text-uppercase fw-semibold",
+                            style={
+                                "fontSize": "0.65rem",
+                                "letterSpacing": "1.4px",
+                                "color": "#6c757d",
+                            },
+                        ),
+                        className="mb-3",
+                    ),
+                    dbc.Checklist(
+                        id="radar-drop-zonas",
+                        options=[],
+                        value=[],
+                        inline=True,
+                        input_class_name="btn-check",
+                        label_class_name="btn btn-outline-primary btn-sm fw-semibold rounded-pill px-3 py-1 mb-2 me-2",
+                    ),
+                    html.Div(id="radar-child-zones-wrapper", className="mt-1"),
                 ],
-                className="mb-4",
-            ),
-            dbc.Row(
-                [
-                    dbc.Col(
-                        [
-                            dbc.Button(
-                                "Descargar todos (.png)",
-                                id="btn-download-all-bi",
-                                color="secondary",
-                                outline=True,
-                                className="mt-2 w-100 rounded-3 fw-bold shadow-sm",
-                            ),
-                            dcc.Download(id="download-bi-zip"),
-                        ],
-                        xs=12,
-                        className="text-end mb-4",
-                    )
-                ]
+                className="mb-4 px-3 py-3 rounded-4",
+                style={
+                    "background": "rgba(0,0,0,0.02)",
+                    "border": "1px solid rgba(0,0,0,0.07)",
+                },
             ),
             loading_section(
                 html.Div(id="bi-dynamic-content", style={"minHeight": "420px"}),
