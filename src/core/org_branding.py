@@ -69,16 +69,18 @@ _REGISTRY: dict[str, OrgBranding] = {
         secondary="#1A1A1A",
         logo_asset="/assets/logo_miniso.png",
         palette=(
-            "#E60012",
-            "#1A1A1A",
-            "#F4811F",
-            "#8E44AD",
-            "#16A085",
-            "#2980B9",
-            "#D35400",
-            "#6C3483",
-            "#148F77",
-            "#4D4D4D",
+            "#E60012",  # Miniso Red
+            "#1A1A1A",  # Miniso Black
+            "#FF3366",  # Pink Magenta (packaging accent)
+            "#FF6B6B",  # Coral Red (secondary red tint)
+            "#FFB3C1",  # Soft Rose (pastel line)
+            "#C62828",  # Deep Red
+            "#4A4A4A",  # Charcoal Gray
+            "#FF8C42",  # Warm Amber (seasonal collection)
+            "#D4145A",  # Deep Magenta
+            "#808080",  # Medium Gray
+            "#FFD6D6",  # Blush (lightest tint)
+            "#8B0000",  # Dark Crimson
         ),
     ),
     # ── S69 TSE Showroom HQ ───────────────────────────────────────────────────
