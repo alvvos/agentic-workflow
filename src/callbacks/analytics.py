@@ -235,6 +235,8 @@ def master_reactive_analytics(
     child_zone_names: set = set()
     funnel_step_map: dict[str, int] = {}
     parent_map: dict[str, str] = {}
+    all_zones_display: list[str] = []
+    _seen_adz: set = set()
     for loc in locs or []:
         for parent_name, children in data_master.mapa_hijos_por_zona.get(loc, {}).items():
             for z in children:
@@ -243,7 +245,10 @@ def master_reactive_analytics(
         for z in data_master.mapa_zonas_por_loc.get(loc, []):
             if z.get("funnel_step") is not None:
                 funnel_step_map[z["value"]] = z["funnel_step"]
-    zones_active = zones_bi
+            nm = z["value"]
+            if nm not in _seen_adz and "sinnombre" not in nm.lower():
+                all_zones_display.append(nm)
+                _seen_adz.add(nm)
     bi_content = generar_panel_bi_completo(
         df_bi,
         df_bi_hist,
@@ -251,7 +256,8 @@ def master_reactive_analytics(
         child_zones=child_zone_names,
         funnel_step_map=funnel_step_map,
         parent_map=parent_map,
-        zones_active=zones_active,
+        zones_active=zones_bi,
+        all_zones=all_zones_display,
     )
     audit_content = (
         generar_tabla_auditoria(df_actual)

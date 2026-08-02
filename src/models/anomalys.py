@@ -734,6 +734,7 @@ def generar_panel_bi_completo(
     funnel_step_map: dict | None = None,
     parent_map: dict | None = None,
     zones_active: list | None = None,
+    all_zones: list | None = None,
 ):
     if df_actual.empty:
         return dbc.Alert(
@@ -765,20 +766,19 @@ def generar_panel_bi_completo(
         years = list(df_u["fecha_dia"].dt.year.unique())
         festivos_ubi = _get_festivos_loc(ubi, years)
 
-        zonas_presentes = ordenar_zonas(df_u["Zona"].unique())
-        # zonas_kpi: todas las zonas presentes — KPI cards y heatmaps.
-        # zonas_funnel: solo zonas con zone_type definido, ordenadas por posición en el funnel.
-        # Si ninguna zona tiene zone_type: sin funnel (lista vacía).
-        zonas_kpi = zonas_presentes
+        # zonas_data: solo zonas con datos en el periodo — usadas para cálculos y gráficos.
+        # zonas_presentes: todas las zonas del location para el display (incluye inactivas e hijos).
+        zonas_data = ordenar_zonas(df_u["Zona"].unique())
+        zonas_presentes = list(dict.fromkeys(list(all_zones or []) + list(zonas_data)))
         _fsm = funnel_step_map or {}
         zonas_funnel = sorted(
-            [z for z in zonas_presentes if _fsm.get(z) is not None],
+            [z for z in zonas_data if _fsm.get(z) is not None],
             key=lambda z: _fsm[z],
         )
         mapa_colores = obtener_mapa_colores(zonas_presentes)
         cintas_kpis_zonas = []
 
-        _za = set(zones_active) if zones_active else set(zonas_presentes)
+        _za = set(zones_active) if zones_active else set(zonas_data)
         ordered = _ordered_zones_hierarchical(zonas_presentes, parent_map, funnel_step_map)
 
         for zona, depth in ordered:
@@ -1074,7 +1074,7 @@ def generar_panel_bi_completo(
             rows.append(dbc.Row([col1, col2]))
 
         heatmap_cols = []
-        for zona_hm in zonas_kpi:
+        for zona_hm in zonas_data:
             df_zona_hm = df_u[df_u["Zona"] == zona_hm]
             fig_hm = crear_mapa_calor_horario(df_zona_hm, zona_hm)
             if fig_hm is not None:
