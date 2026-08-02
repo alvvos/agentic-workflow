@@ -701,6 +701,30 @@ def _kpi_inline(titulo, val, hist, es_tiempo=False, es_ratio=False):
     )
 
 
+def _ordered_zones_hierarchical(zonas_presentes, parent_map, funnel_step_map):
+    """Returns [(zone_name, depth)] ordered: parents by funnel_step, each followed by children."""
+    pm = parent_map or {}
+    fsm = funnel_step_map or {}
+    children_of = {}
+    for child, parent in pm.items():
+        children_of.setdefault(parent, []).append(child)
+    parent_zones = sorted(
+        [z for z in zonas_presentes if z not in pm],
+        key=lambda z: (fsm.get(z, 99), z),
+    )
+    result = []
+    for parent in parent_zones:
+        result.append((parent, 0))
+        for child in children_of.get(parent, []):
+            if child in zonas_presentes:
+                result.append((child, 1))
+    seen = {z for z, _ in result}
+    for z in zonas_presentes:
+        if z not in seen:
+            result.append((z, 0))
+    return result
+
+
 def generar_panel_bi_completo(
     df_actual,
     df_hist,
@@ -708,6 +732,8 @@ def generar_panel_bi_completo(
     fechas_filtro=None,
     child_zones: set | None = None,
     funnel_step_map: dict | None = None,
+    parent_map: dict | None = None,
+    zones_active: list | None = None,
 ):
     if df_actual.empty:
         return dbc.Alert(
@@ -752,7 +778,12 @@ def generar_panel_bi_completo(
         mapa_colores = obtener_mapa_colores(zonas_presentes)
         cintas_kpis_zonas = []
 
-        for zona in zonas_kpi:
+        _za = set(zones_active) if zones_active else set(zonas_presentes)
+        ordered = _ordered_zones_hierarchical(zonas_presentes, parent_map, funnel_step_map)
+
+        for zona, depth in ordered:
+            if "sinnombre" in zona.lower():
+                continue
             df_z = df_u[df_u["Zona"] == zona]
             df_zh = df_h[df_h["Zona"] == zona] if not df_h.empty else pd.DataFrame()
 
@@ -799,42 +830,65 @@ def generar_panel_bi_completo(
             if val_uv28 is not None:
                 kpis_uv.append(_kpi_inline("UV 28d", val_uv28, None))
 
-            cinta_hijos = [
-                html.Div(
-                    [
-                        html.Span(
-                            [
-                                html.Span(
-                                    style={
-                                        "display": "inline-block",
-                                        "width": "8px",
-                                        "height": "8px",
-                                        "borderRadius": "50%",
-                                        "backgroundColor": color_zona,
-                                        "marginRight": "8px",
-                                        "flexShrink": 0,
-                                    }
-                                ),
-                                zona,
-                            ],
-                            className="fw-bold text-uppercase text-dark me-4 flex-shrink-0 d-flex align-items-center",
-                            style={"fontSize": "0.7rem", "letterSpacing": "0.5px"},
-                        ),
-                        _kpi_inline("Visitas", val_tv, hist_tv),
-                        _kpi_inline("Visitantes", val_uv, hist_uv),
-                        _kpi_inline("Nuevos", val_nv, hist_nv),
-                        _kpi_inline("Estancia", val_dt, hist_dt, es_tiempo=True),
-                        *kpis_uv,
-                    ],
-                    className="d-flex flex-wrap align-items-end gap-4",
-                )
-            ]
-            cinta = html.Div(
-                cinta_hijos,
-                className="mb-2 py-2 px-3 bg-light rounded-3 border-start border-3",
-                style={"borderLeftColor": color_zona},
+            is_active = zona in _za
+            dot_char = "◦" if depth > 0 else "●"
+            dot_color = color_zona if is_active else "#ced4da"
+            zona_label_style = {
+                "fontSize": "0.7rem",
+                "letterSpacing": "0.5px",
+                "color": "#adb5bd" if not is_active else "#212529",
+            }
+
+            toggle = dbc.Switch(
+                id={"type": "zone-active", "index": zona},
+                value=is_active,
+                className="mb-0 flex-shrink-0",
+                style={"transform": "scale(0.85)"},
             )
 
+            cinta = html.Div(
+                html.Div(
+                    [
+                        toggle,
+                        html.Span(
+                            dot_char,
+                            style={
+                                "color": dot_color,
+                                "fontSize": "0.75rem",
+                                "flexShrink": 0,
+                                "userSelect": "none",
+                            },
+                            className="me-1",
+                        ),
+                        html.Span(
+                            zona,
+                            className="fw-bold text-uppercase me-3 flex-shrink-0",
+                            style=zona_label_style,
+                        ),
+                        *(
+                            [
+                                _kpi_inline("Visitas", val_tv, hist_tv),
+                                _kpi_inline("Visitantes", val_uv, hist_uv),
+                                _kpi_inline("Nuevos", val_nv, hist_nv),
+                                _kpi_inline("Estancia", val_dt, hist_dt, es_tiempo=True),
+                                *kpis_uv,
+                            ]
+                            if is_active
+                            else [
+                                html.Span("—", className="text-muted", style={"fontSize": "0.8rem"})
+                            ]
+                        ),
+                    ],
+                    className="d-flex flex-wrap align-items-center gap-3",
+                ),
+                className="mb-2 py-2 px-3 rounded-3 border-start border-3"
+                + (" ms-4" if depth > 0 else ""),
+                style={
+                    "borderLeftColor": color_zona,
+                    "background": "rgba(248,249,250,0.6)" if depth > 0 else "rgba(248,249,250,1)",
+                    "opacity": "0.6" if not is_active else "1",
+                },
+            )
             cintas_kpis_zonas.append(cinta)
 
         # --- SECCIÓN REACTIVA DE FUNNEL (Ratio de Atracción) ---

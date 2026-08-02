@@ -1,5 +1,6 @@
+import dash
 import dash_bootstrap_components as dbc
-from dash import ALL, Input, Output, State, html
+from dash import ALL, Input, Output, State, ctx, html
 
 from src.core import data_master
 from src.core.config import app
@@ -248,15 +249,21 @@ def render_child_zone_selectors(selected_parents, locs):
     Output("zonas-activas-combined", "data"),
     [
         Input("radar-drop-zonas", "value"),
-        Input({"type": "child-zone-checklist", "index": ALL}, "value"),
+        Input({"type": "zone-active", "index": ALL}, "value"),
+    ],
+    [
+        State({"type": "zone-active", "index": ALL}, "id"),
+        State("zonas-activas-combined", "data"),
     ],
 )
-def combine_zones(parent_zones, child_zones_all):
-    combined = list(parent_zones or [])
-    for child_list in child_zones_all or []:
-        if child_list:
-            combined.extend(child_list)
-    return list(dict.fromkeys(combined))  # preserves order, deduplicates
+def combine_zones(radar_zones, toggle_values, toggle_ids, current):
+    if ctx.triggered_id == "radar-drop-zonas" or not toggle_ids:
+        return list(radar_zones or [])
+    active = [iid["index"] for iid, v in zip(toggle_ids, toggle_values) if v]
+    new = list(dict.fromkeys(active))
+    if set(new) == set(current or []):
+        return dash.no_update
+    return new
 
 
 @app.callback(

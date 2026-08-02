@@ -37,7 +37,7 @@ def _find_loc_image(loc_uuid: str | None) -> str | None:
         Output("audit-results", "children"),
         Output("panel-ejecutivo-content", "children"),
     ],
-    [Input("loc-loaded", "data")],
+    [Input("loc-loaded", "data"), Input("zonas-activas-combined", "data")],
     [
         State("tipo-fecha", "value"),
         State("date-rango", "start_date"),
@@ -53,11 +53,26 @@ def _find_loc_image(loc_uuid: str | None) -> str | None:
     prevent_initial_call=True,
 )
 def master_reactive_analytics(
-    locs, t_f, sd, ed, dia, parent_zones, child_zones_all, comp, pm_ventana, _data_v, s_id
+    locs,
+    zones_combined,
+    t_f,
+    sd,
+    ed,
+    dia,
+    parent_zones,
+    child_zones_all,
+    comp,
+    pm_ventana,
+    _data_v,
+    s_id,
 ):
-    parent_zones = parent_zones or []
-    child_zones = [z for lst in (child_zones_all or []) for z in (lst or [])]
-    zones_bi = list(dict.fromkeys(parent_zones + child_zones))
+    _trigger = ctx.triggered_id
+    if _trigger == "zonas-activas-combined":
+        zones_bi = list(zones_combined or [])
+    else:
+        parent_zones = parent_zones or []
+        child_zones = [z for lst in (child_zones_all or []) for z in (lst or [])]
+        zones_bi = list(dict.fromkeys(parent_zones + child_zones))
     if not locs:
         return html.Div(), "Esperando selección de ubicación...", html.Div(), html.Div()
     if isinstance(locs, str):
@@ -219,14 +234,24 @@ def master_reactive_analytics(
 
     child_zone_names: set = set()
     funnel_step_map: dict[str, int] = {}
+    parent_map: dict[str, str] = {}
     for loc in locs or []:
-        for children in data_master.mapa_hijos_por_zona.get(loc, {}).values():
-            child_zone_names.update(z["label"] for z in children)
+        for parent_name, children in data_master.mapa_hijos_por_zona.get(loc, {}).items():
+            for z in children:
+                child_zone_names.add(z["label"])
+                parent_map[z["label"]] = parent_name
         for z in data_master.mapa_zonas_por_loc.get(loc, []):
             if z.get("funnel_step") is not None:
                 funnel_step_map[z["value"]] = z["funnel_step"]
+    zones_active = zones_bi
     bi_content = generar_panel_bi_completo(
-        df_bi, df_bi_hist, comp, child_zones=child_zone_names, funnel_step_map=funnel_step_map
+        df_bi,
+        df_bi_hist,
+        comp,
+        child_zones=child_zone_names,
+        funnel_step_map=funnel_step_map,
+        parent_map=parent_map,
+        zones_active=zones_active,
     )
     audit_content = (
         generar_tabla_auditoria(df_actual)

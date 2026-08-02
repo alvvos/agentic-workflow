@@ -15,33 +15,15 @@ def build_tab_bi():
             html.Div(id="bi-status-visor", className="mb-4"),
             html.Div(
                 [
-                    html.Div(
-                        html.Span(
-                            "ZONAS ACTIVAS",
-                            className="text-uppercase fw-semibold",
-                            style={
-                                "fontSize": "0.65rem",
-                                "letterSpacing": "1.4px",
-                                "color": "#6c757d",
-                            },
-                        ),
-                        className="mb-3",
-                    ),
                     dbc.Checklist(
                         id="radar-drop-zonas",
                         options=[],
                         value=[],
-                        inline=False,
-                        input_class_name="form-check-input",
-                        label_class_name="form-check-label ms-2",
+                        style={"display": "none"},
                     ),
-                    html.Div(id="radar-child-zones-wrapper", className="mt-1"),
+                    html.Div(id="radar-child-zones-wrapper", style={"display": "none"}),
                 ],
-                className="mb-4 px-3 py-3 rounded-4",
-                style={
-                    "background": "rgba(0,0,0,0.02)",
-                    "border": "1px solid rgba(0,0,0,0.07)",
-                },
+                style={"display": "none"},
             ),
             loading_section(
                 html.Div(id="bi-dynamic-content", style={"minHeight": "420px"}),
