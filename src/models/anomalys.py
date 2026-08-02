@@ -731,8 +731,6 @@ def generar_panel_bi_completo(
     df_actual["fecha_dia"] = df_actual["fecha"].dt.normalize()
     if not df_hist.empty:
         df_hist["fecha_dia"] = df_hist["fecha"].dt.normalize()
-    multi_mes = df_actual["fecha_dia"].dt.to_period("M").nunique() > 1
-
     paneles = []
     for ubi in df_actual["Ubicación"].unique():
         df_u = df_actual[df_actual["Ubicación"] == ubi].copy()
@@ -786,6 +784,21 @@ def generar_panel_bi_completo(
 
             color_zona = mapa_colores.get(zona, "#34495e")
 
+            def _uv_rolling_val(df, col):
+                if col not in df.columns:
+                    return None
+                serie = df.sort_values("fecha_dia")[col].dropna()
+                return float(serie.iloc[-1]) if not serie.empty else None
+
+            val_uv7 = _uv_rolling_val(df_z, "uv_7d")
+            val_uv28 = _uv_rolling_val(df_z, "uv_28d")
+
+            kpis_uv = []
+            if val_uv7 is not None:
+                kpis_uv.append(_kpi_inline("UV 7d", val_uv7, None))
+            if val_uv28 is not None:
+                kpis_uv.append(_kpi_inline("UV 28d", val_uv28, None))
+
             cinta_hijos = [
                 html.Div(
                     [
@@ -811,17 +824,11 @@ def generar_panel_bi_completo(
                         _kpi_inline("Visitantes", val_uv, hist_uv),
                         _kpi_inline("Nuevos", val_nv, hist_nv),
                         _kpi_inline("Estancia", val_dt, hist_dt, es_tiempo=True),
+                        *kpis_uv,
                     ],
                     className="d-flex flex-wrap align-items-end gap-4",
                 )
             ]
-            cols_uv = [c for c in ["uv_7d", "uv_28d"] if c in df_z.columns]
-            if cols_uv and multi_mes:
-                uv_block = _seccion_uv_rolling(
-                    df_z, df_zh, cols_uv, multi_mes, zona, color_zona, ubi
-                )
-                if uv_block:
-                    cinta_hijos.append(uv_block)
             cinta = html.Div(
                 cinta_hijos,
                 className="mb-2 py-2 px-3 bg-light rounded-3 border-start border-3",
