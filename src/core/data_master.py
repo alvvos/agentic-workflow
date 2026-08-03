@@ -90,10 +90,12 @@ def _load_from_db() -> None:
 def get_opciones_orgs_for_user(org_access: list | None) -> list:
     """Devuelve las opciones de org filtradas por acceso.
     None  → admin/dev: ve todo.
-    []    → usuario sin asignaciones explícitas: ve todo (acceso abierto por defecto).
+    []    → usuario sin asignaciones: no ve ninguna org.
     [..] → restringido a las orgs asignadas vía accesos_usuario."""
-    if not org_access:  # None o lista vacía
+    if org_access is None:
         return list(opciones_orgs)
+    if not org_access:
+        return []
     allowed = set(org_access)
     return [o for o in opciones_orgs if o["value"] in allowed]
 

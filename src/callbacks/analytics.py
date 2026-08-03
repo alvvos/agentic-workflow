@@ -78,6 +78,19 @@ def master_reactive_analytics(
     if isinstance(locs, str):
         locs = [locs]
 
+    from src.core.auth import get_current_org_access
+
+    _org_access = get_current_org_access()
+    if _org_access is not None:
+        _allowed_locs = {
+            opt["value"]
+            for _oid in _org_access
+            for opt in data_master.mapa_locs_por_org.get(_oid, [])
+        }
+        locs = [loc_id for loc_id in locs if loc_id in _allowed_locs]
+    if not locs:
+        return html.Div(), "Sin acceso a las ubicaciones seleccionadas.", html.Div(), html.Div()
+
     df = get_df_visitas(locs)
     if df.empty:
         return html.Div(), "Sin datos. Sincroniza para descargar.", html.Div(), html.Div()

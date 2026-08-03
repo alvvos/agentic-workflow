@@ -196,6 +196,5 @@ def login():
 
 @server.route("/logout")
 def logout():
-    flask.session.pop("user", None)
-    flask.session.pop("role", None)
+    flask.session.clear()
     return flask.redirect("/login")

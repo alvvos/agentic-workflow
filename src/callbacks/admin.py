@@ -5,6 +5,7 @@ import flask
 from dash import ALL, Input, Output, State, callback_context, dcc, html, no_update
 from werkzeug.security import generate_password_hash
 
+from src.core.auth import is_admin
 from src.core.config import MODO_DESARROLLO, app
 from src.db.store import get_conn
 
@@ -560,6 +561,8 @@ def _stat_pill(value, label, icon, color_cls) -> html.Div:
     Input("admin-sub-tabs", "active_tab"),
 )
 def refresh_users_table(_, active_tab):
+    if not is_admin():
+        return no_update
     if active_tab != "admin-tab-users":
         return no_update
     return _render_users_table(_load_users())
@@ -572,6 +575,8 @@ def refresh_users_table(_, active_tab):
     Input("data-version", "data"),
 )
 def refresh_locs_tree(active_tab, _signal, _version):
+    if not is_admin():
+        return no_update
     if active_tab != "admin-tab-locs":
         return no_update
     orgs = _load_orgs()
@@ -599,6 +604,8 @@ def refresh_locs_tree(active_tab, _signal, _version):
     prevent_initial_call=True,
 )
 def add_user(_, username, password, role, signal):
+    if not is_admin():
+        return no_update, "Sin permisos.", True, "danger", no_update, no_update
     username = (username or "").strip()
     password = (password or "").strip()
 
@@ -728,6 +735,8 @@ def open_delete_modal(n_clicks_list):
     prevent_initial_call=True,
 )
 def handle_delete_modal(_, __, pending, signal):
+    if not is_admin():
+        return no_update, "Sin permisos.", True, "danger", no_update, False, no_update, False
     ctx = callback_context
     trigger = (ctx.triggered or [{}])[0].get("prop_id", "")
 
@@ -780,6 +789,8 @@ def handle_delete_modal(_, __, pending, signal):
     prevent_initial_call=True,
 )
 def toggle_role(n_clicks_list, signal):
+    if not is_admin():
+        return no_update, "Sin permisos.", True, "danger"
     ctx = callback_context
     if not ctx.triggered or all((n or 0) == 0 for n in n_clicks_list):
         return no_update, no_update, no_update, no_update
@@ -896,6 +907,8 @@ def open_access_modal(access_clicks, _cancel):
     prevent_initial_call=True,
 )
 def save_access_modal(n_clicks, selected_orgs, user_id, signal):
+    if not is_admin():
+        return no_update, "Sin permisos.", True, "danger", no_update
     if not n_clicks or not user_id:
         return no_update, no_update, no_update, no_update, no_update
     _set_user_org_access(user_id, selected_orgs or [])
@@ -918,6 +931,8 @@ def save_access_modal(n_clicks, selected_orgs, user_id, signal):
     prevent_initial_call=True,
 )
 def save_zone_hierarchy(n_clicks, parent_values, zone_ids, visible_values, signal):
+    if not is_admin():
+        return no_update, "Sin permisos.", True, "danger", no_update
     if not n_clicks or not zone_ids:
         return no_update, no_update, no_update, no_update, no_update
 

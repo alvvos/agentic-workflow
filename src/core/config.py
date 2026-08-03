@@ -29,7 +29,15 @@ app = dash.Dash(
 app.title = "Reporting Aitanna"
 
 server = app.server
-server.secret_key = os.getenv("SECRET_KEY", "dev-only-change-in-prod")
+_secret_key = os.getenv("SECRET_KEY")
+if not _secret_key:
+    if MODO_DESARROLLO:
+        _secret_key = "dev-only-insecure-key"
+    else:
+        raise RuntimeError(
+            "SECRET_KEY no está configurada. Define la variable de entorno antes de arrancar en producción."
+        )
+server.secret_key = _secret_key
 
 
 @server.teardown_request

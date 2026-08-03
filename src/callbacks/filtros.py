@@ -67,8 +67,13 @@ def toggle_fecha(tipo):
     Output("drop-locs", "options"), Output("drop-locs", "value"), Input("drop-org", "value")
 )
 def actualizar_locs(org_uuid):
+    from src.core.auth import get_current_org_access
+
     data_master.reload_if_changed()
     if not org_uuid:
+        return [], None
+    org_access = get_current_org_access()
+    if org_access is not None and org_uuid not in org_access:
         return [], None
     opciones = data_master.mapa_locs_por_org.get(org_uuid, [])
     default = opciones[0]["value"] if opciones else None
