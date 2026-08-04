@@ -2,6 +2,7 @@ import threading
 from datetime import datetime, timedelta
 
 import dash
+import pandas as pd
 from dash import Input, Output, State
 
 from src.core.config import app
@@ -21,19 +22,19 @@ def _read_status(session_id):
     return _sync_status.get(session_id)
 
 
-def _run_sync(session_id, locs):
+def _run_sync(session_id, locs, desde=None, hasta=None):
     cancel_event = _sync_threads.get(session_id)
 
     def progress_cb(current, total):
         _write_status(session_id, status="running", current=current, total=total)
-        if cancel_event and cancel_event.is_set():
-            pass  # sincronizador revisa stop_event en cada iteración
 
     try:
         actualizar_datos(
             locs if locs else None,
             stop_event=cancel_event,
             progress_cb=progress_cb,
+            desde=desde,
+            hasta=hasta,
         )
         final = "cancelled" if (cancel_event and cancel_event.is_set()) else "done"
         _write_status(session_id, status=final, current=0, total=0)
@@ -65,28 +66,16 @@ def actualizar_alerta_sync(session_id, _data_v, _tick, locs):
 
         ultima_por_loc = get_ultima_fecha_por_location()
         if not ultima_por_loc:
-            return (
-                "Sin datos — sincronizar",
-                "danger",
-                False,
-            )
+            return ("Sin datos — sincronizar", "danger", False)
         locs_list = [locs] if isinstance(locs, str) else (locs or [])
         fechas_locs = [ultima_por_loc[loc] for loc in locs_list if loc in ultima_por_loc]
         if not fechas_locs:
-            return (
-                "Sin datos — sincronizar",
-                "danger",
-                False,
-            )
+            return ("Sin datos — sincronizar", "danger", False)
         fecha_mas_atrasada = min(pd.to_datetime(f).date() for f in fechas_locs)
         ayer = datetime.today().date() - timedelta(days=1)
         dias = (ayer - fecha_mas_atrasada).days
         if dias > 1:
-            return (
-                f"Sincronizar · {dias}d sin datos",
-                "primary",
-                False,
-            )
+            return (f"Sincronizar · {dias}d sin datos", "primary", False)
     except Exception:
         pass
     return _normal
@@ -97,15 +86,55 @@ def actualizar_alerta_sync(session_id, _data_v, _tick, locs):
 
 @app.callback(
     Output("modal-sync", "is_open"),
-    Output("sync-trigger", "data"),
     Input("btn-sync", "n_clicks"),
     prevent_initial_call=True,
 )
 def abrir_modal_carga(n_clicks):
-    return True, n_clicks
+    return True
 
 
-# ── Lanzar sync en hilo background ──────────────────────────────────────────
+# ── Toggle colapso de rango ──────────────────────────────────────────────────
+
+
+@app.callback(
+    Output("sync-rango-collapse", "is_open"),
+    Input("sync-use-rango", "value"),
+)
+def toggle_rango_collapse(usar_rango):
+    return bool(usar_rango)
+
+
+# ── Vista: configurar vs. progreso ───────────────────────────────────────────
+
+
+@app.callback(
+    Output("sync-configure-phase", "style"),
+    Output("sync-progress-phase", "style"),
+    Input("sync-phase", "data"),
+)
+def actualizar_vista_sync(phase):
+    if phase == "progress":
+        return {"display": "none"}, {}
+    return {}, {"display": "none"}
+
+
+# ── Iniciar sync (desde modal) ───────────────────────────────────────────────
+
+
+@app.callback(
+    Output("sync-trigger", "data"),
+    Output("sync-phase", "data"),
+    Input("btn-iniciar-sync", "n_clicks"),
+    State("sync-trigger", "data"),
+    prevent_initial_call=True,
+)
+def iniciar_sync(n, current_trigger):
+    if not n:
+        return dash.no_update, dash.no_update
+    return (current_trigger or 0) + 1, "progress"
+
+
+# ── Lanzar hilo en background ────────────────────────────────────────────────
 
 
 @app.callback(
@@ -114,24 +143,31 @@ def abrir_modal_carga(n_clicks):
     Input("sync-trigger", "data"),
     State("drop-locs", "value"),
     State("session-id", "data"),
+    State("sync-input-desde", "date"),
+    State("sync-input-hasta", "date"),
+    State("sync-use-rango", "value"),
     prevent_initial_call=True,
 )
-def ejecutar_sincronizacion(trigger, locs, session_id):
+def ejecutar_sincronizacion(trigger, locs, session_id, desde, hasta, usar_rango):
     if not trigger:
         return True, 0
 
     with _sync_lock:
         if session_id in _sync_threads:
-            return False, dash.no_update  # ya en curso
+            return False, dash.no_update
 
         cancel_event = threading.Event()
         _sync_threads[session_id] = cancel_event
 
     _write_status(session_id, status="running", current=0, total=0)
 
+    _desde = desde if usar_rango and desde else None
+    _hasta = hasta if usar_rango and hasta else None
+
     threading.Thread(
         target=_run_sync,
         args=(session_id, locs),
+        kwargs={"desde": _desde, "hasta": _hasta},
         daemon=True,
     ).start()
     return False, 0
@@ -150,6 +186,7 @@ def ejecutar_sincronizacion(trigger, locs, session_id):
     Output("interval-sync-poll", "disabled", allow_duplicate=True),
     Output("sync-progress-text", "children"),
     Output("sync-progress-bar", "value", allow_duplicate=True),
+    Output("sync-phase", "data", allow_duplicate=True),
     Input("interval-sync-poll", "n_intervals"),
     State("session-id", "data"),
     prevent_initial_call=True,
@@ -159,7 +196,7 @@ def poll_sync_progress(_, session_id):
     data = _read_status(session_id)
 
     if data is None:
-        return _no, _no, _no, _no, _no, _no, True, "", 0
+        return _no, _no, _no, _no, _no, _no, True, "", 0, _no
 
     status = data.get("status", "running")
     current = data.get("current", 0)
@@ -168,7 +205,7 @@ def poll_sync_progress(_, session_id):
     progress_text = f"Ubicación {current} de {total}…" if total > 0 else "Iniciando…"
 
     if status == "running":
-        return True, _no, _no, _no, _no, _no, False, progress_text, pct
+        return True, _no, _no, _no, _no, _no, False, progress_text, pct, _no
 
     _sync_status.pop(session_id, None)
 
@@ -183,9 +220,21 @@ def poll_sync_progress(_, session_id):
             True,
             "",
             100,
+            "configure",
         )
     if status == "cancelled":
-        return (False, True, "Sincronización cancelada.", "warning", "Cancelado", _no, True, "", 0)
+        return (
+            False,
+            True,
+            "Sincronización cancelada.",
+            "warning",
+            "Cancelado",
+            _no,
+            True,
+            "",
+            0,
+            "configure",
+        )
     return (
         False,
         True,
@@ -196,6 +245,7 @@ def poll_sync_progress(_, session_id):
         True,
         "",
         0,
+        "configure",
     )
 
 
@@ -213,6 +263,3 @@ def cancelar_sincronizacion(_, session_id):
     if ev:
         ev.set()
     return "Cancelando… finalizando ubicación actual."
-
-
-import pandas as pd  # noqa: E402 — needed by actualizar_alerta_sync

@@ -150,6 +150,7 @@ def serve_layout():
             dcc.Store(id="session-id", data=session_id),
             dcc.Store(id="data-version", data=0),
             dcc.Store(id="sync-trigger", data=0),
+            dcc.Store(id="sync-phase", data="configure"),
             dcc.Store(id="sidebar-open", data=True),
             dcc.Store(id="loc-loaded", data=None),
             dcc.Store(id="org-branding-store", data=None),
@@ -171,39 +172,133 @@ def serve_layout():
             ),
             dbc.Modal(
                 [
+                    dbc.ModalHeader(
+                        dbc.ModalTitle(
+                            [
+                                html.I(className="fas fa-rotate me-2 text-primary"),
+                                "Sincronizar datos",
+                            ],
+                            className="fw-bold",
+                        ),
+                        close_button=True,
+                    ),
                     dbc.ModalBody(
                         html.Div(
                             [
+                                # ── Fase 1: Configuración ────────────────────────
                                 html.Div(
-                                    [
-                                        dbc.Spinner(color="primary", size="sm"),
-                                        html.H6(
-                                            "Sincronizando datos…",
-                                            className="ms-3 mb-0 text-primary fw-bold",
+                                    id="sync-configure-phase",
+                                    children=[
+                                        html.P(
+                                            "Descargará datos desde la última fecha registrada para la ubicación seleccionada.",
+                                            className="text-muted small mb-3",
+                                        ),
+                                        dbc.Switch(
+                                            id="sync-use-rango",
+                                            label="Restaurar rango específico",
+                                            value=False,
+                                            className="mb-2",
+                                        ),
+                                        dbc.Collapse(
+                                            id="sync-rango-collapse",
+                                            is_open=False,
+                                            children=[
+                                                dbc.Alert(
+                                                    [
+                                                        html.I(className="fas fa-info-circle me-2"),
+                                                        "Los datos existentes en el rango serán sobreescritos con los valores actuales de la API.",
+                                                    ],
+                                                    color="info",
+                                                    className="rounded-3 border-0 py-2 small mb-3",
+                                                ),
+                                                dbc.Row(
+                                                    [
+                                                        dbc.Col(
+                                                            [
+                                                                html.Label(
+                                                                    "Desde",
+                                                                    className="form-label fw-bold small text-muted",
+                                                                ),
+                                                                dcc.DatePickerSingle(
+                                                                    id="sync-input-desde",
+                                                                    display_format="DD MMM YYYY",
+                                                                    placeholder="Fecha inicio",
+                                                                    first_day_of_week=1,
+                                                                    style={"width": "100%"},
+                                                                ),
+                                                            ],
+                                                            width=6,
+                                                        ),
+                                                        dbc.Col(
+                                                            [
+                                                                html.Label(
+                                                                    "Hasta",
+                                                                    className="form-label fw-bold small text-muted",
+                                                                ),
+                                                                dcc.DatePickerSingle(
+                                                                    id="sync-input-hasta",
+                                                                    display_format="DD MMM YYYY",
+                                                                    placeholder="Fecha fin",
+                                                                    first_day_of_week=1,
+                                                                    style={"width": "100%"},
+                                                                ),
+                                                            ],
+                                                            width=6,
+                                                        ),
+                                                    ],
+                                                    className="g-2 mb-3",
+                                                ),
+                                            ],
+                                        ),
+                                        dbc.Button(
+                                            [
+                                                html.I(className="fas fa-play me-2"),
+                                                "Iniciar sincronización",
+                                            ],
+                                            id="btn-iniciar-sync",
+                                            color="primary",
+                                            className="w-100 rounded-3 fw-bold mt-2",
                                         ),
                                     ],
-                                    className="d-flex align-items-center mb-3",
                                 ),
-                                dbc.Progress(
-                                    id="sync-progress-bar",
-                                    value=0,
-                                    max=100,
-                                    striped=True,
-                                    animated=True,
-                                    color="primary",
-                                    className="mb-2",
-                                    style={"height": "10px", "borderRadius": "5px"},
-                                ),
+                                # ── Fase 2: Progreso ─────────────────────────────
                                 html.Div(
-                                    id="sync-progress-text", className="text-muted small mb-3"
-                                ),
-                                dbc.Button(
-                                    [html.I(className="fas fa-times me-1"), "Cancelar"],
-                                    id="btn-cancel-sync",
-                                    color="danger",
-                                    outline=True,
-                                    size="sm",
-                                    className="rounded-3",
+                                    id="sync-progress-phase",
+                                    style={"display": "none"},
+                                    children=[
+                                        html.Div(
+                                            [
+                                                dbc.Spinner(color="primary", size="sm"),
+                                                html.H6(
+                                                    "Sincronizando datos…",
+                                                    className="ms-3 mb-0 text-primary fw-bold",
+                                                ),
+                                            ],
+                                            className="d-flex align-items-center mb-3",
+                                        ),
+                                        dbc.Progress(
+                                            id="sync-progress-bar",
+                                            value=0,
+                                            max=100,
+                                            striped=True,
+                                            animated=True,
+                                            color="primary",
+                                            className="mb-2",
+                                            style={"height": "10px", "borderRadius": "5px"},
+                                        ),
+                                        html.Div(
+                                            id="sync-progress-text",
+                                            className="text-muted small mb-3",
+                                        ),
+                                        dbc.Button(
+                                            [html.I(className="fas fa-times me-1"), "Cancelar"],
+                                            id="btn-cancel-sync",
+                                            color="danger",
+                                            outline=True,
+                                            size="sm",
+                                            className="rounded-3",
+                                        ),
+                                    ],
                                 ),
                             ],
                             className="p-4",
