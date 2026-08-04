@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 
@@ -26,19 +27,26 @@ def _get_location_ids(ubicaciones_seleccionadas=None):
     return []
 
 
-def peticion_dia(loc_id, fecha_str):
+def peticion_dia(loc_id, fecha_str, max_retries=3):
     url = f"https://platform.aitanna.ai/api/v1/internal/get-anonymous-report/location/{loc_id}/date/{fecha_str}"
     headers = {"x-api-key": AITANNA_API_KEY}
-    try:
-        res = requests.get(url, headers=headers, timeout=15)
-        if res.status_code == 200:
-            return fecha_str, res.json(), "OK"
-        elif res.status_code == 404:
-            return fecha_str, None, "404"
-        else:
+    for attempt in range(max_retries):
+        try:
+            res = requests.get(url, headers=headers, timeout=15)
+            if res.status_code == 200:
+                return fecha_str, res.json(), "OK"
+            if res.status_code == 404:
+                return fecha_str, None, "404"
+            if res.status_code in (429, 503) and attempt < max_retries - 1:
+                time.sleep(2**attempt)
+                continue
             return fecha_str, None, f"Error {res.status_code}"
-    except Exception as e:
-        return fecha_str, None, f"Exception: {str(e)}"
+        except Exception as e:
+            if attempt < max_retries - 1:
+                time.sleep(2**attempt)
+                continue
+            return fecha_str, None, f"Exception: {str(e)}"
+    return fecha_str, None, "max_retries_exceeded"
 
 
 def _upsert_visitas(rows: list) -> None:
@@ -250,11 +258,8 @@ def actualizar_datos(
             )
 
         if zone_enum_map:
-            from src.db.store import get_conn as _gc
-
-            _conn = _gc()
             for z_uuid, z_enum in zone_enum_map.items():
-                _conn.execute(
+                conn.execute(
                     "UPDATE zonas SET zone_enum = %s WHERE zona_id = %s AND (zone_enum IS NULL OR zone_enum != %s)",
                     [z_enum, z_uuid, z_enum],
                 )

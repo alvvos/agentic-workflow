@@ -108,11 +108,11 @@ def reload_if_changed() -> bool:
         return False
     try:
         _load_from_db()
-        if opciones_orgs:
-            _last_load = now
         return True
     except Exception:
         return False
+    finally:
+        _last_load = now
 
 
 # Carga inicial al importar el módulo.
@@ -120,7 +120,7 @@ def reload_if_changed() -> bool:
 # la próxima llamada a reload_if_changed() reintentará de inmediato.
 try:
     _load_from_db()
-    if opciones_orgs:
-        _last_load = time.time()
 except Exception:
     pass
+finally:
+    _last_load = time.time()

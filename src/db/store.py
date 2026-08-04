@@ -51,7 +51,15 @@ def _build_pool() -> ConnectionPool:
         reconnect_timeout=pool_timeout,
         open=False,
     )
-    pool.open(wait=True, timeout=pool_timeout)
+    try:
+        pool.open(wait=True, timeout=pool_timeout)
+    except Exception as exc:
+        import logging
+
+        logging.getLogger("store").warning(
+            "DB no disponible al arrancar (%s) — la app levanta en modo degradado y reintentará.",
+            exc,
+        )
     atexit.register(pool.close)
     return pool
 
