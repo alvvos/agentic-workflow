@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import dash_bootstrap_components as dbc
 import pandas as pd
@@ -70,7 +70,68 @@ def _ordenar_zonas_fuera_dentro(zonas: list[dict]) -> list[dict]:
     return sorted(zonas, key=lambda z: (_depth(z["zona_id"]), z["nombre"]))
 
 
-def _zona_card(nombre: str, res: dict, color: str) -> dbc.Col:
+def _backtest_chart(res_bt: dict, color: str) -> go.Figure:
+    g = res_bt["grafica"]
+    fechas_bt = g["fechas"]
+    reales_bt = g["reales"]
+    predichos_bt = g["predichos"]
+
+    x_labels, y_reales, y_predichos = [], [], []
+    for i, f in enumerate(fechas_bt):
+        if i < len(reales_bt) and reales_bt[i] is not None:
+            dt = pd.to_datetime(f)
+            x_labels.append(f"{_DIAS_ES[dt.dayofweek]}<br>{dt.strftime('%d')}")
+            y_reales.append(reales_bt[i])
+            y_predichos.append(predichos_bt[i] if i < len(predichos_bt) else None)
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=x_labels,
+            y=y_reales,
+            mode="lines+markers",
+            line=dict(color="#95a5a6", width=2),
+            marker=dict(color="#95a5a6", size=5),
+            name="Real",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=x_labels,
+            y=y_predichos,
+            mode="lines",
+            line=dict(color=color, width=2, dash="dash"),
+            name="Predicho",
+        )
+    )
+    fig.update_layout(
+        height=160,
+        margin=dict(t=8, b=4, l=4, r=4),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        xaxis=dict(
+            showgrid=False,
+            tickfont=dict(size=9, color=_C_DARK),
+            fixedrange=True,
+            showline=False,
+            zeroline=False,
+        ),
+        yaxis=dict(visible=False, fixedrange=True, showgrid=False),
+        showlegend=True,
+        legend=dict(
+            font=dict(size=9),
+            orientation="h",
+            yanchor="top",
+            y=1.0,
+            xanchor="right",
+            x=1.0,
+            bgcolor="rgba(0,0,0,0)",
+        ),
+    )
+    return fig
+
+
+def _zona_card(nombre: str, res: dict, color: str, res_bt=None) -> dbc.Col:
     fechas = res["grafica"]["fechas"]
     predichos = [max(0, int(round(v))) for v in res["grafica"]["predichos"]]
     reales = res["grafica"]["reales"]
@@ -167,6 +228,53 @@ def _zona_card(nombre: str, res: dict, color: str) -> dbc.Col:
         showlegend=False,
     )
 
+    backtest_section = []
+    if res_bt is not None and res_bt.get("status") == "success":
+        m_bt = res_bt["metricas"]
+        acc_bt = m_bt.get("accuracy")
+        mae_bt = m_bt.get("mae")
+        wmape_bt = m_bt.get("wmape_pct")
+
+        acc_txt = (
+            f"Precisión: {float(acc_bt):.1f}%" if acc_bt not in ("N/A", None) else "Precisión: N/A"
+        )
+        mae_txt = f"MAE: {int(round(float(mae_bt))) if mae_bt not in ('N/A', None) else 'N/A'} vis"
+        wmape_txt = (
+            f"Error medio: {float(wmape_bt):.1f}%"
+            if wmape_bt not in ("N/A", None)
+            else "Error medio: N/A"
+        )
+
+        fig_bt = _backtest_chart(res_bt, color)
+        backtest_section = [
+            html.Div(
+                "Validación · últimos 7 días",
+                className="text-muted",
+                style={"fontSize": "0.70rem", "marginBottom": "4px"},
+            ),
+            dcc.Graph(
+                figure=fig_bt,
+                config=_CFG,
+                style={"height": "160px", "marginX": "-4px"},
+            ),
+            html.Div(
+                [
+                    html.Span(mae_txt, style={"color": _C_MUTED, "fontSize": "0.70rem"}),
+                    html.Span(" · ", style={"color": _C_MUTED, "fontSize": "0.70rem"}),
+                    html.Span(acc_txt, style={"color": _C_MUTED, "fontSize": "0.70rem"}),
+                    html.Span(" · ", style={"color": _C_MUTED, "fontSize": "0.70rem"}),
+                    html.Span(wmape_txt, style={"color": _C_MUTED, "fontSize": "0.70rem"}),
+                ],
+                className="mb-3",
+            ),
+            html.Hr(style={"borderColor": "#e9ecef", "margin": "0 0 8px 0"}),
+            html.Div(
+                "Próximos 7 días",
+                className="text-muted",
+                style={"fontSize": "0.70rem", "marginBottom": "8px"},
+            ),
+        ]
+
     return dbc.Col(
         dbc.Card(
             [
@@ -187,6 +295,7 @@ def _zona_card(nombre: str, res: dict, color: str) -> dbc.Col:
                             ],
                             className="d-flex align-items-center justify-content-between mb-3",
                         ),
+                        *backtest_section,
                         # Número grande: próximo día
                         html.Div(
                             [
@@ -442,6 +551,7 @@ def actualizar_prediccion_publica(tab, locs, session_id):
         loc_nombre = mapa_tiendas.get(loc_uuid, loc_uuid)
         zonas = [z for z in get_zones_for_loc(loc_uuid) if not z.get("oculta")]
 
+        falso_hoy_bt = (datetime.today() - timedelta(days=7)).strftime("%Y-%m-%d")
         zonas_ordenadas = _ordenar_zonas_fuera_dentro(zonas)
         zona_cols = []
         for idx, z in enumerate(zonas_ordenadas):
@@ -449,7 +559,8 @@ def actualizar_prediccion_publica(tab, locs, session_id):
             if res.get("status") != "success":
                 zona_cols.append(_zona_card_insuficiente(z["nombre"], _color_zona(idx)))
                 continue
-            zona_cols.append(_zona_card(z["nombre"], res, _color_zona(idx)))
+            res_bt = ejecutar_auditoria_predictiva(df_e, loc_uuid, z["zona_id"], falso_hoy_bt, 7)
+            zona_cols.append(_zona_card(z["nombre"], res, _color_zona(idx), res_bt=res_bt))
 
         if zona_cols:
             secciones.append(_loc_section(loc_nombre, zona_cols))
