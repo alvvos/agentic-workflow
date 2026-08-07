@@ -70,62 +70,153 @@ def _ordenar_zonas_fuera_dentro(zonas: list[dict]) -> list[dict]:
     return sorted(zonas, key=lambda z: (_depth(z["zona_id"]), z["nombre"]))
 
 
-def _backtest_chart(res_bt: dict, color: str) -> go.Figure:
-    g = res_bt["grafica"]
-    fechas_bt = g["fechas"]
-    reales_bt = g["reales"]
-    predichos_bt = g["predichos"]
+def _acc_color(acc) -> str:
+    if acc in ("N/A", None):
+        return _C_MUTED
+    try:
+        v = float(str(acc).replace("%", ""))
+        if v >= 85:
+            return "#27ae60"
+        if v >= 70:
+            return "#e67e22"
+        return "#e74c3c"
+    except Exception:
+        return _C_MUTED
 
-    x_labels, y_reales, y_predichos = [], [], []
-    for i, f in enumerate(fechas_bt):
-        if i < len(reales_bt) and reales_bt[i] is not None:
-            dt = pd.to_datetime(f)
-            x_labels.append(f"{_DIAS_ES[dt.dayofweek]}<br>{dt.strftime('%d')}")
-            y_reales.append(reales_bt[i])
-            y_predichos.append(predichos_bt[i] if i < len(predichos_bt) else None)
+
+def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
+    g_bt = res_bt["grafica"]
+    g_fw = res_fw["grafica"]
+
+    bt_x, bt_real, bt_pred = [], [], []
+    for i, f in enumerate(g_bt["fechas"]):
+        r = g_bt["reales"][i] if i < len(g_bt["reales"]) else None
+        if r is not None:
+            bt_x.append(f)
+            bt_real.append(float(r))
+            bt_pred.append(float(g_bt["predichos"][i]) if i < len(g_bt["predichos"]) else None)
+
+    fw_x = g_fw["fechas"]
+    fw_pred = [max(0, int(round(v))) for v in g_fw["predichos"]]
+    fw_lower = g_fw.get("lower") or []
+    fw_upper = g_fw.get("upper") or []
+
+    all_x = bt_x + fw_x
+    all_dates = [pd.to_datetime(x) for x in all_x]
+    step = max(1, len(all_dates) // 7)
+    tick_idx = list(range(0, len(all_dates), step))
+    if (len(all_dates) - 1) not in tick_idx:
+        tick_idx.append(len(all_dates) - 1)
+    tickvals = [all_x[i] for i in tick_idx]
+    ticktext = [
+        f"{_DIAS_ES[all_dates[i].dayofweek]}<br>{all_dates[i].strftime('%d')}" for i in tick_idx
+    ]
+
+    today_str = fw_x[0] if fw_x else None
 
     fig = go.Figure()
+
+    if fw_lower and fw_upper:
+        fig.add_trace(
+            go.Scatter(
+                x=fw_x + fw_x[::-1],
+                y=fw_upper + fw_lower[::-1],
+                fill="toself",
+                fillcolor=_rgba(color, 0.12),
+                line=dict(width=0),
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
+
     fig.add_trace(
         go.Scatter(
-            x=x_labels,
-            y=y_reales,
+            x=bt_x,
+            y=bt_real,
             mode="lines+markers",
-            line=dict(color="#95a5a6", width=2),
-            marker=dict(color="#95a5a6", size=5),
+            line=dict(color="#b2bec3", width=2),
+            marker=dict(size=4, color="#b2bec3"),
             name="Real",
         )
     )
     fig.add_trace(
         go.Scatter(
-            x=x_labels,
-            y=y_predichos,
+            x=bt_x,
+            y=bt_pred,
             mode="lines",
-            line=dict(color=color, width=2, dash="dash"),
-            name="Predicho",
+            line=dict(color=color, width=1.5, dash="dash"),
+            name="Modelo",
         )
     )
+    fig.add_trace(
+        go.Scatter(
+            x=fw_x,
+            y=fw_pred,
+            mode="lines+markers",
+            line=dict(color=color, width=2.5),
+            marker=dict(size=5, color="white", symbol="circle", line=dict(color=color, width=2)),
+            name="Previsión",
+            showlegend=False,
+        )
+    )
+
     fig.update_layout(
-        height=160,
-        margin=dict(t=8, b=4, l=4, r=4),
-        plot_bgcolor="white",
-        paper_bgcolor="white",
+        height=200,
+        margin=dict(t=24, b=4, l=4, r=4),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
         xaxis=dict(
-            showgrid=False,
-            tickfont=dict(size=9, color=_C_DARK),
+            type="date",
+            tickvals=tickvals,
+            ticktext=ticktext,
+            tickfont=dict(size=8, color=_C_DARK),
             fixedrange=True,
+            showgrid=False,
             showline=False,
             zeroline=False,
         ),
         yaxis=dict(visible=False, fixedrange=True, showgrid=False),
         showlegend=True,
         legend=dict(
-            font=dict(size=9),
+            font=dict(size=8),
             orientation="h",
             yanchor="top",
-            y=1.0,
+            y=1.06,
             xanchor="right",
             x=1.0,
             bgcolor="rgba(0,0,0,0)",
+        ),
+        shapes=(
+            [
+                dict(
+                    type="line",
+                    x0=today_str,
+                    x1=today_str,
+                    y0=0,
+                    y1=1,
+                    yref="paper",
+                    line=dict(color="#b2bec3", width=1.5, dash="dot"),
+                )
+            ]
+            if today_str
+            else []
+        ),
+        annotations=(
+            [
+                dict(
+                    x=today_str,
+                    y=1.0,
+                    yref="paper",
+                    text="hoy",
+                    showarrow=False,
+                    font=dict(size=7, color="#95a5a6"),
+                    xanchor="left",
+                    yanchor="bottom",
+                    xshift=3,
+                )
+            ]
+            if today_str
+            else []
         ),
     )
     return fig
@@ -228,127 +319,140 @@ def _zona_card(nombre: str, res: dict, color: str, res_bt=None) -> dbc.Col:
         showlegend=False,
     )
 
-    backtest_section = []
-    if res_bt is not None and res_bt.get("status") == "success":
+    has_bt = res_bt is not None and res_bt.get("status") == "success"
+
+    if has_bt:
         m_bt = res_bt["metricas"]
         acc_bt = m_bt.get("accuracy")
         mae_bt = m_bt.get("mae")
         wmape_bt = m_bt.get("wmape_pct")
 
-        acc_txt = (
-            f"Precisión: {float(acc_bt):.1f}%" if acc_bt not in ("N/A", None) else "Precisión: N/A"
-        )
-        mae_txt = f"MAE: {int(round(float(mae_bt))) if mae_bt not in ('N/A', None) else 'N/A'} vis"
-        wmape_txt = (
-            f"Error medio: {float(wmape_bt):.1f}%"
-            if wmape_bt not in ("N/A", None)
-            else "Error medio: N/A"
-        )
+        acc_display = f"{float(acc_bt):.1f}%" if acc_bt not in ("N/A", None) else "—"
+        mae_display = f"{int(round(float(mae_bt))):,}" if mae_bt not in ("N/A", None) else "—"
+        wmape_display = f"{float(wmape_bt):.1f}%" if wmape_bt not in ("N/A", None) else "—"
+        kpi_color = _acc_color(acc_bt)
 
-        fig_bt = _backtest_chart(res_bt, color)
-        backtest_section = [
-            html.Div(
-                "Validación · últimos 7 días",
-                className="text-muted",
-                style={"fontSize": "0.70rem", "marginBottom": "4px"},
-            ),
-            dcc.Graph(
-                figure=fig_bt,
-                config=_CFG,
-                style={"height": "160px", "marginX": "-4px"},
-            ),
-            html.Div(
+        metrics_row = html.Div(
+            dbc.Row(
                 [
-                    html.Span(mae_txt, style={"color": _C_MUTED, "fontSize": "0.70rem"}),
-                    html.Span(" · ", style={"color": _C_MUTED, "fontSize": "0.70rem"}),
-                    html.Span(acc_txt, style={"color": _C_MUTED, "fontSize": "0.70rem"}),
-                    html.Span(" · ", style={"color": _C_MUTED, "fontSize": "0.70rem"}),
-                    html.Span(wmape_txt, style={"color": _C_MUTED, "fontSize": "0.70rem"}),
+                    dbc.Col(
+                        [
+                            html.Div(
+                                acc_display,
+                                className="fw-bold lh-1",
+                                style={"fontSize": "1.35rem", "color": kpi_color},
+                            ),
+                            html.Div(
+                                "Precisión",
+                                style={
+                                    "fontSize": "0.65rem",
+                                    "color": _C_MUTED,
+                                    "marginTop": "2px",
+                                },
+                            ),
+                        ],
+                        className="text-center",
+                    ),
+                    dbc.Col(
+                        [
+                            html.Div(
+                                mae_display,
+                                className="fw-bold text-dark lh-1",
+                                style={"fontSize": "1.35rem"},
+                            ),
+                            html.Div(
+                                "MAE · visitas",
+                                style={
+                                    "fontSize": "0.65rem",
+                                    "color": _C_MUTED,
+                                    "marginTop": "2px",
+                                },
+                            ),
+                        ],
+                        className="text-center",
+                    ),
+                    dbc.Col(
+                        [
+                            html.Div(
+                                wmape_display,
+                                className="fw-bold text-dark lh-1",
+                                style={"fontSize": "1.35rem"},
+                            ),
+                            html.Div(
+                                "Error relativo",
+                                style={
+                                    "fontSize": "0.65rem",
+                                    "color": _C_MUTED,
+                                    "marginTop": "2px",
+                                },
+                            ),
+                        ],
+                        className="text-center",
+                    ),
                 ],
-                className="mb-3",
+                className="g-0",
             ),
-            html.Hr(style={"borderColor": "#e9ecef", "margin": "0 0 8px 0"}),
-            html.Div(
-                "Próximos 7 días",
-                className="text-muted",
-                style={"fontSize": "0.70rem", "marginBottom": "8px"},
+            className="py-2 px-3 mb-3 rounded-3",
+            style={"background": "#f8f9fa"},
+        )
+        chart_el = dcc.Graph(
+            figure=_unified_chart(res_bt, res, color),
+            config=_CFG,
+            style={"height": "200px", "margin": "0 -4px"},
+        )
+    else:
+        metrics_row = html.Span()
+        chart_el = dcc.Graph(figure=fig, config=_CFG, style={"height": "170px", "marginX": "-4px"})
+
+    manana_el = html.Div(
+        [
+            html.Span(
+                f"{dia_lbl} {fecha_lbl} · {primera_val:,} vis",
+                className="fw-semibold text-dark",
+                style={"fontSize": "0.80rem"},
             ),
-        ]
+            *(
+                [
+                    html.Span(
+                        f"  IC90% {lowers[0]:,}–{uppers[0]:,}",
+                        style={"fontSize": "0.70rem", "color": _C_PRIMARY, "marginLeft": "6px"},
+                        title=(
+                            "Intervalo de confianza conformal al 90 %.\n"
+                            "El modelo estima que el número real de visitas caerá\n"
+                            "dentro de este rango en 9 de cada 10 días."
+                        ),
+                    )
+                ]
+                if lowers and uppers
+                else []
+            ),
+            html.Div(tendencia_el, style={"marginTop": "2px"}),
+        ],
+        style={"marginTop": "10px"},
+    )
 
     return dbc.Col(
         dbc.Card(
-            [
-                dbc.CardBody(
-                    [
-                        # Cabecera zona
-                        html.Div(
-                            [
-                                html.Span(
-                                    nombre,
-                                    className="fw-bold text-dark",
-                                    style={
-                                        "fontSize": "0.82rem",
-                                        "textTransform": "uppercase",
-                                        "letterSpacing": "0.6px",
-                                    },
-                                ),
-                            ],
-                            className="d-flex align-items-center justify-content-between mb-3",
+            dbc.CardBody(
+                [
+                    html.Div(
+                        html.Span(
+                            nombre,
+                            className="fw-bold text-dark",
+                            style={
+                                "fontSize": "0.82rem",
+                                "textTransform": "uppercase",
+                                "letterSpacing": "0.6px",
+                            },
                         ),
-                        *backtest_section,
-                        # Número grande: próximo día
-                        html.Div(
-                            [
-                                html.Div(
-                                    f"{dia_lbl} {fecha_lbl}",
-                                    className="text-muted mb-0",
-                                    style={"fontSize": "0.72rem"},
-                                ),
-                                html.Div(
-                                    f"{primera_val:,}",
-                                    className="fw-bold text-dark lh-1",
-                                    style={"fontSize": "1.9rem"},
-                                ),
-                                *(
-                                    [
-                                        dbc.Badge(
-                                            f"IC90%  {lowers[0]:,} – {uppers[0]:,}",
-                                            color="light",
-                                            text_color="primary",
-                                            className="border border-primary-subtle fw-normal mt-1",
-                                            style={
-                                                "fontSize": "0.63rem",
-                                                "cursor": "default",
-                                                "letterSpacing": "0.3px",
-                                            },
-                                            title=(
-                                                "Intervalo de confianza conformal al 90 %.\n"
-                                                "El modelo estima que el número real de visitas caerá\n"
-                                                "dentro de este rango en 9 de cada 10 días.\n"
-                                                "Se calcula a partir de los residuos históricos del propio modelo."
-                                            ),
-                                        )
-                                    ]
-                                    if lowers and uppers
-                                    else []
-                                ),
-                                html.Div(
-                                    "visitas previstas",
-                                    className="text-muted mb-1",
-                                    style={"fontSize": "0.70rem"},
-                                ),
-                                tendencia_el,
-                            ],
-                            className="mb-3",
-                        ),
-                        # Mini gráfico
-                        dcc.Graph(
-                            figure=fig, config=_CFG, style={"height": "170px", "marginX": "-4px"}
-                        ),
-                    ],
-                    className="p-3",
-                ),
-            ],
+                        className="mb-3",
+                    ),
+                    metrics_row,
+                    chart_el,
+                    manana_el,
+                ],
+                className="p-3",
+            ),
             className="border-0 shadow-sm rounded-4 h-100 bg-white",
         ),
         xs=12,
@@ -448,7 +552,7 @@ def build_tab_prediccion_cliente(role: str = "viewer"):
                                     className="fw-bold mb-1 text-dark",
                                 ),
                                 html.P(
-                                    "Próximos 7 días · pulsa Aplicar tras seleccionar ubicación.",
+                                    "Próximos 14 días · validación retrospectiva incluida.",
                                     className="text-muted small mb-0",
                                 ),
                             ],
@@ -551,15 +655,15 @@ def actualizar_prediccion_publica(tab, locs, session_id):
         loc_nombre = mapa_tiendas.get(loc_uuid, loc_uuid)
         zonas = [z for z in get_zones_for_loc(loc_uuid) if not z.get("oculta")]
 
-        falso_hoy_bt = (datetime.today() - timedelta(days=7)).strftime("%Y-%m-%d")
+        falso_hoy_bt = (datetime.today() - timedelta(days=14)).strftime("%Y-%m-%d")
         zonas_ordenadas = _ordenar_zonas_fuera_dentro(zonas)
         zona_cols = []
         for idx, z in enumerate(zonas_ordenadas):
-            res = ejecutar_auditoria_predictiva(df_e, loc_uuid, z["zona_id"], falso_hoy, 7)
+            res = ejecutar_auditoria_predictiva(df_e, loc_uuid, z["zona_id"], falso_hoy, 14)
             if res.get("status") != "success":
                 zona_cols.append(_zona_card_insuficiente(z["nombre"], _color_zona(idx)))
                 continue
-            res_bt = ejecutar_auditoria_predictiva(df_e, loc_uuid, z["zona_id"], falso_hoy_bt, 7)
+            res_bt = ejecutar_auditoria_predictiva(df_e, loc_uuid, z["zona_id"], falso_hoy_bt, 14)
             zona_cols.append(_zona_card(z["nombre"], res, _color_zona(idx), res_bt=res_bt))
 
         if zona_cols:
