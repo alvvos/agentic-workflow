@@ -48,28 +48,6 @@ def _color_zona(idx: int) -> str:
     return palette[idx % len(palette)]
 
 
-def _ordenar_zonas_fuera_dentro(zonas: list[dict]) -> list[dict]:
-    """Ordena zonas de exterior (sin padre) a interior (con padre) por profundidad BFS.
-    Dentro del mismo nivel, alfabéticamente por nombre."""
-    by_uuid = {z["zona_id"]: z for z in zonas}
-    # Calcula profundidad de cada zona
-    depth: dict[str, int] = {}
-
-    def _depth(uuid: str) -> int:
-        if uuid in depth:
-            return depth[uuid]
-        z = by_uuid.get(uuid)
-        if z is None or not z.get("parent_zona_id"):
-            depth[uuid] = 0
-        else:
-            depth[uuid] = _depth(z["parent_zona_id"]) + 1
-        return depth[uuid]
-
-    for z in zonas:
-        _depth(z["zona_id"])
-    return sorted(zonas, key=lambda z: (_depth(z["zona_id"]), z["nombre"]))
-
-
 def _acc_color(acc) -> str:
     if acc in ("N/A", None):
         return _C_MUTED
@@ -129,13 +107,20 @@ def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
             )
         )
 
+    all_vals = [v for v in bt_real + fw_pred + (fw_upper or []) if v is not None]
+    y_max = max(all_vals) if all_vals else 1
+    y_ceil = y_max * 1.35
+
     fig.add_trace(
         go.Scatter(
             x=bt_x,
             y=bt_real,
-            mode="lines+markers",
+            mode="lines+markers+text",
             line=dict(color="#b2bec3", width=2),
             marker=dict(size=4, color="#b2bec3"),
+            text=[f"{int(v):,}" for v in bt_real],
+            textposition="top center",
+            textfont=dict(size=7, color="#95a5a6"),
             name="Real",
         )
     )
@@ -152,17 +137,20 @@ def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
         go.Scatter(
             x=fw_x,
             y=fw_pred,
-            mode="lines+markers",
+            mode="lines+markers+text",
             line=dict(color=color, width=2.5),
             marker=dict(size=5, color="white", symbol="circle", line=dict(color=color, width=2)),
+            text=[f"{v:,}" for v in fw_pred],
+            textposition="top center",
+            textfont=dict(size=8, color=_C_DARK, family="monospace"),
             name="Previsión",
             showlegend=False,
         )
     )
 
     fig.update_layout(
-        height=200,
-        margin=dict(t=24, b=4, l=4, r=4),
+        height=220,
+        margin=dict(t=36, b=4, l=4, r=4),
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
         xaxis=dict(
@@ -175,7 +163,7 @@ def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
             showline=False,
             zeroline=False,
         ),
-        yaxis=dict(visible=False, fixedrange=True, showgrid=False),
+        yaxis=dict(visible=False, fixedrange=True, showgrid=False, range=[0, y_ceil]),
         showlegend=True,
         legend=dict(
             font=dict(size=8),
@@ -398,11 +386,11 @@ def _zona_card(nombre: str, res: dict, color: str, res_bt=None) -> dbc.Col:
         chart_el = dcc.Graph(
             figure=_unified_chart(res_bt, res, color),
             config=_CFG,
-            style={"height": "200px", "margin": "0 -4px"},
+            style={"height": "220px", "margin": "0 -4px"},
         )
     else:
         metrics_row = html.Span()
-        chart_el = dcc.Graph(figure=fig, config=_CFG, style={"height": "170px", "marginX": "-4px"})
+        chart_el = dcc.Graph(figure=fig, config=_CFG, style={"height": "200px", "marginX": "-4px"})
 
     manana_el = html.Div(
         [
@@ -431,34 +419,28 @@ def _zona_card(nombre: str, res: dict, color: str, res_bt=None) -> dbc.Col:
         style={"marginTop": "10px"},
     )
 
-    return dbc.Col(
-        dbc.Card(
-            dbc.CardBody(
-                [
-                    html.Div(
-                        html.Span(
-                            nombre,
-                            className="fw-bold text-dark",
-                            style={
-                                "fontSize": "0.82rem",
-                                "textTransform": "uppercase",
-                                "letterSpacing": "0.6px",
-                            },
-                        ),
-                        className="mb-3",
+    return dbc.Card(
+        dbc.CardBody(
+            [
+                html.Div(
+                    html.Span(
+                        nombre,
+                        className="fw-bold text-dark",
+                        style={
+                            "fontSize": "0.82rem",
+                            "textTransform": "uppercase",
+                            "letterSpacing": "0.6px",
+                        },
                     ),
-                    metrics_row,
-                    chart_el,
-                    manana_el,
-                ],
-                className="p-3",
-            ),
-            className="border-0 shadow-sm rounded-4 h-100 bg-white",
+                    className="mb-3",
+                ),
+                metrics_row,
+                chart_el,
+                manana_el,
+            ],
+            className="p-3",
         ),
-        xs=12,
-        sm=6,
-        lg=4,
-        className="mb-3",
+        className="border-0 shadow-sm rounded-4 bg-white",
     )
 
 
@@ -474,61 +456,105 @@ def _empty_state(msg: str = "") -> html.Div:
     )
 
 
-def _zona_card_insuficiente(nombre: str, color: str) -> dbc.Col:
-    return dbc.Col(
-        dbc.Card(
-            dbc.CardBody(
-                [
-                    html.Div(
-                        html.Span(
-                            nombre,
-                            className="fw-bold text-dark",
-                            style={
-                                "fontSize": "0.82rem",
-                                "textTransform": "uppercase",
-                                "letterSpacing": "0.6px",
-                            },
-                        ),
-                        className="mb-3",
+def _zona_card_insuficiente(nombre: str, color: str) -> dbc.Card:
+    return dbc.Card(
+        dbc.CardBody(
+            [
+                html.Div(
+                    html.Span(
+                        nombre,
+                        className="fw-bold text-dark",
+                        style={
+                            "fontSize": "0.82rem",
+                            "textTransform": "uppercase",
+                            "letterSpacing": "0.6px",
+                        },
                     ),
-                    html.Div(
-                        [
-                            html.Span(
-                                "Datos insuficientes para generar previsión.",
-                                className="text-muted small",
-                            ),
-                        ]
-                    ),
-                    html.P(
-                        "Se necesitan al menos 30 días de historial.",
-                        className="text-muted",
-                        style={"fontSize": "0.72rem"},
-                    ),
-                ],
-                className="p-3",
-            ),
-            className="border-0 shadow-sm rounded-4 h-100 bg-white",
-            style={"borderLeft": f"3px solid {color}"},
+                    className="mb-3",
+                ),
+                html.Span(
+                    "Datos insuficientes para generar previsión.",
+                    className="text-muted small",
+                ),
+                html.P(
+                    "Se necesitan al menos 30 días de historial.",
+                    className="text-muted",
+                    style={"fontSize": "0.72rem"},
+                ),
+            ],
+            className="p-3",
         ),
-        xs=12,
-        sm=6,
-        lg=4,
+        className="border-0 shadow-sm rounded-4 bg-white",
+        style={"borderLeft": f"3px solid {color}"},
+    )
+
+
+def _build_zone_tree(zonas: list[dict]) -> tuple[list, dict]:
+    children_map: dict[str, list] = {z["zona_id"]: [] for z in zonas}
+    roots: list = []
+    for z in zonas:
+        pid = z.get("parent_zona_id")
+        if pid and pid in children_map:
+            children_map[pid].append(z)
+        else:
+            roots.append(z)
+    for zid in children_map:
+        children_map[zid].sort(key=lambda z: z.get("nombre", ""))
+    return roots, children_map
+
+
+def _assign_colors(roots: list, children_map: dict) -> dict:
+    color_map: dict = {}
+    counter = [0]
+
+    def dfs(zones):
+        for z in zones:
+            color_map[z["zona_id"]] = _color_zona(counter[0])
+            counter[0] += 1
+            dfs(children_map.get(z["zona_id"], []))
+
+    dfs(roots)
+    return color_map
+
+
+def _render_zona_node(
+    zone: dict, color: str, zona_results: dict, children_map: dict, color_map: dict
+) -> html.Div:
+    zid = zone["zona_id"]
+    res, res_bt = zona_results.get(zid, (None, None))
+    card = (
+        _zona_card_insuficiente(zone["nombre"], color)
+        if res is None
+        else _zona_card(zone["nombre"], res, color, res_bt)
+    )
+    children = children_map.get(zid, [])
+    if not children:
+        return html.Div(card, className="mb-3")
+    child_nodes = [
+        _render_zona_node(c, color_map[c["zona_id"]], zona_results, children_map, color_map)
+        for c in children
+    ]
+    return html.Div(
+        [
+            html.Div(card, className="mb-2"),
+            html.Div(
+                child_nodes,
+                className="ps-4 ms-2",
+                style={"borderLeft": f"3px solid {color}"},
+            ),
+        ],
         className="mb-3",
     )
 
 
-def _loc_section(loc_nombre: str, zona_cols: list) -> html.Div:
+def _loc_section(loc_nombre: str, tree_nodes: list) -> html.Div:
     return html.Div(
         [
             html.Div(
-                [
-                    html.Span(
-                        loc_nombre, className="fw-bold text-dark", style={"fontSize": "1rem"}
-                    ),
-                ],
+                html.Span(loc_nombre, className="fw-bold text-dark", style={"fontSize": "1rem"}),
                 className="d-flex align-items-center mb-3",
             ),
-            dbc.Row(zona_cols, className="g-3"),
+            html.Div(tree_nodes),
         ],
         className="mb-5",
     )
@@ -656,18 +682,27 @@ def actualizar_prediccion_publica(tab, locs, session_id):
         zonas = [z for z in get_zones_for_loc(loc_uuid) if not z.get("oculta")]
 
         falso_hoy_bt = (datetime.today() - timedelta(days=14)).strftime("%Y-%m-%d")
-        zonas_ordenadas = _ordenar_zonas_fuera_dentro(zonas)
-        zona_cols = []
-        for idx, z in enumerate(zonas_ordenadas):
-            res = ejecutar_auditoria_predictiva(df_e, loc_uuid, z["zona_id"], falso_hoy, 14)
-            if res.get("status") != "success":
-                zona_cols.append(_zona_card_insuficiente(z["nombre"], _color_zona(idx)))
-                continue
-            res_bt = ejecutar_auditoria_predictiva(df_e, loc_uuid, z["zona_id"], falso_hoy_bt, 14)
-            zona_cols.append(_zona_card(z["nombre"], res, _color_zona(idx), res_bt=res_bt))
+        roots, children_map = _build_zone_tree(zonas)
+        color_map = _assign_colors(roots, children_map)
 
-        if zona_cols:
-            secciones.append(_loc_section(loc_nombre, zona_cols))
+        zona_results: dict = {}
+        for z in zonas:
+            zid = z["zona_id"]
+            res = ejecutar_auditoria_predictiva(df_e, loc_uuid, zid, falso_hoy, 14)
+            if res.get("status") != "success":
+                zona_results[zid] = (None, None)
+            else:
+                res_bt = ejecutar_auditoria_predictiva(df_e, loc_uuid, zid, falso_hoy_bt, 14)
+                zona_results[zid] = (res, res_bt)
+
+        tree_nodes = [
+            _render_zona_node(
+                root, color_map[root["zona_id"]], zona_results, children_map, color_map
+            )
+            for root in roots
+        ]
+        if tree_nodes:
+            secciones.append(_loc_section(loc_nombre, tree_nodes))
 
     if not secciones:
         return _empty_state(
