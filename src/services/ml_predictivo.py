@@ -192,6 +192,7 @@ def _loop_prediccion(
                     "mucho_calor": 1 if t_max >= 32.0 else 0,
                     "mucho_frio": 1 if t_min <= 8.0 else 0,
                     "clima_ideal": 1 if (18.0 <= t_max <= 26.0 and llueve == 0) else 0,
+                    "es_gap": 0,
                     **ext_feats,
                 }
             ]
@@ -248,6 +249,24 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
             .reset_index()
             .sort_values("fecha")
             .reset_index(drop=True)
+        )
+
+        # Gap handling: reindex al rango de fechas completo para que shift(n)
+        # opere sobre días calendario y no sobre posiciones. Sin esto, un agujero
+        # de 7 días consecutivos hace que lag_7d apunte al día anterior al hueco,
+        # no al día equivalente de la semana anterior.
+        _full_idx = pd.date_range(df_tienda["fecha"].min(), df_tienda["fecha"].max(), freq="D")
+        df_tienda = (
+            df_tienda.set_index("fecha").reindex(_full_idx).rename_axis("fecha").reset_index()
+        )
+        df_tienda["es_gap"] = df_tienda["total_visits"].isna().astype(int)
+        df_tienda["total_visits"] = df_tienda["total_visits"].fillna(0)
+        df_tienda["temp_max"] = df_tienda["temp_max"].ffill().bfill().fillna(22.0)
+        df_tienda["temp_min"] = df_tienda["temp_min"].ffill().bfill().fillna(15.0)
+        df_tienda["llueve"] = df_tienda["llueve"].ffill().bfill().fillna(0).astype(int)
+        # Recompute es_festivo for all rows including gap days
+        df_tienda["es_festivo"] = df_tienda["fecha"].apply(
+            lambda d: 1 if d.date() in festivos else 0
         )
 
         # 2. SEPARACIÓN DEL PASADO (TRAIN SET)
@@ -324,6 +343,7 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
             "mucho_calor",
             "mucho_frio",
             "clima_ideal",
+            "es_gap",
         ]
 
         _reserved = set(_BASE_FEATURES)
