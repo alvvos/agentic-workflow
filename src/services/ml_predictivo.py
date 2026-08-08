@@ -15,6 +15,29 @@ _HOL_CACHE: dict = {}
 
 # Cobertura nominal de los intervalos conformes (90 %)
 _CONFORMAL_ALPHA = 0.10
+# Decay exponencial para ponderar residuos de calibración: residuos recientes pesan más.
+# Con decay=0.04 y n=60 días de calibración, el día más reciente pesa ~11× el más antiguo.
+_CONFORMAL_DECAY = 0.04
+# Factor de crecimiento logarítmico de la banda con el horizonte.
+# Con beta=0.15: día 1 → ×1.00, día 7 → ×1.29, día 14 → ×1.40.
+_HORIZON_BETA = 0.15
+
+
+def _weighted_conformal_quantile(resid: np.ndarray, level: float) -> float:
+    """Cuantil empírico con pesos exponenciales por recencia.
+
+    El set de calibración está ordenado cronológicamente: índice 0 = más antiguo.
+    Los residuos recientes reciben más peso porque el régimen actual de volatilidad
+    es más relevante para el futuro inmediato que el de hace meses.
+    Resuelve parcialmente la violación de intercambiabilidad por autocorrelación.
+    """
+    n = len(resid)
+    weights = np.exp(_CONFORMAL_DECAY * np.arange(n))
+    weights /= weights.sum()
+    sorted_idx = np.argsort(resid)
+    cumw = np.cumsum(weights[sorted_idx])
+    idx = int(np.searchsorted(cumw, level))
+    return float(resid[sorted_idx[min(idx, n - 1)]])
 
 
 def _get_festivos(pais_codigo: str, years: list) -> object:
@@ -343,14 +366,15 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
             )
             modelo.fit(X_t, y_t, eval_set=[(X_t, y_t), (X_v, y_v)], verbose=False)
 
-            # Conformal q — Fase 1: anchura constante para todos los horizontes.
-            # El cuantil empírico con corrección de muestra finita garantiza
-            # cobertura ≥ 1−α bajo intercambiabilidad (aprox. para series temporales).
+            # Conformal q con pesos exponenciales por recencia (EnbPI adaptado).
+            # El cuantil con corrección (n+1) garantiza cobertura ≥ 1−α; el weighting
+            # exponencial hace que el régimen reciente de volatilidad domine sobre el
+            # histórico lejano, atenuando el problema de autocorrelación en la calibración.
             if len(X_cal) > 0:
                 resid = np.abs(y_cal.values - np.maximum(0, modelo.predict(X_cal)))
                 n_cal = len(resid)
                 level = min(np.ceil((n_cal + 1) * (1 - _CONFORMAL_ALPHA)) / n_cal, 1.0)
-                q_conf = float(np.quantile(resid, level, method="higher"))
+                q_conf = _weighted_conformal_quantile(resid, level)
 
         # 4. PREDICCIÓN AUTORREGRESIVA
         df_hist = df_tienda[df_tienda["fecha"] < fecha_corte].copy()
@@ -367,10 +391,16 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
             org_config=org_config,
         )
 
-        # Bandas conformes
+        # Bandas conformes con crecimiento logarítmico por horizonte.
+        # En la predicción autorregresiva cada paso h usa h predicciones propias como lags,
+        # acumulando error. q_h = q_conf × (1 + β·ln(h+1)) captura ese crecimiento
+        # sin explotar: día 1 ×1.00, día 7 ×1.29, día 14 ×1.40.
         if q_conf is not None:
-            lowers = [int(np.maximum(0, np.round(p - q_conf))) for p in valores_pred]
-            uppers = [int(np.round(p + q_conf)) for p in valores_pred]
+            lowers, uppers = [], []
+            for h, p in enumerate(valores_pred):
+                q_h = q_conf * (1 + _HORIZON_BETA * np.log1p(h))
+                lowers.append(int(np.maximum(0, np.round(p - q_h))))
+                uppers.append(int(np.round(p + q_h)))
         else:
             lowers = uppers = None
 
