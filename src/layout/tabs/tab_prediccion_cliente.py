@@ -95,13 +95,32 @@ def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
     fig = go.Figure()
 
     if fw_lower and fw_upper:
+        # Lower bound — text below each point, fill up to upper with tonexty
         fig.add_trace(
             go.Scatter(
-                x=fw_x + fw_x[::-1],
-                y=fw_upper + fw_lower[::-1],
-                fill="toself",
+                x=fw_x,
+                y=fw_lower,
+                mode="lines+text",
+                line=dict(width=0),
+                text=[f"{v:,}" for v in fw_lower],
+                textposition="bottom center",
+                textfont=dict(size=6, color=_rgba(color, 0.65)),
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
+        # Upper bound — fills down to lower, text above each point
+        fig.add_trace(
+            go.Scatter(
+                x=fw_x,
+                y=fw_upper,
+                mode="lines+text",
+                fill="tonexty",
                 fillcolor=_rgba(color, 0.12),
                 line=dict(width=0),
+                text=[f"{v:,}" for v in fw_upper],
+                textposition="top center",
+                textfont=dict(size=6, color=_rgba(color, 0.65)),
                 showlegend=False,
                 hoverinfo="skip",
             )
@@ -109,7 +128,7 @@ def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
 
     all_vals = [v for v in bt_real + fw_pred + (fw_upper or []) if v is not None]
     y_max = max(all_vals) if all_vals else 1
-    y_ceil = y_max * 1.35
+    y_ceil = y_max * 1.60
 
     fig.add_trace(
         go.Scatter(
@@ -149,8 +168,8 @@ def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
     )
 
     fig.update_layout(
-        height=220,
-        margin=dict(t=36, b=4, l=4, r=4),
+        height=250,
+        margin=dict(t=36, b=20, l=4, r=4),
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
         xaxis=dict(
@@ -386,7 +405,7 @@ def _zona_card(nombre: str, res: dict, color: str, res_bt=None) -> dbc.Col:
         chart_el = dcc.Graph(
             figure=_unified_chart(res_bt, res, color),
             config=_CFG,
-            style={"height": "220px", "margin": "0 -4px"},
+            style={"height": "250px", "margin": "0 -4px"},
         )
     else:
         metrics_row = html.Span()
@@ -578,7 +597,7 @@ def build_tab_prediccion_cliente(role: str = "viewer"):
                                     className="fw-bold mb-1 text-dark",
                                 ),
                                 html.P(
-                                    "Próximos 14 días · validación retrospectiva incluida.",
+                                    "Próximos 7 días · validación retrospectiva incluida.",
                                     className="text-muted small mb-0",
                                 ),
                             ],
@@ -688,7 +707,7 @@ def actualizar_prediccion_publica(tab, locs, session_id):
         zona_results: dict = {}
         for z in zonas:
             zid = z["zona_id"]
-            res = ejecutar_auditoria_predictiva(df_e, loc_uuid, zid, falso_hoy, 14)
+            res = ejecutar_auditoria_predictiva(df_e, loc_uuid, zid, falso_hoy, 7)
             if res.get("status") != "success":
                 zona_results[zid] = (None, None)
             else:
