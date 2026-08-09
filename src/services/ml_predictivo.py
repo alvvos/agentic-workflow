@@ -21,6 +21,10 @@ _CONFORMAL_DECAY = 0.04
 # Factor de crecimiento logarítmico de la banda con el horizonte.
 # Con beta=0.15: día 1 → ×1.00, día 7 → ×1.29, día 14 → ×1.40.
 _HORIZON_BETA = 0.15
+# TTL del modelo en caché: 14 días = 2 ciclos semanales completos.
+# El XGBoost aprende patrones día-de-semana; con <2 semanas puede no haber visto
+# suficientes repeticiones de cada día. Más de 14 días arriesga drift estacional.
+_MODEL_CACHE_TTL_DAYS = 14
 
 
 def _weighted_conformal_quantile(resid: np.ndarray, level: float) -> float:
@@ -58,6 +62,7 @@ festivos_espana = holidays.ES(years=[2024, 2025, 2026])
 
 # ── Registro de modelos ──────────────────────────────────────────────────────
 _REGISTRY_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models", "registry")
+_REGISTRY_PURGED = False  # guard: la purga ocurre una sola vez por proceso
 
 
 def _registry_paths(location_uuid, zone_uuid):
@@ -70,7 +75,7 @@ def _registry_paths(location_uuid, zone_uuid):
 
 
 def _load_cached_model(location_uuid, zone_uuid, features):
-    """Inválido si: no existe, features distintas, o tiene > 7 días."""
+    """Inválido si: no existe, features distintas, tiene > _MODEL_CACHE_TTL_DAYS, o sin q_conf."""
     model_path, meta_path = _registry_paths(location_uuid, zone_uuid)
     if not os.path.exists(model_path) or not os.path.exists(meta_path):
         return None, {}, None
@@ -80,7 +85,7 @@ def _load_cached_model(location_uuid, zone_uuid, features):
         if meta.get("features") != features:
             return None, {}, None
         age_days = (datetime.now() - datetime.fromisoformat(meta["trained_at"])).days
-        if age_days > 7:
+        if age_days > _MODEL_CACHE_TTL_DAYS:
             return None, {}, None
         if meta.get("q_conf") is None:
             return None, {}, None
@@ -91,7 +96,36 @@ def _load_cached_model(location_uuid, zone_uuid, features):
         return None, {}, None
 
 
+def _purge_stale_registry() -> None:
+    """Borra pares .ubj + .meta.json cuyo trained_at supera el TTL.
+
+    Se llama una vez por proceso (guard _REGISTRY_PURGED) desde _save_model,
+    de modo que la limpieza ocurre justo después de guardar un modelo fresco
+    sin añadir latencia a las peticiones de lectura.
+    """
+    cutoff = datetime.now() - timedelta(days=_MODEL_CACHE_TTL_DAYS + 1)
+    try:
+        entries = os.listdir(_REGISTRY_DIR)
+    except FileNotFoundError:
+        return
+    for fname in entries:
+        if not fname.endswith(".meta.json"):
+            continue
+        meta_path = os.path.join(_REGISTRY_DIR, fname)
+        try:
+            with open(meta_path) as f:
+                meta = json.load(f)
+            if datetime.fromisoformat(meta["trained_at"]) < cutoff:
+                os.remove(meta_path)
+                ubj = os.path.join(_REGISTRY_DIR, fname.replace(".meta.json", ".ubj"))
+                if os.path.exists(ubj):
+                    os.remove(ubj)
+        except Exception:
+            pass
+
+
 def _save_model(modelo, location_uuid, zone_uuid, features, metrics, q_conf):
+    global _REGISTRY_PURGED
     model_path, meta_path = _registry_paths(location_uuid, zone_uuid)
     modelo.save_model(model_path)
     with open(meta_path, "w") as f:
@@ -107,6 +141,9 @@ def _save_model(modelo, location_uuid, zone_uuid, features, metrics, q_conf):
             f,
             indent=2,
         )
+    if not _REGISTRY_PURGED:
+        _purge_stale_registry()
+        _REGISTRY_PURGED = True
 
 
 # ── Loop autorregresivo ───────────────────────────────────────────────────────
