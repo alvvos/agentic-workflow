@@ -106,8 +106,9 @@ def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
                 y=fw_lower,
                 mode="lines",
                 line=dict(width=0),
+                name="IC mín",
                 showlegend=False,
-                hovertemplate="IC inferior: <b>%{y:,}</b><extra></extra>",
+                hovertemplate="%{y:,}<extra></extra>",
             )
         )
         fig.add_trace(
@@ -118,8 +119,9 @@ def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
                 fill="tonexty",
                 fillcolor=_rgba(color, 0.13),
                 line=dict(width=0),
+                name="IC máx",
                 showlegend=False,
-                hovertemplate="IC superior: <b>%{y:,}</b><extra></extra>",
+                hovertemplate="%{y:,}<extra></extra>",
             )
         )
 
@@ -157,6 +159,7 @@ def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
             textfont=dict(size=9, color=_C_DARK, family="monospace"),
             name="Previsión",
             showlegend=False,
+            hovertemplate="%{y:,}<extra></extra>",
         )
     )
 
@@ -219,6 +222,7 @@ def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
             zeroline=False,
         ),
         yaxis=dict(visible=False, fixedrange=True, showgrid=False, range=[0, y_ceil]),
+        hovermode="x unified",
         showlegend=True,
         legend=dict(
             font=dict(size=8),
