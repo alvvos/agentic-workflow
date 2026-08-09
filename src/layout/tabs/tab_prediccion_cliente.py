@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 from dash import Input, Output, State, callback, dcc, html, no_update
 
 from src.core.data_master import mapa_tiendas
+from src.core.org_branding import get_branding_from_locs
 from src.db.queries import get_df_enriquecido, get_zones_for_loc
 from src.layout.components.loaders import loading_section
 from src.services.ml_predictivo import ejecutar_auditoria_predictiva
@@ -62,7 +63,7 @@ def _acc_color(acc) -> str:
         return _C_MUTED
 
 
-def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
+def _unified_chart(res_bt: dict, res_fw: dict, color: str, band_color: str = "") -> go.Figure:
     g_bt = res_bt["grafica"]
     g_fw = res_fw["grafica"]
 
@@ -111,13 +112,14 @@ def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
                 hovertemplate="%{y:,}<extra></extra>",
             )
         )
+        _band = band_color or color
         fig.add_trace(
             go.Scatter(
                 x=fw_x,
                 y=fw_upper,
                 mode="lines",
                 fill="tonexty",
-                fillcolor=_rgba(color, 0.13),
+                fillcolor=_rgba(_band, 0.13),
                 line=dict(width=0),
                 name="IC máx",
                 showlegend=False,
@@ -239,7 +241,7 @@ def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
     return fig
 
 
-def _zona_card(nombre: str, res: dict, color: str, res_bt=None) -> dbc.Col:
+def _zona_card(nombre: str, res: dict, color: str, res_bt=None, band_color: str = "") -> dbc.Col:
     fechas = res["grafica"]["fechas"]
     predichos = [max(0, int(round(v))) for v in res["grafica"]["predichos"]]
     reales = res["grafica"]["reales"]
@@ -413,7 +415,7 @@ def _zona_card(nombre: str, res: dict, color: str, res_bt=None) -> dbc.Col:
             style={"background": "#f8f9fa"},
         )
         chart_el = dcc.Graph(
-            figure=_unified_chart(res_bt, res, color),
+            figure=_unified_chart(res_bt, res, color, band_color),
             config=_CFG,
             style={"height": "300px", "margin": "0 -4px"},
         )
@@ -547,20 +549,27 @@ def _assign_colors(roots: list, children_map: dict) -> dict:
 
 
 def _render_zona_node(
-    zone: dict, color: str, zona_results: dict, children_map: dict, color_map: dict
+    zone: dict,
+    color: str,
+    zona_results: dict,
+    children_map: dict,
+    color_map: dict,
+    band_color: str = "",
 ) -> html.Div:
     zid = zone["zona_id"]
     res, res_bt = zona_results.get(zid, (None, None))
     card = (
         _zona_card_insuficiente(zone["nombre"], color)
         if res is None
-        else _zona_card(zone["nombre"], res, color, res_bt)
+        else _zona_card(zone["nombre"], res, color, res_bt, band_color)
     )
     children = children_map.get(zid, [])
     if not children:
         return html.Div(card, className="mb-3")
     child_nodes = [
-        _render_zona_node(c, color_map[c["zona_id"]], zona_results, children_map, color_map)
+        _render_zona_node(
+            c, color_map[c["zona_id"]], zona_results, children_map, color_map, band_color
+        )
         for c in children
     ]
     return html.Div(
@@ -711,6 +720,7 @@ def actualizar_prediccion_publica(tab, locs, session_id):
         zonas = [z for z in get_zones_for_loc(loc_uuid) if not z.get("oculta")]
 
         falso_hoy_bt = (datetime.today() - timedelta(days=14)).strftime("%Y-%m-%d")
+        branding = get_branding_from_locs([loc_uuid])
         roots, children_map = _build_zone_tree(zonas)
         color_map = _assign_colors(roots, children_map)
 
@@ -726,7 +736,12 @@ def actualizar_prediccion_publica(tab, locs, session_id):
 
         tree_nodes = [
             _render_zona_node(
-                root, color_map[root["zona_id"]], zona_results, children_map, color_map
+                root,
+                color_map[root["zona_id"]],
+                zona_results,
+                children_map,
+                color_map,
+                branding.effective_band_color,
             )
             for root in roots
         ]

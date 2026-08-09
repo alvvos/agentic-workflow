@@ -31,6 +31,11 @@ class OrgBranding:
     secondary: str  # color secundario HEX
     logo_asset: str  # ruta relativa a /assets/
     palette: tuple[str, ...]  # paleta multi-serie; ≥10 colores
+    band_color: str = ""  # color de relleno de bandas IC; si vacío usa primary
+
+    @property
+    def effective_band_color(self) -> str:
+        return self.band_color or self.primary
 
 
 # ── Paleta y branding por defecto (Aitanna/sin org) ──────────────────────────
@@ -68,6 +73,7 @@ _REGISTRY: dict[str, OrgBranding] = {
         primary="#E60012",
         secondary="#1A1A1A",
         logo_asset="/assets/logo_miniso.png",
+        band_color="#FF6B6B",  # coral suave — menos saturado que el rojo primario en rellenos
         palette=(
             "#E60012",  # Miniso Red
             "#1A1A1A",  # Miniso Black
