@@ -110,7 +110,7 @@ def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
                 line=dict(width=0),
                 text=[f"{v:,}" for v in fw_lower],
                 textposition="top center",
-                textfont=dict(size=6, color=_rgba(color, 0.55)),
+                textfont=dict(size=7, color=_rgba(color, 0.78)),
                 showlegend=False,
                 hoverinfo="skip",
             )
@@ -127,7 +127,7 @@ def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
                 line=dict(width=0),
                 text=[f"{v:,}" for v in fw_upper],
                 textposition="bottom center",
-                textfont=dict(size=6, color=_rgba(color, 0.55)),
+                textfont=dict(size=7, color=_rgba(color, 0.78)),
                 showlegend=False,
                 hoverinfo="skip",
             )
