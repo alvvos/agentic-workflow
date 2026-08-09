@@ -74,6 +74,12 @@ def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
             bt_real.append(float(r))
             bt_pred.append(float(g_bt["predichos"][i]) if i < len(g_bt["predichos"]) else None)
 
+    # Mostrar solo los últimos 7 días del backtest → proporción 50/50 con los 7 días de previsión
+    if len(bt_x) > 7:
+        bt_x = bt_x[-7:]
+        bt_real = bt_real[-7:]
+        bt_pred = bt_pred[-7:]
+
     fw_x = g_fw["fechas"]
     fw_pred = [max(0, int(round(v))) for v in g_fw["predichos"]]
     fw_lower = g_fw.get("lower") or []
@@ -81,21 +87,21 @@ def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
 
     all_x = bt_x + fw_x
     all_dates = [pd.to_datetime(x) for x in all_x]
-    step = max(1, len(all_dates) // 7)
-    tick_idx = list(range(0, len(all_dates), step))
-    if (len(all_dates) - 1) not in tick_idx:
-        tick_idx.append(len(all_dates) - 1)
-    tickvals = [all_x[i] for i in tick_idx]
-    ticktext = [
-        f"{_DIAS_ES[all_dates[i].dayofweek]}<br>{all_dates[i].strftime('%d')}" for i in tick_idx
-    ]
+    # Con 14 fechas totales (7 bt + 7 fw) mostramos todas
+    tickvals = all_x
+    ticktext = [f"{_DIAS_ES[d.dayofweek]}<br>{d.strftime('%d')}" for d in all_dates]
 
     today_str = fw_x[0] if fw_x else None
+
+    all_vals = [v for v in bt_real + fw_pred + (fw_upper or []) if v is not None]
+    y_max = max(all_vals) if all_vals else 1
+    y_ceil = y_max * 1.45
 
     fig = go.Figure()
 
     if fw_lower and fw_upper:
-        # Lower bound — text below each point, fill up to upper with tonexty
+        # Lower bound — textposition "top center" → texto renderiza DENTRO de la banda IC,
+        # por encima de la línea inferior; no colisiona con los valores de predicción
         fig.add_trace(
             go.Scatter(
                 x=fw_x,
@@ -103,32 +109,29 @@ def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
                 mode="lines+text",
                 line=dict(width=0),
                 text=[f"{v:,}" for v in fw_lower],
-                textposition="bottom center",
-                textfont=dict(size=6, color=_rgba(color, 0.65)),
+                textposition="top center",
+                textfont=dict(size=6, color=_rgba(color, 0.55)),
                 showlegend=False,
                 hoverinfo="skip",
             )
         )
-        # Upper bound — fills down to lower, text above each point
+        # Upper bound — textposition "bottom center" → texto renderiza DENTRO de la banda IC,
+        # por debajo de la línea superior; fill="tonexty" rellena hasta la traza inferior
         fig.add_trace(
             go.Scatter(
                 x=fw_x,
                 y=fw_upper,
                 mode="lines+text",
                 fill="tonexty",
-                fillcolor=_rgba(color, 0.12),
+                fillcolor=_rgba(color, 0.13),
                 line=dict(width=0),
                 text=[f"{v:,}" for v in fw_upper],
-                textposition="top center",
-                textfont=dict(size=6, color=_rgba(color, 0.65)),
+                textposition="bottom center",
+                textfont=dict(size=6, color=_rgba(color, 0.55)),
                 showlegend=False,
                 hoverinfo="skip",
             )
         )
-
-    all_vals = [v for v in bt_real + fw_pred + (fw_upper or []) if v is not None]
-    y_max = max(all_vals) if all_vals else 1
-    y_ceil = y_max * 1.60
 
     fig.add_trace(
         go.Scatter(
@@ -157,19 +160,62 @@ def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
             x=fw_x,
             y=fw_pred,
             mode="lines+markers+text",
-            line=dict(color=color, width=2.5),
-            marker=dict(size=5, color="white", symbol="circle", line=dict(color=color, width=2)),
+            line=dict(color=color, width=3),
+            marker=dict(size=7, color="white", symbol="circle", line=dict(color=color, width=2.5)),
             text=[f"{v:,}" for v in fw_pred],
             textposition="top center",
-            textfont=dict(size=8, color=_C_DARK, family="monospace"),
+            textfont=dict(size=9, color=_C_DARK, family="monospace"),
             name="Previsión",
             showlegend=False,
         )
     )
 
+    shapes = []
+    annotations = []
+    if today_str:
+        if fw_x:
+            shapes.append(
+                dict(
+                    type="rect",
+                    xref="x",
+                    yref="paper",
+                    x0=today_str,
+                    x1=fw_x[-1],
+                    y0=0,
+                    y1=1,
+                    fillcolor=_rgba(color, 0.04),
+                    line=dict(width=0),
+                    layer="below",
+                )
+            )
+        shapes.append(
+            dict(
+                type="line",
+                x0=today_str,
+                x1=today_str,
+                y0=0,
+                y1=1,
+                yref="paper",
+                line=dict(color="#636e72", width=1.5, dash="dot"),
+            )
+        )
+        annotations.append(
+            dict(
+                x=today_str,
+                y=1.0,
+                yref="paper",
+                text="hoy",
+                showarrow=False,
+                font=dict(size=7, color="#636e72"),
+                xanchor="left",
+                yanchor="bottom",
+                xshift=3,
+            )
+        )
+
     fig.update_layout(
-        height=250,
-        margin=dict(t=36, b=20, l=4, r=4),
+        height=300,
+        margin=dict(t=36, b=24, l=4, r=4),
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
         xaxis=dict(
@@ -193,38 +239,8 @@ def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
             x=1.0,
             bgcolor="rgba(0,0,0,0)",
         ),
-        shapes=(
-            [
-                dict(
-                    type="line",
-                    x0=today_str,
-                    x1=today_str,
-                    y0=0,
-                    y1=1,
-                    yref="paper",
-                    line=dict(color="#b2bec3", width=1.5, dash="dot"),
-                )
-            ]
-            if today_str
-            else []
-        ),
-        annotations=(
-            [
-                dict(
-                    x=today_str,
-                    y=1.0,
-                    yref="paper",
-                    text="hoy",
-                    showarrow=False,
-                    font=dict(size=7, color="#95a5a6"),
-                    xanchor="left",
-                    yanchor="bottom",
-                    xshift=3,
-                )
-            ]
-            if today_str
-            else []
-        ),
+        shapes=shapes,
+        annotations=annotations,
     )
     return fig
 
@@ -405,7 +421,7 @@ def _zona_card(nombre: str, res: dict, color: str, res_bt=None) -> dbc.Col:
         chart_el = dcc.Graph(
             figure=_unified_chart(res_bt, res, color),
             config=_CFG,
-            style={"height": "250px", "margin": "0 -4px"},
+            style={"height": "300px", "margin": "0 -4px"},
         )
     else:
         metrics_row = html.Span()
