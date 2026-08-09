@@ -15,7 +15,7 @@ _C_DARK = "#1a1a2e"
 _C_MUTED = "#7f8c8d"
 _DIAS_ES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 _DIAS_LARGO = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-_CFG = {"displayModeBar": False, "staticPlot": True}
+_CFG = {"displayModeBar": False, "staticPlot": False}
 
 
 def _rgba(hex_color: str, alpha: float) -> str:
@@ -100,36 +100,26 @@ def _unified_chart(res_bt: dict, res_fw: dict, color: str) -> go.Figure:
     fig = go.Figure()
 
     if fw_lower and fw_upper:
-        # Lower bound — textposition "top center" → texto renderiza DENTRO de la banda IC,
-        # por encima de la línea inferior; no colisiona con los valores de predicción
         fig.add_trace(
             go.Scatter(
                 x=fw_x,
                 y=fw_lower,
-                mode="lines+text",
+                mode="lines",
                 line=dict(width=0),
-                text=[f"{v:,}" for v in fw_lower],
-                textposition="top center",
-                textfont=dict(size=7, color=_rgba(color, 0.78)),
                 showlegend=False,
-                hoverinfo="skip",
+                hovertemplate="IC inferior: <b>%{y:,}</b><extra></extra>",
             )
         )
-        # Upper bound — textposition "bottom center" → texto renderiza DENTRO de la banda IC,
-        # por debajo de la línea superior; fill="tonexty" rellena hasta la traza inferior
         fig.add_trace(
             go.Scatter(
                 x=fw_x,
                 y=fw_upper,
-                mode="lines+text",
+                mode="lines",
                 fill="tonexty",
                 fillcolor=_rgba(color, 0.13),
                 line=dict(width=0),
-                text=[f"{v:,}" for v in fw_upper],
-                textposition="bottom center",
-                textfont=dict(size=7, color=_rgba(color, 0.78)),
                 showlegend=False,
-                hoverinfo="skip",
+                hovertemplate="IC superior: <b>%{y:,}</b><extra></extra>",
             )
         )
 
