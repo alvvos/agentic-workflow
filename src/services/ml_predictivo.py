@@ -65,7 +65,7 @@ festivos_espana = holidays.ES(years=[2024, 2025, 2026])
 
 # ── Registro de modelos ──────────────────────────────────────────────────────
 _REGISTRY_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models", "registry")
-_REGISTRY_PURGED = False  # guard: la purga ocurre una sola vez por proceso
+_REGISTRY_LAST_PURGE: str = ""  # fecha ISO de la última purga; se ejecuta una vez por día
 
 
 def _registry_paths(location_uuid, zone_uuid, falso_hoy: str = ""):
@@ -142,7 +142,7 @@ def _purge_stale_registry() -> None:
 
 
 def _save_model(modelo, location_uuid, zone_uuid, features, metrics, q_conf, falso_hoy: str = ""):
-    global _REGISTRY_PURGED
+    global _REGISTRY_LAST_PURGE
     model_path, meta_path = _registry_paths(location_uuid, zone_uuid, falso_hoy)
     modelo.save_model(model_path)
     with open(meta_path, "w") as f:
@@ -158,9 +158,10 @@ def _save_model(modelo, location_uuid, zone_uuid, features, metrics, q_conf, fal
             f,
             indent=2,
         )
-    if not _REGISTRY_PURGED:
+    today = datetime.now().strftime("%Y-%m-%d")
+    if _REGISTRY_LAST_PURGE != today:
         _purge_stale_registry()
-        _REGISTRY_PURGED = True
+        _REGISTRY_LAST_PURGE = today
 
 
 # ── Loop autorregresivo ───────────────────────────────────────────────────────
