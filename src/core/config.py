@@ -1,7 +1,13 @@
+import logging
 import os
 
 import dash
 import dash_bootstrap_components as dbc
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)s [%(levelname)s] %(message)s",
+)
 
 MODO_DESARROLLO = os.getenv("MODO_DESARROLLO", "false").lower() == "true"
 
