@@ -68,18 +68,20 @@ _REGISTRY_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "
 _REGISTRY_PURGED = False  # guard: la purga ocurre una sola vez por proceso
 
 
-def _registry_paths(location_uuid, zone_uuid):
+def _registry_paths(location_uuid, zone_uuid, falso_hoy: str = ""):
     os.makedirs(_REGISTRY_DIR, exist_ok=True)
-    key = f"{location_uuid}_{zone_uuid}"
+    key = (
+        f"{location_uuid}_{zone_uuid}_{falso_hoy}" if falso_hoy else f"{location_uuid}_{zone_uuid}"
+    )
     return (
         os.path.join(_REGISTRY_DIR, f"{key}.ubj"),
         os.path.join(_REGISTRY_DIR, f"{key}.meta.json"),
     )
 
 
-def _load_cached_model(location_uuid, zone_uuid, features):
+def _load_cached_model(location_uuid, zone_uuid, features, falso_hoy: str = ""):
     """Inválido si: no existe, features distintas, tiene > _MODEL_CACHE_TTL_DAYS, o sin q_conf."""
-    model_path, meta_path = _registry_paths(location_uuid, zone_uuid)
+    model_path, meta_path = _registry_paths(location_uuid, zone_uuid, falso_hoy)
     _key = f"{location_uuid[:8]}_{zone_uuid[:8]}"
     if not os.path.exists(model_path) or not os.path.exists(meta_path):
         log.info("CACHE MISS [%s] — archivos no encontrados", _key)
@@ -139,9 +141,9 @@ def _purge_stale_registry() -> None:
             pass
 
 
-def _save_model(modelo, location_uuid, zone_uuid, features, metrics, q_conf):
+def _save_model(modelo, location_uuid, zone_uuid, features, metrics, q_conf, falso_hoy: str = ""):
     global _REGISTRY_PURGED
-    model_path, meta_path = _registry_paths(location_uuid, zone_uuid)
+    model_path, meta_path = _registry_paths(location_uuid, zone_uuid, falso_hoy)
     modelo.save_model(model_path)
     with open(meta_path, "w") as f:
         json.dump(
@@ -407,22 +409,16 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
         # 3. MODELO: caché o entrenamiento
         hoy = datetime.today().date()
         delta_dias = abs((pd.to_datetime(falso_hoy).date() - hoy).days)
-        es_produccion = delta_dias <= 2
-
-        if not es_produccion:
-            log.info(
-                "TRAIN [%s/%s] — backtest (falso_hoy=%s, delta=%d d) — sin caché",
-                location_uuid[:8],
-                zone_uuid[:8],
-                falso_hoy,
-                delta_dias,
-            )
+        # Umbral ampliado a 15 d para incluir la llamada de backtest (delta=14)
+        es_produccion = delta_dias <= 15
 
         cache_hit = False
         cached_metrics = {}
         q_conf = None
         if es_produccion:
-            modelo, cached_metrics, q_conf = _load_cached_model(location_uuid, zone_uuid, features)
+            modelo, cached_metrics, q_conf = _load_cached_model(
+                location_uuid, zone_uuid, features, falso_hoy
+            )
             if modelo is not None:
                 cache_hit = True
 
@@ -523,6 +519,7 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
                     "best_iteration": best_iter,
                 },
                 q_conf=q_conf,
+                falso_hoy=falso_hoy,
             )
 
         return {
