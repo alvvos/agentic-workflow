@@ -209,11 +209,13 @@ def _loop_prediccion(
 
         visits_array = df_work["total_visits"].values
         lag_1d = visits_array[-1] if len(visits_array) >= 1 else 0
+        lag_2d = visits_array[-2] if len(visits_array) >= 2 else 0
         lag_7d = visits_array[-7] if len(visits_array) >= 7 else 0
         lag_14d = visits_array[-14] if len(visits_array) >= 14 else 0
         media_7d = np.mean(visits_array[-7:]) if len(visits_array) >= 7 else 0
         media_14d = np.mean(visits_array[-14:]) if len(visits_array) >= 14 else 0
         std_7d = np.std(visits_array[-7:]) if len(visits_array) >= 7 else 0
+        anomalia_1d = lag_1d - media_7d
 
         pred_ts = pd.Timestamp(current_date)
         ext_feats: dict = {}
@@ -248,6 +250,8 @@ def _loop_prediccion(
                     "mucho_frio": 1 if t_min <= 8.0 else 0,
                     "clima_ideal": 1 if (18.0 <= t_max <= 26.0 and llueve == 0) else 0,
                     "es_gap": 0,
+                    "lag_2d": lag_2d,
+                    "anomalia_1d": anomalia_1d,
                     **ext_feats,
                 }
             ]
@@ -348,11 +352,15 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
         ).astype(int)
         train["finde_lluvioso"] = train["es_finde"] * train["llueve"]
         train["lag_1d"] = train["total_visits"].shift(1)
+        train["lag_2d"] = train["total_visits"].shift(2)
         train["lag_7d"] = train["total_visits"].shift(7)
         train["media_7d"] = train["total_visits"].rolling(7).mean()
         train["lag_14d"] = train["total_visits"].shift(14)
         train["media_14d"] = train["total_visits"].rolling(14).mean()
         train["std_7d"] = train["total_visits"].rolling(7).std().fillna(0)
+        # Proxy de residuo: cuánto desvió ayer del promedio reciente.
+        # Captura "momentum anómalo" sin circularidad (no usa predicciones del modelo).
+        train["anomalia_1d"] = train["lag_1d"] - train["media_7d"]
         train = train.dropna().reset_index(drop=True)
 
         # Features externas activas
@@ -399,6 +407,8 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
             "mucho_frio",
             "clima_ideal",
             "es_gap",
+            "lag_2d",
+            "anomalia_1d",
         ]
 
         _reserved = set(_BASE_FEATURES)
@@ -454,6 +464,21 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
                 n_cal = len(resid)
                 level = min(np.ceil((n_cal + 1) * (1 - _CONFORMAL_ALPHA)) / n_cal, 1.0)
                 q_conf = _weighted_conformal_quantile(resid, level)
+
+        # Importancia de features por ganancia (solo en entrenamiento nuevo)
+        if not cache_hit:
+            try:
+                scores = modelo.get_booster().get_score(importance_type="gain")
+                top = sorted(scores.items(), key=lambda x: -x[1])[:12]
+                log.info(
+                    "FEATURE IMPORTANCE (gain) [%s/%s falso_hoy=%s]: %s",
+                    location_uuid[:8],
+                    zone_uuid[:8],
+                    falso_hoy,
+                    ", ".join(f"{k}={v:.1f}" for k, v in top),
+                )
+            except Exception:
+                pass
 
         # 4. PREDICCIÓN AUTORREGRESIVA
         df_hist = df_tienda[df_tienda["fecha"] < fecha_corte].copy()
