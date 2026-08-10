@@ -1,5 +1,6 @@
 import gc
 import json
+import logging
 import os
 from datetime import datetime, timedelta
 
@@ -10,6 +11,8 @@ import xgboost as xgb
 from sklearn.metrics import mean_absolute_error
 
 from src.db.queries import get_active_ext_features, get_org_info
+
+log = logging.getLogger("ml_predictivo")
 
 _HOL_CACHE: dict = {}
 
@@ -77,22 +80,34 @@ def _registry_paths(location_uuid, zone_uuid):
 def _load_cached_model(location_uuid, zone_uuid, features):
     """Inválido si: no existe, features distintas, tiene > _MODEL_CACHE_TTL_DAYS, o sin q_conf."""
     model_path, meta_path = _registry_paths(location_uuid, zone_uuid)
+    _key = f"{location_uuid[:8]}_{zone_uuid[:8]}"
     if not os.path.exists(model_path) or not os.path.exists(meta_path):
+        log.info("CACHE MISS [%s] — archivos no encontrados", _key)
         return None, {}, None
     try:
         with open(meta_path) as f:
             meta = json.load(f)
         if meta.get("features") != features:
+            log.warning(
+                "CACHE MISS [%s] — feature mismatch. cached=%s  current=%s",
+                _key,
+                meta.get("features"),
+                features,
+            )
             return None, {}, None
         age_days = (datetime.now() - datetime.fromisoformat(meta["trained_at"])).days
         if age_days > _MODEL_CACHE_TTL_DAYS:
+            log.info("CACHE MISS [%s] — modelo caducado (%d días)", _key, age_days)
             return None, {}, None
         if meta.get("q_conf") is None:
+            log.info("CACHE MISS [%s] — q_conf ausente", _key)
             return None, {}, None
         modelo = xgb.XGBRegressor()
         modelo.load_model(model_path)
+        log.info("CACHE HIT  [%s] — modelo cargado (%d días)", _key, age_days)
         return modelo, meta.get("metrics", {}), meta.get("q_conf")
-    except Exception:
+    except Exception as e:
+        log.warning("CACHE MISS [%s] — excepción al cargar: %s", _key, e)
         return None, {}, None
 
 
@@ -391,7 +406,17 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
 
         # 3. MODELO: caché o entrenamiento
         hoy = datetime.today().date()
-        es_produccion = abs((pd.to_datetime(falso_hoy).date() - hoy).days) <= 2
+        delta_dias = abs((pd.to_datetime(falso_hoy).date() - hoy).days)
+        es_produccion = delta_dias <= 2
+
+        if not es_produccion:
+            log.info(
+                "TRAIN [%s/%s] — backtest (falso_hoy=%s, delta=%d d) — sin caché",
+                location_uuid[:8],
+                zone_uuid[:8],
+                falso_hoy,
+                delta_dias,
+            )
 
         cache_hit = False
         cached_metrics = {}
