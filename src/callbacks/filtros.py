@@ -81,11 +81,8 @@ def actualizar_locs(org_uuid):
 
 
 @app.callback(
-    Output("org-branding-store", "data"),
-    Output("org-brand-css", "data"),
     Output("org-logo-img", "src"),
     Output("org-logo-wrapper", "style"),
-    Output("sidebar-accent-bar", "style"),
     Input("btn-cargar-ubicacion", "n_clicks"),
     State("drop-org", "value"),
     prevent_initial_call=True,
@@ -93,26 +90,12 @@ def actualizar_locs(org_uuid):
 def aplicar_branding_org(_n, org_id):
     import os
 
-    from src.core.org_branding import OrgBranding, branding_css, get_org_branding
+    from src.core.org_branding import get_org_branding
 
-    _default_accent = {
-        "width": "3px",
-        "height": "18px",
-        "backgroundColor": "#0052CC",
-        "borderRadius": "2px",
-        "flexShrink": 0,
-    }
     if not org_id:
-        return (
-            {"org_id": None, "primary": "#0052CC", "secondary": "#6c757d"},
-            "",
-            "",
-            {"display": "none"},
-            _default_accent,
-        )
+        return "", {"display": "none"}
 
-    b: OrgBranding = get_org_branding(org_id)
-
+    b = get_org_branding(org_id)
     _assets_root = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         "assets",
@@ -124,23 +107,8 @@ def aplicar_branding_org(_n, org_id):
     else:
         logo_src = ""
 
-    has_org_logo = bool(logo_src)
-    org_logo_wrapper_style = {"display": "block"} if has_org_logo else {"display": "none"}
-
-    accent_style = {
-        "width": "3px",
-        "height": "18px",
-        "backgroundColor": b.primary,
-        "borderRadius": "2px",
-        "flexShrink": 0,
-    }
-    return (
-        {"org_id": b.org_id, "primary": b.primary, "secondary": b.secondary},
-        branding_css(b),
-        logo_src,
-        org_logo_wrapper_style,
-        accent_style,
-    )
+    org_logo_wrapper_style = {"display": "block"} if logo_src else {"display": "none"}
+    return logo_src, org_logo_wrapper_style
 
 
 def _funnel_key(z):
@@ -297,23 +265,3 @@ def refresh_org_options(signal):
     from src.core.auth import get_current_org_access
 
     return data_master.get_opciones_orgs_for_user(get_current_org_access())
-
-
-# Inyecta el CSS de branding en un <style id="org-brand-style"> del <head>.
-# Crea el elemento si no existe — funciona aunque html.Style no esté disponible en esta versión de Dash.
-app.clientside_callback(
-    """
-    function(css) {
-        var el = document.getElementById('org-brand-style');
-        if (!el) {
-            el = document.createElement('style');
-            el.id = 'org-brand-style';
-            document.head.appendChild(el);
-        }
-        el.textContent = css || '';
-        return '';
-    }
-    """,
-    Output("org-brand-css-sink", "children"),
-    Input("org-brand-css", "data"),
-)

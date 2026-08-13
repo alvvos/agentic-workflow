@@ -6,7 +6,6 @@ import plotly.graph_objects as go
 from dash import Input, Output, State, callback, dcc, html, no_update
 
 from src.core.data_master import mapa_tiendas
-from src.core.org_branding import get_branding_from_locs
 from src.db.queries import get_df_enriquecido, get_zones_for_loc
 from src.layout.components.loaders import loading_section
 from src.services.ml_predictivo import ejecutar_auditoria_predictiva
@@ -720,7 +719,6 @@ def actualizar_prediccion_publica(tab, locs, session_id):
         zonas = [z for z in get_zones_for_loc(loc_uuid) if not z.get("oculta")]
 
         falso_hoy_bt = (datetime.today() - timedelta(days=14)).strftime("%Y-%m-%d")
-        branding = get_branding_from_locs([loc_uuid])
         roots, children_map = _build_zone_tree(zonas)
         color_map = _assign_colors(roots, children_map)
 
@@ -741,7 +739,7 @@ def actualizar_prediccion_publica(tab, locs, session_id):
                 zona_results,
                 children_map,
                 color_map,
-                branding.effective_band_color,
+                "",
             )
             for root in roots
         ]

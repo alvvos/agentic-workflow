@@ -43,16 +43,23 @@ def serve_layout():
                                     [
                                         html.H2(
                                             "Operaciones",
-                                            className="fw-bold text-dark mb-0",
-                                            style={"fontSize": "1.5rem", "letterSpacing": "-0.3px"},
+                                            className="mb-0",
+                                            style={
+                                                "fontSize": "1.45rem",
+                                                "fontWeight": "700",
+                                                "letterSpacing": "-0.5px",
+                                                "color": "#0f0f0f",
+                                                "lineHeight": "1.1",
+                                            },
                                         ),
                                         html.Span(
                                             datetime.today().strftime("%-d de %B · %Y"),
                                             style={
-                                                "fontSize": "0.75rem",
-                                                "color": "#8492a6",
-                                                "fontWeight": "500",
-                                                "marginTop": "2px",
+                                                "fontSize": "0.7rem",
+                                                "color": "#b0b0aa",
+                                                "fontWeight": "400",
+                                                "marginTop": "3px",
+                                                "letterSpacing": "0.02em",
                                             },
                                         ),
                                     ],
@@ -92,21 +99,37 @@ def serve_layout():
                                 ),
                                 (
                                     dbc.Button(
-                                        "Admin",
+                                        html.I(className="fas fa-shield-halved"),
                                         id="btn-admin-panel",
                                         color="secondary",
                                         outline=True,
                                         size="sm",
-                                        className="fw-bold rounded-3 shadow-sm me-2",
+                                        className="rounded-3 shadow-sm me-2",
+                                        title="Panel de administración",
                                     )
                                     if role == "admin"
                                     else html.Span(id="btn-admin-panel")
                                 ),
                                 (
-                                    html.A(
-                                        session_id,
-                                        href="/logout",
-                                        className="btn btn-outline-secondary btn-sm fw-bold rounded-3 shadow-sm",
+                                    html.Div(
+                                        [
+                                            html.Span(
+                                                session_id,
+                                                className="text-muted small me-2",
+                                                style={"fontWeight": "500"},
+                                            ),
+                                            html.A(
+                                                [
+                                                    html.I(
+                                                        className="fas fa-right-from-bracket me-1"
+                                                    ),
+                                                    "Cerrar sesión",
+                                                ],
+                                                href="/logout",
+                                                className="btn btn-outline-secondary btn-sm fw-bold rounded-3 shadow-sm",
+                                            ),
+                                        ],
+                                        className="d-flex align-items-center",
                                     )
                                     if not MODO_DESARROLLO
                                     else html.Span()
@@ -140,7 +163,11 @@ def serve_layout():
                         ]
                     )
                 ],
-                className="border-0 shadow-sm rounded-4",
+                className="border-0 rounded-4",
+                style={
+                    "background": "#ffffff",
+                    "boxShadow": "0 1px 4px rgba(0,0,0,.05), 0 4px 20px rgba(0,0,0,.04)",
+                },
             ),
         ]
     )
@@ -153,9 +180,6 @@ def serve_layout():
             dcc.Store(id="sync-phase", data="configure"),
             dcc.Store(id="sidebar-open", data=True),
             dcc.Store(id="loc-loaded", data=None),
-            dcc.Store(id="org-branding-store", data=None),
-            dcc.Store(id="org-brand-css", data=""),
-            html.Div(id="org-brand-css-sink", style={"display": "none"}),
             dcc.Interval(id="interval-staleness", interval=5 * 60 * 1000, n_intervals=0),
             dcc.Interval(id="interval-sync-poll", interval=1500, n_intervals=0, disabled=True),
             dbc.Modal(
@@ -396,5 +420,9 @@ def serve_layout():
             ),
         ],
         fluid=True,
-        style={"padding": "30px", "minHeight": "100vh"},
+        style={
+            "padding": "28px 32px",
+            "minHeight": "100vh",
+            "background": "#f7f7f5",
+        },
     )

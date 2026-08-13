@@ -6,20 +6,20 @@ from dash import dcc, html
 from src.core.data_master import opciones_orgs
 
 _LABEL_STYLE = {
-    "fontSize": "0.68rem",
-    "fontWeight": "700",
-    "letterSpacing": "0.6px",
-    "color": "#8492a6",
+    "fontSize": "0.65rem",
+    "fontWeight": "600",
+    "letterSpacing": "0.07em",
+    "color": "#a0a0a0",
     "textTransform": "uppercase",
-    "marginBottom": "6px",
+    "marginBottom": "7px",
     "display": "flex",
     "alignItems": "center",
     "gap": "6px",
 }
 
 _SECTION_DIVIDER_STYLE = {
-    "borderTop": "1px solid #edf0f5",
-    "margin": "16px 0 14px",
+    "borderTop": "1px solid #f0f0ee",
+    "margin": "18px 0 16px",
 }
 
 
@@ -33,10 +33,20 @@ def build_sidebar(org_options=None):
     return html.Div(
         [
             html.Div(
-                html.Img(
-                    id="sidebar-logo-img",
-                    src="/assets/logo.png",
-                    style={"maxWidth": "100%", "maxHeight": "56px", "objectFit": "contain"},
+                html.Div(
+                    html.Img(
+                        id="sidebar-logo-img",
+                        src="/assets/logo.png",
+                        style={"maxWidth": "100%", "maxHeight": "44px", "objectFit": "contain"},
+                    ),
+                    style={
+                        "display": "inline-block",
+                        "background": "#ffffff",
+                        "borderRadius": "50px",
+                        "padding": "10px 22px",
+                        "boxShadow": "0 1px 6px rgba(0,0,0,.08)",
+                        "border": "1px solid #f0f0ee",
+                    },
                 ),
                 className="text-center mb-3 px-2",
             ),
@@ -46,24 +56,18 @@ def build_sidebar(org_options=None):
                         # ── Encabezado ──────────────────────────────────────
                         html.Div(
                             [
-                                html.Div(
-                                    id="sidebar-accent-bar",
-                                    style={
-                                        "width": "3px",
-                                        "height": "18px",
-                                        "backgroundColor": "#0052CC",
-                                        "borderRadius": "2px",
-                                        "flexShrink": 0,
-                                    },
+                                html.I(
+                                    className="fas fa-sliders",
+                                    style={"fontSize": "0.75rem", "color": "#b0b0aa"},
                                 ),
                                 html.Span(
                                     "Filtros",
                                     style={
-                                        "fontSize": "0.78rem",
-                                        "fontWeight": "700",
-                                        "letterSpacing": "0.8px",
+                                        "fontSize": "0.72rem",
+                                        "fontWeight": "600",
+                                        "letterSpacing": "0.07em",
                                         "textTransform": "uppercase",
-                                        "color": "#2c3e50",
+                                        "color": "#6e6e6a",
                                     },
                                 ),
                             ],
@@ -176,11 +180,12 @@ def build_sidebar(org_options=None):
                             color="primary",
                             size="sm",
                             className="w-100 fw-bold rounded-3",
+                            style={"letterSpacing": "0.02em"},
                         ),
                     ],
                     style={"padding": "20px 18px"},
                 ),
-                className="border-0 shadow-sm sidebar-accent-card",
+                className="border-0 sidebar-accent-card",
             ),
         ],
         className="sticky-top",

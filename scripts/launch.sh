@@ -71,6 +71,7 @@ sleep 1
 echo "→ Arrancando app en http://localhost:$APP_PORT"
 cd "$REPO_ROOT"
 source venv/bin/activate 2>/dev/null || true
+[ -f .env ] && set -a && source .env && set +a
 python app.py &
 APP_PID=$!
 

@@ -1,4 +1,11 @@
 
+/* ── Body baseline — smooth font rendering ───────────────────────────────── */
+body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
 /* ── Loading modal — backdrop blur + card centrada ───────────────────────── */
 @keyframes loader-card-in {
     from { opacity: 0; transform: translate(-50%, -54%); }
@@ -26,8 +33,9 @@
     z-index: 9991;
     background: white;
     padding: 1.1rem 1.8rem;
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+    border-radius: 14px;
+    border: 1px solid #f0f0f0;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
     display: flex;
     align-items: center;
     animation: loader-card-in 0.18s ease;
@@ -68,15 +76,16 @@
     flex: 0 0 auto !important;
     width: auto !important;
     display: inline-block !important;
-    padding: 12px 20px !important;
+    padding: 10px 18px !important;
     margin: 0 !important;
     border: none !important;
     border-bottom: 3px solid transparent !important;
     margin-bottom: -2px !important;
     background: transparent !important;
     color: #6c757d !important;
-    font-size: 0.87rem !important;
+    font-size: 0.82rem !important;
     font-weight: 600 !important;
+    letter-spacing: 0.01em !important;
     cursor: pointer !important;
     white-space: nowrap !important;
     transition: color 0.15s ease, border-color 0.15s ease !important;
@@ -110,16 +119,17 @@
     padding: 0 !important;
 }
 
-/* ── Sidebar card — borde superior de acento ────────────────────────────── */
+/* ── Sidebar card ────────────────────────────────────────────────────────── */
 .sidebar-accent-card {
-    border-top: 3px solid #0052CC !important;
-    border-radius: 0 0 12px 12px !important;
+    border: 1px solid #f0f0ee !important;
+    border-radius: 12px !important;
+    box-shadow: 0 1px 8px rgba(0, 0, 0, 0.05), 0 4px 20px rgba(0, 0, 0, 0.04) !important;
 }
 
 /* ── Chat FAB — hover sutil ──────────────────────────────────────────────── */
 #chat-fab:hover {
     transform: translateY(-2px) !important;
-    box-shadow: 0 8px 28px rgba(0,82,204,0.50) !important;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.15) !important;
 }
 
 /* ── Chat modal — backdrop con blur ─────────────────────────────────────── */
@@ -162,7 +172,29 @@
     box-shadow: 0 0 0 0.18rem rgba(0, 82, 204, 0.20) !important;
 }
 
-/* ── Panel Estado: cabeceras del acordeón ────────────────────────────────── */
+/* ── Panel Estado: acordeón con esquinas redondeadas ─────────────────────── */
+.pm-acordeon .accordion-item {
+    border-radius: 12px !important;
+    overflow: hidden;
+    margin-bottom: 6px;
+    border: none !important;
+}
+.pm-acordeon .accordion-item:last-child {
+    margin-bottom: 0;
+}
+.pm-acordeon .accordion-button {
+    border-radius: 12px !important;
+}
+.pm-acordeon .accordion-button.collapsed {
+    border-radius: 12px !important;
+}
+.pm-acordeon .accordion-button:not(.collapsed) {
+    border-radius: 12px 12px 0 0 !important;
+}
+.pm-acordeon .accordion-collapse .accordion-body {
+    border-radius: 0 0 12px 12px !important;
+}
+
 /* Cerradas → fondo azul corporativo */
 .pm-acordeon .accordion-button.collapsed {
     background-color: #0052CC !important;
@@ -171,7 +203,7 @@
 }
 /* Iconos y texto dentro de la cabecera cerrada */
 .pm-acordeon .accordion-button.collapsed i {
-    color: rgba(255,255,255,0.88) !important;
+    color: rgba(255, 255, 255, 0.88) !important;
 }
 .pm-acordeon .accordion-button.collapsed span {
     color: #fff !important;
@@ -180,11 +212,11 @@
 .pm-acordeon .accordion-button.collapsed::after {
     filter: brightness(0) invert(1);
 }
-/* Abiertas → fondo muy claro, texto oscuro */
+/* Abiertas → fondo cálido claro, texto oscuro */
 .pm-acordeon .accordion-button:not(.collapsed) {
-    background-color: #f4f7ff;
-    color: #1a2e5a;
-    box-shadow: inset 0 -1px 0 rgba(0,82,204,0.12);
+    background-color: #f8f8f6;
+    color: #1a1a1a;
+    box-shadow: inset 0 -1px 0 rgba(0, 82, 204, 0.12);
 }
 .pm-acordeon .accordion-button:not(.collapsed)::after {
     filter: none;
@@ -227,11 +259,11 @@
 
 /* ── Plotly rangeselector — botones de navegación temporal ──────────────── */
 .rangeselector .button rect {
-    fill: rgba(248, 249, 250, 0.95) !important;
+    fill: rgba(0, 0, 0, 0.04) !important;
     stroke: #dee2e6 !important;
     stroke-width: 1 !important;
-    rx: 6 !important;
-    ry: 6 !important;
+    rx: 8 !important;
+    ry: 8 !important;
 }
 .rangeselector .button:hover rect {
     fill: #e8effc !important;
@@ -272,33 +304,3 @@
     font-size: 0.81em;
     font-family: monospace;
 }
-
-/* ── Admin panel — siempre colores Bootstrap neutros, sin tinte de org ────── */
-/* Estos selectores tienen mayor especificidad que los del branding dinámico   */
-/* (.admin-chrome X > X) y ganan aunque ambos usen !important.                */
-.admin-chrome .text-primary                        { color: #0d6efd !important; }
-.admin-chrome .bg-primary                          { background-color: #0d6efd !important; }
-.admin-chrome .border-primary                      { border-color: #0d6efd !important; }
-.admin-chrome .border-start.border-primary         { border-left-color: #0d6efd !important; }
-.admin-chrome .badge.bg-primary                    { background-color: #0d6efd !important; }
-.admin-chrome .btn-primary                         { background-color: #0d6efd !important; border-color: #0d6efd !important; color: #fff !important; }
-.admin-chrome .btn-primary:hover                   { background-color: #0b5ed7 !important; border-color: #0a58ca !important; }
-.admin-chrome .btn-outline-primary                 { color: #0d6efd !important; border-color: #0d6efd !important; background-color: transparent !important; }
-.admin-chrome .btn-outline-primary:hover           { background-color: #0d6efd !important; color: #fff !important; }
-.admin-chrome .btn-outline-danger                  { color: #dc3545 !important; border-color: #dc3545 !important; }
-.admin-chrome .accordion-button:not(.collapsed)    { color: #0d6efd !important; }
-/* Nav-links — el branding inyecta --bs-link-color globalmente, lo que pinta los <a> de org color */
-.admin-chrome .nav-link                            { color: #6c757d !important; }
-.admin-chrome .nav-link:hover                      { color: #495057 !important; }
-.admin-chrome .nav-tabs .nav-link.active           { color: #495057 !important; border-top-color: #dee2e6 !important; border-left-color: #dee2e6 !important; border-right-color: #dee2e6 !important; }
-/* Form controls focus */
-.admin-chrome .form-control:focus                  { border-color: #86b7fe !important; box-shadow: 0 0 0 0.25rem rgba(13,110,253,.25) !important; }
-.admin-chrome .form-select:focus                   { border-color: #86b7fe !important; box-shadow: 0 0 0 0.25rem rgba(13,110,253,.25) !important; }
-.admin-chrome .form-check-input:checked            { background-color: #0d6efd !important; border-color: #0d6efd !important; }
-.admin-chrome .form-check-input:focus              { border-color: #86b7fe !important; box-shadow: 0 0 0 0.25rem rgba(13,110,253,.25) !important; }
-/* Modal POIs — Bootstrap lo renderiza fuera del wrapper .admin-chrome, así que usamos clase propia */
-.admin-modal .text-primary                         { color: #0d6efd !important; }
-.admin-modal .btn-primary                          { background-color: #0d6efd !important; border-color: #0d6efd !important; }
-.admin-modal .btn-outline-primary                  { color: #0d6efd !important; border-color: #0d6efd !important; }
-.admin-modal .form-control:focus                   { border-color: #86b7fe !important; box-shadow: 0 0 0 0.25rem rgba(13,110,253,.25) !important; }
-.admin-modal .form-select:focus                    { border-color: #86b7fe !important; box-shadow: 0 0 0 0.25rem rgba(13,110,253,.25) !important; }
