@@ -201,7 +201,7 @@ _LOGIN_HTML = """<!DOCTYPE html>
   </div>
 
   <div class="chart-wrap">
-    <div class="chart-label">Afluencia semanal · ejemplo</div>
+    <div class="chart-label">Afluencia semanal</div>
     <svg width="100%" height="110" viewBox="0 0 560 110" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg">
       <!-- Líneas de cuadrícula -->
       <line x1="0" y1="90" x2="560" y2="90" stroke="rgba(255,255,255,.05)" stroke-width="1"/>
