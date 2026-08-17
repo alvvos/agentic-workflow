@@ -343,16 +343,19 @@ def construir_figura_bi(
         for f_date, f_name in festivos.items():
             f_ts = pd.Timestamp(f_date)
             if f_min <= f_ts <= f_max:
-                fig.add_vline(
-                    x=f_ts.strftime("%Y-%m-%d"),
-                    line=dict(color="#f39c12", width=1.5, dash="dash"),
-                    opacity=0.55,
-                    annotation_text=(f_name[:18] if f_name else ""),
-                    annotation_position="top right",
-                    annotation_font=dict(size=8, color="#e67e22"),
-                    annotation_bgcolor="rgba(255,255,255,0.75)",
-                    annotation_bordercolor="#f39c12",
-                )
+                try:
+                    fig.add_vline(
+                        x=f_ts.strftime("%Y-%m-%d"),
+                        line=dict(color="#f39c12", width=1.5, dash="dash"),
+                        opacity=0.55,
+                        annotation_text=(f_name[:18] if f_name else ""),
+                        annotation_position="top right",
+                        annotation_font=dict(size=8, color="#e67e22"),
+                        annotation_bgcolor="rgba(255,255,255,0.75)",
+                        annotation_bordercolor="#f39c12",
+                    )
+                except Exception:
+                    pass
 
     return fig
 
