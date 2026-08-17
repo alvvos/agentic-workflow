@@ -196,7 +196,7 @@ _LOGIN_HTML = """<!DOCTYPE html>
   </div>
 
   <div class="left-headline">
-    <h1>Retail<br><span>intel</span>li<br>gence.</h1>
+    <h1>Aitanna<br>Repor<span>ting.</span></h1>
     <p>Afluencia en tiempo real, forecasts por zona y detección automática de anomalías.</p>
   </div>
 
@@ -235,16 +235,16 @@ _LOGIN_HTML = """<!DOCTYPE html>
 
   <div class="left-footer">
     <div class="left-footer-item">
-      <span class="left-footer-num">14d</span>
-      <span class="left-footer-label">Forecast</span>
+      <span class="left-footer-num">Diario</span>
+      <span class="left-footer-label">Actualización</span>
     </div>
     <div class="left-footer-item">
-      <span class="left-footer-num">Multi-org</span>
-      <span class="left-footer-label">Arquitectura</span>
+      <span class="left-footer-num">14 días</span>
+      <span class="left-footer-label">Previsión</span>
     </div>
     <div class="left-footer-item">
-      <span class="left-footer-num">XGBoost</span>
-      <span class="left-footer-label">Motor ML</span>
+      <span class="left-footer-num">Por zona</span>
+      <span class="left-footer-label">Granularidad</span>
     </div>
   </div>
 </div>
