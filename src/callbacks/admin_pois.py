@@ -169,10 +169,10 @@ def _render_table(location_uuid: str) -> html.Div:
 
 @app.callback(
     Output("admin-pois-loc-select", "options"),
-    Input("admin-sub-tabs", "active_tab"),
+    Input("url", "pathname"),
 )
-def _cargar_opciones_locs(active_tab):
-    if active_tab != "admin-tab-pois":
+def _cargar_opciones_locs(pathname):
+    if not pathname or not pathname.startswith("/admin/pois"):
         return no_update
     return _get_loc_options()
 
@@ -226,7 +226,7 @@ def _actualizar_tabla(location_uuid, del_clicks):
 
 
 @app.callback(
-    Output("admin-poi-modal", "is_open"),
+    Output("admin-poi-form-panel", "style"),
     Output("admin-poi-modal-title", "children"),
     Output("admin-poi-nombre", "value"),
     Output("admin-poi-categoria", "value"),
@@ -240,12 +240,12 @@ def _actualizar_tabla(location_uuid, del_clicks):
     Input("admin-poi-modal-save", "n_clicks"),
     prevent_initial_call=True,
 )
-def _toggle_poi_modal(n_add, n_cancel, n_save):
+def _toggle_poi_form(n_add, n_cancel, n_save):
     triggered = dash.callback_context.triggered[0]["prop_id"]
     if "admin-poi-add-btn" in triggered:
-        return True, "Añadir POI", "", "metro", None, None, 0.5, "", None
+        return {}, "Añadir POI", "", "metro", None, None, 0.5, "", None
     return (
-        False,
+        {"display": "none"},
         no_update,
         no_update,
         no_update,

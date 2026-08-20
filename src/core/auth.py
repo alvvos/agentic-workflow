@@ -315,6 +315,8 @@ def require_login():
         return
     if not flask.session.get("user"):
         return flask.redirect("/login")
+    if flask.request.path.startswith("/admin") and flask.session.get("role") != "admin":
+        return flask.redirect("/")
 
 
 @server.route("/login", methods=["GET", "POST"])

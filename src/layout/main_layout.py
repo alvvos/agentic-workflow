@@ -8,8 +8,8 @@ from src.chatbot.chat_panel import build_chat_fab, build_chat_modal
 from src.core import data_master
 from src.core.auth import get_current_org_access, get_current_role
 from src.core.config import MODO_DESARROLLO
+from src.layout.admin.admin_shell import build_admin_shell
 from src.layout.sidebar import build_sidebar
-from src.layout.tabs.tab_admin import build_admin_content
 from src.layout.tabs.tab_bi import build_tab_bi
 from src.layout.tabs.tab_informes import build_tab_informes
 from src.layout.tabs.tab_pm import build_tab_pm
@@ -98,13 +98,11 @@ def serve_layout():
                                     className="fw-bold rounded-3 shadow-sm me-2 d-none",
                                 ),
                                 (
-                                    dbc.Button(
+                                    html.A(
                                         html.I(className="fas fa-shield-halved"),
                                         id="btn-admin-panel",
-                                        color="secondary",
-                                        outline=True,
-                                        size="sm",
-                                        className="rounded-3 shadow-sm me-2",
+                                        href="/admin/usuarios",
+                                        className="btn btn-outline-secondary btn-sm rounded-3 shadow-sm me-2",
                                         title="Panel de administración",
                                     )
                                     if role == "admin"
@@ -173,7 +171,9 @@ def serve_layout():
     )
 
     return dbc.Container(
-        [
+        id="main-container",
+        children=[
+            dcc.Location(id="url", refresh=False),
             dcc.Store(id="session-id", data=session_id),
             dcc.Store(id="data-version", data=0),
             dcc.Store(id="sync-trigger", data=0),
@@ -372,28 +372,6 @@ def serve_layout():
                 contentClassName="border-0 rounded-4",
                 style={"boxShadow": "0 20px 60px rgba(0,0,0,0.15)"},
             ),
-            dbc.Modal(
-                [
-                    dbc.ModalHeader(
-                        dbc.ModalTitle(
-                            [
-                                html.I(className="fas fa-shield-halved me-2 text-primary"),
-                                "Panel de administración",
-                            ],
-                            className="fw-bold",
-                        ),
-                        close_button=True,
-                    ),
-                    dbc.ModalBody(build_admin_content(), className="p-0"),
-                ],
-                id="modal-admin-panel",
-                size="xl",
-                is_open=False,
-                scrollable=True,
-                centered=False,
-                contentClassName="border-0 rounded-4 admin-modal",
-                style={"boxShadow": "0 20px 60px rgba(0,0,0,0.15)"},
-            ),
             dbc.Toast(
                 id="toast-notificacion",
                 header="Notificación",
@@ -412,12 +390,18 @@ def serve_layout():
             ),
             build_chat_modal(),
             build_chat_fab(),
-            dbc.Row(
-                [
-                    dbc.Col(sidebar, id="sidebar-col", xs=12, lg=3, xl=2, className="mb-4 mb-lg-0"),
-                    dbc.Col(main_content, id="main-col", xs=12, lg=9, xl=10),
-                ]
+            html.Div(
+                id="dashboard-container",
+                children=dbc.Row(
+                    [
+                        dbc.Col(
+                            sidebar, id="sidebar-col", xs=12, lg=3, xl=2, className="mb-4 mb-lg-0"
+                        ),
+                        dbc.Col(main_content, id="main-col", xs=12, lg=9, xl=10),
+                    ]
+                ),
             ),
+            build_admin_shell(),
         ],
         fluid=True,
         style={

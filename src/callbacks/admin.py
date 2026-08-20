@@ -12,6 +12,9 @@ from src.db.store import get_conn
 _ROLE_LABELS = {"admin": "Administrador", "user": "Usuario"}
 _ROLE_COLORS = {"admin": "danger", "user": "primary"}
 
+_SHOW = {}
+_HIDE = {"display": "none"}
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -109,10 +112,10 @@ def _load_orgs() -> list:
     return [{"uuid": o[0], "name": o[1], "locations": locs_by_org.get(o[0], [])} for o in orgs_rows]
 
 
-# ── Zone hierarchy modal ──────────────────────────────────────────────────────
+# ── Zone hierarchy panel ──────────────────────────────────────────────────────
 
 
-def _zone_modal_body(loc_uuid: str):
+def _zone_panel_body(loc_uuid: str):
     conn = get_conn()
     zones = conn.execute(
         "SELECT zona_id, nombre, tipo_zona, parent_zona_id, oculta"
@@ -127,10 +130,9 @@ def _zone_modal_body(loc_uuid: str):
                 "Esta ubicación no tiene zonas registradas.",
             ],
             color="info",
-            className="rounded-3 border-0",
+            className="rounded-3 border-0 m-3",
         )
 
-    # Build parent→children map; treat unknown parents as roots
     by_uuid = {z[0]: z for z in zones}
     children_of = {z[0]: [] for z in zones}
     roots = []
@@ -436,7 +438,6 @@ def _loc_row(loc: dict) -> html.Tr:
 
 
 def _render_locs_tree(orgs: list) -> html.Div:
-    # ── Una card por organización ─────────────────────────────────────────────
     org_cards = []
     for org in orgs:
         locs = org.get("locations", [])
@@ -537,47 +538,26 @@ def _render_locs_tree(orgs: list) -> html.Div:
     return html.Div(org_cards)
 
 
-def _stat_pill(value, label, icon, color_cls) -> html.Div:
-    return html.Div(
-        [
-            html.Div(
-                [
-                    html.I(className=f"fas {icon} me-2 {color_cls}"),
-                    html.Span(str(value), className=f"fw-bold {color_cls} me-1"),
-                    html.Span(label, className="text-muted small"),
-                ],
-                className="d-flex align-items-center justify-content-center",
-            ),
-        ]
-    )
-
-
 # ── Callbacks ─────────────────────────────────────────────────────────────────
 
 
 @app.callback(
     Output("admin-users-table-container", "children"),
     Input("admin-crud-signal", "data"),
-    Input("admin-sub-tabs", "active_tab"),
 )
-def refresh_users_table(_, active_tab):
+def refresh_users_table(_):
     if not is_admin():
-        return no_update
-    if active_tab != "admin-tab-users":
         return no_update
     return _render_users_table(_load_users())
 
 
 @app.callback(
     Output("admin-locs-container", "children"),
-    Input("admin-sub-tabs", "active_tab"),
     Input("admin-crud-signal", "data"),
     Input("data-version", "data"),
 )
-def refresh_locs_tree(active_tab, _signal, _version):
+def refresh_locs_tree(_signal, _version):
     if not is_admin():
-        return no_update
-    if active_tab != "admin-tab-locs":
         return no_update
     orgs = _load_orgs()
     if not orgs:
@@ -627,18 +607,17 @@ def add_user(_, username, password, role, signal):
     return (signal or 0) + 1, f"Usuario '{username}' {action}.", True, "success", "", ""
 
 
-# ── Modal de borrado unificado ────────────────────────────────────────────────
-# El índice del botón codifica el tipo: "user:name" | "loc:uuid" | "org:uuid" | "role:name"
+# ── Confirmación de borrado inline ────────────────────────────────────────────
 
 
 @app.callback(
     Output("admin-pending-delete", "data"),
-    Output("admin-delete-modal", "is_open"),
+    Output("admin-delete-confirm-area", "style"),
     Output("admin-delete-modal-body", "children"),
     Input({"type": "admin-del-btn", "index": ALL}, "n_clicks"),
     prevent_initial_call=True,
 )
-def open_delete_modal(n_clicks_list):
+def open_delete_confirm(n_clicks_list):
     ctx = callback_context
     if not ctx.triggered or all((n or 0) == 0 for n in n_clicks_list):
         return no_update, no_update, no_update
@@ -651,7 +630,6 @@ def open_delete_modal(n_clicks_list):
 
     kind, _, identifier = index.partition(":")
 
-    # Cambio de rol — no es borrado, no abre modal
     if kind == "role":
         return no_update, no_update, no_update
 
@@ -660,13 +638,10 @@ def open_delete_modal(n_clicks_list):
             [
                 "¿Eliminar al usuario ",
                 html.Strong(identifier, className="text-danger"),
-                "?",
-                html.Br(),
-                html.Span("Esta acción no se puede deshacer.", className="text-muted small"),
+                "? Esta acción no se puede deshacer.",
             ]
         )
     elif kind == "loc":
-        # Resolver nombre de la ubicación
         orgs = _load_orgs()
         nombre = next(
             (
@@ -681,12 +656,7 @@ def open_delete_modal(n_clicks_list):
             [
                 "¿Eliminar la ubicación ",
                 html.Strong(nombre, className="text-danger"),
-                "?",
-                html.Br(),
-                html.Span(
-                    "Se eliminará del árbol pero no afecta al historial de datos.",
-                    className="text-muted small",
-                ),
+                "? Se eliminará del árbol pero no afecta al historial de datos.",
             ]
         )
     elif kind == "org":
@@ -700,23 +670,15 @@ def open_delete_modal(n_clicks_list):
                     [
                         "¿Eliminar la organización ",
                         html.Strong(nombre, className="text-danger"),
-                        " y todas sus ubicaciones?",
+                        f" y sus {n_locs} ubicación{'es' if n_locs != 1 else ''}?",
                     ]
-                ),
-                dbc.Alert(
-                    [
-                        html.I(className="fas fa-exclamation-triangle me-2"),
-                        f"Se eliminarán {n_locs} ubicación{'es' if n_locs != 1 else ''} asociadas.",
-                    ],
-                    color="warning",
-                    className="rounded-3 border-0 py-2 mb-0",
                 ),
             ]
         )
     else:
         return no_update, no_update, no_update
 
-    return index, True, body
+    return index, _SHOW, body
 
 
 @app.callback(
@@ -727,32 +689,32 @@ def open_delete_modal(n_clicks_list):
     Output("admin-locs-feedback", "children"),
     Output("admin-locs-feedback", "is_open"),
     Output("admin-locs-feedback", "color"),
-    Output("admin-delete-modal", "is_open", allow_duplicate=True),
+    Output("admin-delete-confirm-area", "style", allow_duplicate=True),
     Input("admin-confirm-delete-btn", "n_clicks"),
     Input("admin-cancel-delete-btn", "n_clicks"),
     State("admin-pending-delete", "data"),
     State("admin-crud-signal", "data"),
     prevent_initial_call=True,
 )
-def handle_delete_modal(_, __, pending, signal):
+def handle_delete_confirm(_, __, pending, signal):
     if not is_admin():
-        return no_update, "Sin permisos.", True, "danger", no_update, False, no_update, False
+        return no_update, "Sin permisos.", True, "danger", no_update, False, no_update, _HIDE
     ctx = callback_context
     trigger = (ctx.triggered or [{}])[0].get("prop_id", "")
 
-    _u = (no_update, False, no_update)  # user feedback unchanged
-    _l = (no_update, False, no_update)  # loc feedback unchanged
+    _u = (no_update, False, no_update)
+    _l = (no_update, False, no_update)
 
     if "cancel" in trigger or not pending:
-        return no_update, *_u, *_l, False
+        return no_update, *_u, *_l, _HIDE
 
     kind, _, identifier = str(pending).partition(":")
 
     if kind == "user":
         if identifier not in _load_users():
-            return no_update, f"Usuario '{identifier}' no encontrado.", True, "warning", *_l, False
+            return no_update, f"Usuario '{identifier}' no encontrado.", True, "warning", *_l, _HIDE
         _delete_user(identifier)
-        return (signal or 0) + 1, f"Usuario '{identifier}' eliminado.", True, "success", *_l, False
+        return (signal or 0) + 1, f"Usuario '{identifier}' eliminado.", True, "success", *_l, _HIDE
 
     if kind == "loc":
         conn = get_conn()
@@ -760,10 +722,10 @@ def handle_delete_modal(_, __, pending, signal):
             "SELECT nombre FROM ubicaciones WHERE ubicacion_id = ?", [identifier]
         ).fetchone()
         if not row:
-            return no_update, *_u, "Ubicación no encontrada.", True, "warning", False
+            return no_update, *_u, "Ubicación no encontrada.", True, "warning", _HIDE
         nombre = row[0]
         conn.execute("DELETE FROM ubicaciones WHERE ubicacion_id = ?", [identifier])
-        return (signal or 0) + 1, *_u, f"Ubicación '{nombre}' eliminada.", True, "success", False
+        return (signal or 0) + 1, *_u, f"Ubicación '{nombre}' eliminada.", True, "success", _HIDE
 
     if kind == "org":
         conn = get_conn()
@@ -771,12 +733,19 @@ def handle_delete_modal(_, __, pending, signal):
             "SELECT nombre FROM organizaciones WHERE org_id = ?", [identifier]
         ).fetchone()
         if not row:
-            return no_update, *_u, "Organización no encontrada.", True, "warning", False
+            return no_update, *_u, "Organización no encontrada.", True, "warning", _HIDE
         nombre = row[0]
         conn.execute("DELETE FROM organizaciones WHERE org_id = ?", [identifier])
-        return (signal or 0) + 1, *_u, f"Organización '{nombre}' eliminada.", True, "success", False
+        return (
+            (signal or 0) + 1,
+            *_u,
+            f"Organización '{nombre}' eliminada.",
+            True,
+            "success",
+            _HIDE,
+        )
 
-    return no_update, *_u, *_l, False
+    return no_update, *_u, *_l, _HIDE
 
 
 @app.callback(
@@ -816,11 +785,11 @@ def toggle_role(n_clicks_list, signal):
     return (signal or 0) + 1, f"'{username}' ahora es {label}.", True, "success"
 
 
-# ── Modal jerarquía de zonas ──────────────────────────────────────────────────
+# ── Panel de edición de zonas (inline) ───────────────────────────────────────
 
 
 @app.callback(
-    Output("admin-zone-modal", "is_open"),
+    Output("admin-zone-editor-panel", "style"),
     Output("admin-zone-modal-title", "children"),
     Output("admin-zone-modal-body", "children"),
     Output("admin-zone-edit-loc", "data"),
@@ -828,12 +797,12 @@ def toggle_role(n_clicks_list, signal):
     Input("admin-zone-modal-cancel", "n_clicks"),
     prevent_initial_call=True,
 )
-def open_zone_modal(edit_clicks, _cancel):
+def open_zone_panel(edit_clicks, _cancel):
     ctx = callback_context
     trigger = (ctx.triggered or [{}])[0].get("prop_id", "")
 
     if "admin-zone-modal-cancel" in trigger:
-        return False, no_update, no_update, no_update
+        return _HIDE, no_update, no_update, no_update
 
     if all((n or 0) == 0 for n in edit_clicks):
         return no_update, no_update, no_update, no_update
@@ -850,14 +819,53 @@ def open_zone_modal(edit_clicks, _cancel):
     )
     nombre_loc = row[0] if row else loc_uuid[:8] + "…"
 
-    return True, f"Jerarquía de zonas — {nombre_loc}", _zone_modal_body(loc_uuid), loc_uuid
-
-
-# ── Modal acceso a organizaciones ────────────────────────────────────────────
+    return _SHOW, f"Zonas — {nombre_loc}", _zone_panel_body(loc_uuid), loc_uuid
 
 
 @app.callback(
-    Output("admin-access-modal", "is_open"),
+    Output("admin-zone-editor-panel", "style", allow_duplicate=True),
+    Output("admin-locs-feedback", "children", allow_duplicate=True),
+    Output("admin-locs-feedback", "is_open", allow_duplicate=True),
+    Output("admin-locs-feedback", "color", allow_duplicate=True),
+    Output("admin-crud-signal", "data", allow_duplicate=True),
+    Input("admin-zone-modal-save", "n_clicks"),
+    State({"type": "zone-parent-select", "index": ALL}, "value"),
+    State({"type": "zone-parent-select", "index": ALL}, "id"),
+    State({"type": "zone-visible-toggle", "index": ALL}, "value"),
+    State("admin-crud-signal", "data"),
+    prevent_initial_call=True,
+)
+def save_zone_hierarchy(n_clicks, parent_values, zone_ids, visible_values, signal):
+    if not is_admin():
+        return _HIDE, "Sin permisos.", True, "danger", no_update
+    if not n_clicks or not zone_ids:
+        return no_update, no_update, no_update, no_update, no_update
+
+    conn = get_conn()
+    for id_dict, parent_val, visible in zip(zone_ids, parent_values, visible_values):
+        zone_uuid = id_dict["index"]
+        parent_uuid = parent_val if parent_val else None
+        oculta = not bool(visible)
+        conn.execute(
+            "UPDATE zonas SET parent_zona_id = ?, oculta = ? WHERE zona_id = ?",
+            [parent_uuid, oculta, zone_uuid],
+        )
+
+    n = len(zone_ids)
+    return (
+        _HIDE,
+        f"Jerarquía publicada — {n} zona{'s' if n != 1 else ''} actualizadas.",
+        True,
+        "success",
+        (signal or 0) + 1,
+    )
+
+
+# ── Panel de acceso a organizaciones (inline) ─────────────────────────────────
+
+
+@app.callback(
+    Output("admin-access-panel", "style"),
     Output("admin-access-modal-title", "children"),
     Output("admin-access-modal-info", "children"),
     Output("admin-access-checklist", "options"),
@@ -867,14 +875,14 @@ def open_zone_modal(edit_clicks, _cancel):
     Input("admin-access-modal-cancel", "n_clicks"),
     prevent_initial_call=True,
 )
-def open_access_modal(access_clicks, _cancel):
+def open_access_panel(access_clicks, _cancel):
     from src.core import data_master as dm
 
     ctx = callback_context
     trigger = (ctx.triggered or [{}])[0].get("prop_id", "")
 
     if "admin-access-modal-cancel" in trigger:
-        return False, no_update, no_update, no_update, no_update, no_update
+        return _HIDE, no_update, no_update, no_update, no_update, no_update
 
     if all((n or 0) == 0 for n in access_clicks):
         return no_update, no_update, no_update, no_update, no_update, no_update
@@ -891,11 +899,11 @@ def open_access_modal(access_clicks, _cancel):
         html.I(className="fas fa-info-circle me-2 text-info"),
         f"Organizaciones accesibles para '{username}'. Sin selección, el usuario no verá datos.",
     ]
-    return True, f"Acceso a organizaciones — {username}", info, options, current, username
+    return _SHOW, f"Acceso — {username}", info, options, current, username
 
 
 @app.callback(
-    Output("admin-access-modal", "is_open", allow_duplicate=True),
+    Output("admin-access-panel", "style", allow_duplicate=True),
     Output("admin-users-feedback", "children", allow_duplicate=True),
     Output("admin-users-feedback", "is_open", allow_duplicate=True),
     Output("admin-users-feedback", "color", allow_duplicate=True),
@@ -906,63 +914,12 @@ def open_access_modal(access_clicks, _cancel):
     State("admin-crud-signal", "data"),
     prevent_initial_call=True,
 )
-def save_access_modal(n_clicks, selected_orgs, user_id, signal):
+def save_access_panel(n_clicks, selected_orgs, user_id, signal):
     if not is_admin():
-        return no_update, "Sin permisos.", True, "danger", no_update
+        return _HIDE, "Sin permisos.", True, "danger", no_update
     if not n_clicks or not user_id:
         return no_update, no_update, no_update, no_update, no_update
     _set_user_org_access(user_id, selected_orgs or [])
     n = len(selected_orgs or [])
     msg = f"Acceso de '{user_id}' actualizado — {n} organización{'es' if n != 1 else ''}."
-    return False, msg, True, "success", (signal or 0) + 1
-
-
-@app.callback(
-    Output("admin-zone-modal", "is_open", allow_duplicate=True),
-    Output("admin-locs-feedback", "children", allow_duplicate=True),
-    Output("admin-locs-feedback", "is_open", allow_duplicate=True),
-    Output("admin-locs-feedback", "color", allow_duplicate=True),
-    Output("admin-crud-signal", "data", allow_duplicate=True),
-    Input("admin-zone-modal-save", "n_clicks"),
-    State({"type": "zone-parent-select", "index": ALL}, "value"),
-    State({"type": "zone-parent-select", "index": ALL}, "id"),
-    State({"type": "zone-visible-toggle", "index": ALL}, "value"),
-    State("admin-crud-signal", "data"),
-    prevent_initial_call=True,
-)
-def save_zone_hierarchy(n_clicks, parent_values, zone_ids, visible_values, signal):
-    if not is_admin():
-        return no_update, "Sin permisos.", True, "danger", no_update
-    if not n_clicks or not zone_ids:
-        return no_update, no_update, no_update, no_update, no_update
-
-    conn = get_conn()
-    uuid_to_parent: dict[str, str | None] = {}
-    for id_dict, parent_val, visible in zip(zone_ids, parent_values, visible_values):
-        zone_uuid = id_dict["index"]
-        parent_uuid = parent_val if parent_val else None
-        oculta = not bool(visible)
-        uuid_to_parent[zone_uuid] = parent_uuid
-        conn.execute(
-            "UPDATE zonas SET parent_zona_id = ?, oculta = ? WHERE zona_id = ?",
-            [parent_uuid, oculta, zone_uuid],
-        )
-
-    n = len(zone_ids)
-    return (
-        False,
-        f"Jerarquía publicada — {n} zona{'s' if n != 1 else ''} actualizadas.",
-        True,
-        "success",
-        (signal or 0) + 1,
-    )
-
-
-@app.callback(
-    Output("modal-admin-panel", "is_open"),
-    Input("btn-admin-panel", "n_clicks"),
-    State("modal-admin-panel", "is_open"),
-    prevent_initial_call=True,
-)
-def toggle_admin_panel(n, is_open):
-    return not is_open
+    return _HIDE, msg, True, "success", (signal or 0) + 1

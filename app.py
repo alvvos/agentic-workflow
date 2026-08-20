@@ -1,5 +1,6 @@
 import src.callbacks.admin  # noqa: F401
 import src.callbacks.admin_pois  # noqa: F401
+import src.callbacks.admin_router  # noqa: F401
 import src.callbacks.analytics  # noqa: F401
 import src.callbacks.chat_callbacks  # noqa: F401
 import src.callbacks.estado_callbacks  # noqa: F401
