@@ -431,36 +431,48 @@ def _loc_row(loc: dict) -> html.Tr:
                 className="align-middle d-none d-md-table-cell",
             ),
             html.Td(
-                dbc.Badge(
+                html.Span(
                     [
-                        html.I(className="fas fa-layer-group me-1"),
-                        f"{len(zones)} zona{'s' if len(zones) != 1 else ''}",
+                        html.Span(
+                            style={
+                                "display": "inline-block",
+                                "width": "7px",
+                                "height": "7px",
+                                "borderRadius": "50%",
+                                "backgroundColor": "#0ea5e9",
+                                "marginRight": "6px",
+                            }
+                        ),
+                        html.Span(
+                            f"{len(zones)} zona{'s' if len(zones) != 1 else ''}",
+                            className="small text-muted",
+                        ),
                     ],
-                    color="info",
-                    pill=True,
+                    className="d-flex align-items-center",
                 ),
                 className="align-middle",
             ),
             html.Td(
-                dbc.ButtonGroup(
+                html.Div(
                     [
                         dbc.Button(
-                            [html.I(className="fas fa-sitemap me-1"), "Zonas"],
+                            html.I(className="fas fa-sitemap"),
                             id={"type": "admin-edit-zones-btn", "index": loc["uuid"]},
+                            color="light",
                             size="sm",
-                            color="primary",
-                            outline=True,
-                            className="rounded-start-3 fw-bold",
+                            className="admin-action-btn",
+                            title="Editar zonas",
                         ),
                         dbc.Button(
                             html.I(className="fas fa-trash-alt"),
                             id={"type": "admin-del-btn", "index": f"loc:{loc['uuid']}"},
+                            color="light",
                             size="sm",
-                            color="danger",
-                            outline=True,
-                            className="rounded-end-3",
+                            className="admin-action-btn admin-action-danger",
+                            title="Eliminar ubicación",
                         ),
-                    ]
+                    ],
+                    className="d-flex gap-1 justify-content-end",
                 ),
                 className="align-middle text-end pe-4",
             ),
@@ -536,23 +548,21 @@ def _render_locs_tree(orgs: list) -> html.Div:
                                     [
                                         html.I(className="fas fa-building me-2 text-primary"),
                                         html.Span(org.get("name", "—"), className="fw-bold me-2"),
-                                        dbc.Badge(
+                                        html.Span(
                                             f"{n} ubicación{'es' if n != 1 else ''}",
-                                            color="secondary",
-                                            pill=True,
-                                            className="ms-1",
+                                            className="small text-muted ms-2",
                                         ),
                                     ],
                                     className="d-flex align-items-center",
                                 ),
                                 dbc.Col(
                                     dbc.Button(
-                                        [html.I(className="fas fa-trash-alt me-1"), "Eliminar org"],
+                                        html.I(className="fas fa-trash-alt"),
                                         id={"type": "admin-del-btn", "index": f"org:{org_uuid}"},
+                                        color="light",
                                         size="sm",
-                                        color="danger",
-                                        outline=True,
-                                        className="rounded-3 fw-bold",
+                                        className="admin-action-btn admin-action-danger",
+                                        title="Eliminar organización",
                                     ),
                                     className="text-end",
                                 ),

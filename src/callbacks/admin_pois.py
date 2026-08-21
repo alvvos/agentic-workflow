@@ -75,11 +75,22 @@ def _render_table(location_uuid: str) -> html.Div:
                         className="align-middle fw-bold small",
                     ),
                     html.Td(
-                        dbc.Badge(
-                            cat_label,
-                            color=color_badge,
-                            pill=True,
-                            className="small",
+                        html.Span(
+                            [
+                                html.Span(
+                                    style={
+                                        "display": "inline-block",
+                                        "width": "7px",
+                                        "height": "7px",
+                                        "borderRadius": "50%",
+                                        "backgroundColor": f"var(--bs-{color_badge})",
+                                        "marginRight": "6px",
+                                        "flexShrink": "0",
+                                    }
+                                ),
+                                html.Span(cat_label, className="small text-muted"),
+                            ],
+                            className="d-flex align-items-center",
                         ),
                         className="align-middle",
                     ),
@@ -109,14 +120,14 @@ def _render_table(location_uuid: str) -> html.Div:
                         className="align-middle text-center",
                     ),
                     html.Td(
-                        dbc.ButtonGroup(
+                        html.Div(
                             [
                                 dbc.Button(
                                     html.I(className="fas fa-pencil-alt"),
                                     id={"type": "admin-poi-edit-btn", "index": poi["nombre"]},
                                     color="light",
                                     size="sm",
-                                    className="rounded-start-2",
+                                    className="admin-action-btn",
                                     title="Editar",
                                 ),
                                 dbc.Button(
@@ -127,10 +138,11 @@ def _render_table(location_uuid: str) -> html.Div:
                                     },
                                     color="light",
                                     size="sm",
-                                    className="rounded-end-2 text-danger",
+                                    className="admin-action-btn admin-action-danger",
                                     title="Eliminar",
                                 ),
-                            ]
+                            ],
+                            className="d-flex gap-1 justify-content-end",
                         ),
                         className="align-middle text-end pe-3",
                     ),

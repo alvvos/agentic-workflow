@@ -102,7 +102,7 @@ def serve_layout():
                                         html.I(className="fas fa-shield-halved"),
                                         id="btn-admin-panel",
                                         href="/admin/usuarios",
-                                        className="btn btn-outline-secondary btn-sm rounded-3 shadow-sm me-2",
+                                        className="header-icon-btn me-1",
                                         title="Panel de administración",
                                     )
                                     if role == "admin"
@@ -111,23 +111,54 @@ def serve_layout():
                                 (
                                     html.Div(
                                         [
+                                            html.Div(
+                                                [
+                                                    html.Span(
+                                                        (
+                                                            session_id[0].upper()
+                                                            if session_id
+                                                            else "?"
+                                                        ),
+                                                        style={
+                                                            "fontSize": "0.68rem",
+                                                            "fontWeight": "700",
+                                                            "color": "#4f46e5",
+                                                            "lineHeight": "1",
+                                                        },
+                                                    )
+                                                ],
+                                                style={
+                                                    "width": "28px",
+                                                    "height": "28px",
+                                                    "borderRadius": "50%",
+                                                    "background": "#e0e7ff",
+                                                    "display": "flex",
+                                                    "alignItems": "center",
+                                                    "justifyContent": "center",
+                                                    "flexShrink": "0",
+                                                },
+                                            ),
                                             html.Span(
                                                 session_id,
-                                                className="text-muted small me-2",
-                                                style={"fontWeight": "500"},
+                                                className="small mx-2",
+                                                style={"fontWeight": "500", "color": "#374151"},
+                                            ),
+                                            html.Span(
+                                                style={
+                                                    "width": "1px",
+                                                    "height": "16px",
+                                                    "background": "#e5e7eb",
+                                                    "marginRight": "10px",
+                                                }
                                             ),
                                             html.A(
-                                                [
-                                                    html.I(
-                                                        className="fas fa-right-from-bracket me-1"
-                                                    ),
-                                                    "Cerrar sesión",
-                                                ],
+                                                html.I(className="fas fa-right-from-bracket"),
                                                 href="/logout",
-                                                className="btn btn-outline-secondary btn-sm fw-bold rounded-3 shadow-sm",
+                                                className="header-icon-btn",
+                                                title="Cerrar sesión",
                                             ),
                                         ],
-                                        className="d-flex align-items-center",
+                                        className="d-flex align-items-center header-user-chip",
                                     )
                                     if not MODO_DESARROLLO
                                     else html.Span()

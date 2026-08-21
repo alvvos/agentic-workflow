@@ -305,6 +305,32 @@ body {
     font-family: monospace;
 }
 
+/* ── Header: chip de usuario + botón icono ───────────────────────────────── */
+.header-user-chip {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 999px;
+    padding: 4px 10px 4px 5px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.05);
+}
+
+.header-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    color: #6b7280;
+    text-decoration: none;
+    transition: background 0.13s ease, color 0.13s ease;
+    font-size: 0.85rem;
+}
+.header-icon-btn:hover {
+    background: #f3f4f6;
+    color: #374151;
+}
+
 /* ── Admin nav sidebar ────────────────────────────────────────────────────── */
 .admin-nav-link {
     color: rgba(200, 200, 220, 0.75);
