@@ -91,7 +91,8 @@ def build_admin_shell():
             "width": "210px",
             "minWidth": "210px",
             "background": "#1a1a2e",
-            "minHeight": "calc(100vh - 57px)",
+            "height": "100%",
+            "overflowY": "auto",
             "padding": "24px 10px",
             "flexShrink": 0,
         },
@@ -115,7 +116,7 @@ def build_admin_shell():
                 style={"display": "none"},
             ),
         ],
-        style={"flex": "1", "overflowX": "hidden"},
+        style={"flex": "1", "overflowY": "auto", "overflowX": "hidden"},
     )
 
     return html.Div(
@@ -131,7 +132,7 @@ def build_admin_shell():
             html.Div(
                 [nav, pages],
                 className="d-flex",
-                style={"minHeight": "calc(100vh - 57px)"},
+                style={"height": "calc(100vh - 57px)", "overflow": "hidden"},
             ),
         ],
     )

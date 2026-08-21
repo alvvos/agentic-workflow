@@ -321,3 +321,36 @@ body {
     color: #ffffff !important;
     font-weight: 600;
 }
+
+/* ── Admin table action buttons (ghost icon buttons) ─────────────────────── */
+.admin-action-btn {
+    width: 32px !important;
+    height: 32px !important;
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+    color: #9ca3af !important;
+    border-radius: 7px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: background 0.13s ease, color 0.13s ease !important;
+    box-shadow: none !important;
+    font-size: 0.82rem !important;
+}
+.admin-action-btn:hover:not(:disabled) {
+    background: #f3f4f6 !important;
+    color: #374151 !important;
+}
+.admin-action-btn:disabled {
+    opacity: 0.25 !important;
+    cursor: not-allowed !important;
+}
+.admin-action-danger:hover:not(:disabled) {
+    background: #fef2f2 !important;
+    color: #dc2626 !important;
+}
+.admin-action-promote:hover:not(:disabled) {
+    background: #fffbeb !important;
+    color: #d97706 !important;
+}

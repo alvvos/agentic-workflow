@@ -246,6 +246,33 @@ def _zone_panel_body(loc_uuid: str):
 # ── Render helpers ────────────────────────────────────────────────────────────
 
 
+def _role_indicator(role: str) -> html.Span:
+    is_admin_role = role == "admin"
+    dot_color = "#ef4444" if is_admin_role else "#9ca3af"
+    text_color = "#dc2626" if is_admin_role else "#6b7280"
+    icon = "fa-shield-halved" if is_admin_role else "fa-user"
+    return html.Span(
+        [
+            html.Span(
+                style={
+                    "width": "7px",
+                    "height": "7px",
+                    "borderRadius": "50%",
+                    "background": dot_color,
+                    "display": "inline-block",
+                    "marginRight": "7px",
+                    "verticalAlign": "middle",
+                    "flexShrink": 0,
+                }
+            ),
+            html.I(className=f"fas {icon} me-1", style={"fontSize": "0.7rem"}),
+            _ROLE_LABELS.get(role, role),
+        ],
+        className="d-inline-flex align-items-center small fw-semibold",
+        style={"color": text_color},
+    )
+
+
 def _render_users_table(users: dict) -> html.Div:
     if not users:
         return html.Div(
@@ -261,89 +288,94 @@ def _render_users_table(users: dict) -> html.Div:
         entry = _normalize(raw)
         role = entry.get("role", "user")
         me = username == _current_user()
+        promote_title = "Promover a Administrador" if role == "user" else "Degradar a Usuario"
+        promote_icon = "fa-user-shield" if role == "user" else "fa-user"
         rows.append(
             html.Tr(
                 [
                     html.Td(
-                        [
-                            html.Span(
-                                username[0].upper(),
-                                className="badge rounded-circle bg-primary me-2 fw-bold",
-                                style={
-                                    "width": "28px",
-                                    "height": "28px",
-                                    "lineHeight": "20px",
-                                    "fontSize": "0.75rem",
-                                    "display": "inline-flex",
-                                    "alignItems": "center",
-                                    "justifyContent": "center",
-                                },
-                            ),
-                            html.Span(username, className="fw-bold"),
-                            *(
-                                [html.Span(" (tú)", className="text-muted small ms-1 fst-italic")]
-                                if me
-                                else []
-                            ),
-                        ],
+                        html.Div(
+                            [
+                                html.Span(
+                                    username[0].upper(),
+                                    style={
+                                        "width": "32px",
+                                        "height": "32px",
+                                        "borderRadius": "50%",
+                                        "background": "#e0e7ff",
+                                        "color": "#4f46e5",
+                                        "fontSize": "0.78rem",
+                                        "fontWeight": "700",
+                                        "display": "inline-flex",
+                                        "alignItems": "center",
+                                        "justifyContent": "center",
+                                        "flexShrink": 0,
+                                        "marginRight": "10px",
+                                    },
+                                ),
+                                html.Div(
+                                    [
+                                        html.Span(username, className="fw-semibold d-block"),
+                                        *(
+                                            [
+                                                html.Span(
+                                                    "sesión actual",
+                                                    className="text-muted fst-italic",
+                                                    style={"fontSize": "0.7rem"},
+                                                )
+                                            ]
+                                            if me
+                                            else []
+                                        ),
+                                    ]
+                                ),
+                            ],
+                            className="d-flex align-items-center",
+                        ),
                         className="align-middle py-3 px-4",
                     ),
                     html.Td(
-                        dbc.Badge(
-                            [
-                                html.I(
-                                    className=f"fas {'fa-shield-alt' if role == 'admin' else 'fa-user'} me-1"
-                                ),
-                                _ROLE_LABELS.get(role, role),
-                            ],
-                            color=_ROLE_COLORS.get(role, "secondary"),
-                            className="rounded-pill px-3 py-2",
-                        ),
+                        _role_indicator(role),
                         className="align-middle",
                     ),
                     html.Td(
-                        dbc.ButtonGroup(
+                        html.Div(
                             [
                                 dbc.Button(
-                                    [html.I(className="fas fa-key me-1"), "Acceso"],
+                                    html.I(className="fas fa-key"),
                                     id={"type": "admin-access-btn", "index": username},
+                                    color="light",
                                     size="sm",
-                                    color="info",
-                                    outline=True,
-                                    className="rounded-start-3 fw-bold",
-                                    disabled=role == "admin",
+                                    className="admin-action-btn",
                                     title=(
                                         "Gestionar acceso a organizaciones"
                                         if role != "admin"
-                                        else "Los administradores tienen acceso total"
+                                        else "Admins tienen acceso total"
                                     ),
+                                    disabled=role == "admin",
                                 ),
                                 dbc.Button(
-                                    [
-                                        html.I(
-                                            className=f"fas {'fa-user-shield' if role == 'user' else 'fa-user'} me-1"
-                                        ),
-                                        "→ Admin" if role == "user" else "→ Usuario",
-                                    ],
+                                    html.I(className=f"fas {promote_icon}"),
                                     id={"type": "admin-del-btn", "index": f"role:{username}"},
+                                    color="light",
                                     size="sm",
-                                    color="warning" if role == "user" else "secondary",
-                                    outline=True,
-                                    className="fw-bold",
+                                    className="admin-action-btn admin-action-promote",
+                                    title=promote_title,
                                     disabled=me,
                                 ),
                                 dbc.Button(
                                     html.I(className="fas fa-trash-alt"),
                                     id={"type": "admin-del-btn", "index": f"user:{username}"},
+                                    color="light",
                                     size="sm",
-                                    color="danger",
-                                    outline=True,
-                                    className="rounded-end-3",
+                                    className="admin-action-btn admin-action-danger",
+                                    title=f"Eliminar {username}",
                                     disabled=me,
                                 ),
-                            ]
+                            ],
+                            className="d-flex gap-1 justify-content-end",
                         ),
-                        className="align-middle text-end pe-4",
+                        className="align-middle pe-4",
                     ),
                 ],
                 className="border-bottom",
