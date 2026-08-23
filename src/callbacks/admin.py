@@ -22,10 +22,38 @@ _HIDE = {"display": "none"}
 def _load_users() -> dict:
     rows = (
         get_conn()
-        .execute("SELECT usuario_id, password_hash, rol FROM usuarios ORDER BY usuario_id")
+        .execute(
+            "SELECT usuario_id, password_hash, rol, ultimo_acceso FROM usuarios ORDER BY usuario_id"
+        )
         .fetchall()
     )
-    return {r[0]: {"password": r[1], "role": r[2] or "user"} for r in rows}
+    return {r[0]: {"password": r[1], "role": r[2] or "user", "ultimo_acceso": r[3]} for r in rows}
+
+
+def _fmt_ultimo_acceso(ts) -> str:
+    if ts is None:
+        return "—"
+    from datetime import datetime, timezone
+
+    if isinstance(ts, str):
+        try:
+            ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        except Exception:
+            return ts
+    now = datetime.now(timezone.utc)
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    diff = now - ts
+    s = diff.total_seconds()
+    if s < 60:
+        return "ahora"
+    if s < 3600:
+        return f"hace {int(s/60)}min"
+    if s < 86400:
+        return f"hace {int(s/3600)}h"
+    if s < 172800:
+        return "ayer"
+    return ts.strftime("%-d %b %Y")
 
 
 def _upsert_user(username: str, password_hash: str, role: str) -> None:
@@ -339,6 +367,15 @@ def _render_users_table(users: dict) -> html.Div:
                         className="align-middle",
                     ),
                     html.Td(
+                        html.Span(
+                            _fmt_ultimo_acceso(
+                                raw.get("ultimo_acceso") if isinstance(raw, dict) else None
+                            ),
+                            className="text-muted small",
+                        ),
+                        className="align-middle",
+                    ),
+                    html.Td(
                         html.Div(
                             [
                                 dbc.Button(
@@ -391,6 +428,10 @@ def _render_users_table(users: dict) -> html.Div:
                             "Usuario", className="px-4 py-3 text-muted small text-uppercase fw-bold"
                         ),
                         html.Th("Rol", className="py-3 text-muted small text-uppercase fw-bold"),
+                        html.Th(
+                            "Último acceso",
+                            className="py-3 text-muted small text-uppercase fw-bold",
+                        ),
                         html.Th(
                             "Acciones",
                             className="py-3 pe-4 text-end text-muted small text-uppercase fw-bold",
