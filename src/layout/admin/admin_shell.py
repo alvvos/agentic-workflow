@@ -1,8 +1,5 @@
-import dash_bootstrap_components as dbc
-import flask
 from dash import dcc, html
 
-from src.core.config import MODO_DESARROLLO
 from src.layout.admin.page_pois import build_page_pois
 from src.layout.admin.page_ubicaciones import build_page_ubicaciones
 from src.layout.admin.page_usuarios import build_page_usuarios
@@ -15,56 +12,6 @@ _NAV_ITEMS = [
 
 
 def build_admin_shell():
-    session_id = "local_dev" if MODO_DESARROLLO else flask.session.get("user", "")
-
-    header = html.Div(
-        dbc.Container(
-            dbc.Row(
-                [
-                    dbc.Col(
-                        dcc.Link(
-                            [html.I(className="fas fa-arrow-left me-2"), "Dashboard"],
-                            href="/",
-                            className="btn btn-outline-secondary btn-sm rounded-3 fw-bold",
-                        ),
-                        width="auto",
-                        className="d-flex align-items-center",
-                    ),
-                    dbc.Col(
-                        html.Div(
-                            [
-                                html.I(className="fas fa-shield-halved me-2 text-primary"),
-                                html.Span("Admin", className="fw-bold fs-5"),
-                            ],
-                            className="d-flex align-items-center",
-                        ),
-                    ),
-                    dbc.Col(
-                        html.Span(
-                            [
-                                html.I(className="fas fa-circle-user me-2 text-muted"),
-                                session_id,
-                            ],
-                            className="text-muted small",
-                        ),
-                        width="auto",
-                        className="d-flex align-items-center",
-                    ),
-                ],
-                align="center",
-                className="g-3",
-            ),
-            fluid=True,
-        ),
-        className="bg-white border-bottom py-3 px-2 d-print-none",
-        style={
-            "position": "sticky",
-            "top": 0,
-            "zIndex": 1000,
-            "boxShadow": "0 1px 4px rgba(0,0,0,.06)",
-        },
-    )
-
     nav = html.Div(
         [
             html.Div(
@@ -128,11 +75,10 @@ def build_admin_shell():
             dcc.Store(id="admin-zone-edit-loc", data=None),
             dcc.Store(id="admin-access-modal-user", data=None),
             dcc.Store(id="admin-poi-edit-id", data=None),
-            header,
             html.Div(
                 [nav, pages],
                 className="d-flex",
-                style={"height": "calc(100vh - 57px)", "overflow": "hidden"},
+                style={"height": "100vh", "overflow": "hidden"},
             ),
         ],
     )
