@@ -103,7 +103,7 @@ def build_chat_modal() -> dbc.Modal:
                                             }
                                         ),
                                         html.Span(
-                                            "Sonnet 4.6 · 14 herramientas",
+                                            "En línea",
                                             style={"fontSize": "0.68rem", "color": _C_MUTED},
                                         ),
                                     ],
@@ -299,7 +299,7 @@ def conv_item(conv: dict, editing: bool = False) -> html.Div:
                 html.Div(
                     [
                         html.Button(
-                            html.I(className="fas fa-check"),
+                            "✓",
                             id={"type": "conv-rename-confirm", "id": cid},
                             n_clicks=0,
                             style={
@@ -309,10 +309,11 @@ def conv_item(conv: dict, editing: bool = False) -> html.Div:
                                 "borderRadius": "4px",
                                 "padding": "2px 7px",
                                 "marginRight": "3px",
+                                "fontSize": "0.8rem",
                             },
                         ),
                         html.Button(
-                            html.I(className="fas fa-times"),
+                            "✕",
                             id={"type": "conv-rename-cancel", "id": cid},
                             n_clicks=0,
                             style={
@@ -321,6 +322,7 @@ def conv_item(conv: dict, editing: bool = False) -> html.Div:
                                 "background": "#6c757d",
                                 "borderRadius": "4px",
                                 "padding": "2px 7px",
+                                "fontSize": "0.72rem",
                             },
                         ),
                     ],
@@ -356,18 +358,26 @@ def conv_item(conv: dict, editing: bool = False) -> html.Div:
                         html.Div(
                             [
                                 html.Button(
-                                    html.I(className="fas fa-pen"),
+                                    "···",
                                     id={"type": "conv-rename-btn", "id": cid},
                                     n_clicks=0,
                                     title="Renombrar",
-                                    style=_BTN_ACTION,
+                                    style={
+                                        **_BTN_ACTION,
+                                        "fontSize": "0.9rem",
+                                        "letterSpacing": "1px",
+                                    },
                                 ),
                                 html.Button(
-                                    html.I(className="fas fa-trash"),
+                                    "✕",
                                     id={"type": "conv-delete-btn", "id": cid},
                                     n_clicks=0,
                                     title="Eliminar",
-                                    style={**_BTN_ACTION, "color": "#e8b4b8"},
+                                    style={
+                                        **_BTN_ACTION,
+                                        "color": "#e8b4b8",
+                                        "fontSize": "0.72rem",
+                                    },
                                 ),
                             ],
                             className="conv-actions",
