@@ -14,13 +14,13 @@ def build_page_usuarios():
                         dbc.ButtonGroup(
                             [
                                 dbc.Button(
-                                    [html.I(className="fas fa-trash-alt me-2"), "Confirmar"],
+                                    "Confirmar",
                                     id="admin-confirm-delete-btn",
                                     color="danger",
                                     className="rounded-start-3 fw-bold",
                                 ),
                                 dbc.Button(
-                                    [html.I(className="fas fa-times me-2"), "Cancelar"],
+                                    "Cancelar",
                                     id="admin-cancel-delete-btn",
                                     color="secondary",
                                     outline=True,
@@ -43,10 +43,7 @@ def build_page_usuarios():
         children=dbc.Card(
             [
                 dbc.CardHeader(
-                    [
-                        html.I(className="fas fa-key me-2 text-info"),
-                        html.Span(id="admin-access-modal-title", className="fw-bold"),
-                    ],
+                    html.Span(id="admin-access-modal-title", className="fw-bold"),
                     className="bg-white border-bottom py-2 px-4",
                 ),
                 dbc.CardBody(
@@ -61,13 +58,13 @@ def build_page_usuarios():
                         dbc.ButtonGroup(
                             [
                                 dbc.Button(
-                                    [html.I(className="fas fa-save me-2"), "Guardar acceso"],
+                                    "Guardar acceso",
                                     id="admin-access-modal-save",
                                     color="primary",
                                     className="rounded-start-3 fw-bold shadow-sm",
                                 ),
                                 dbc.Button(
-                                    [html.I(className="fas fa-times me-2"), "Cancelar"],
+                                    "Cancelar",
                                     id="admin-access-modal-cancel",
                                     color="secondary",
                                     outline=True,
@@ -87,13 +84,10 @@ def build_page_usuarios():
     add_user_form = dbc.Card(
         [
             dbc.CardHeader(
-                [
-                    html.I(className="fas fa-user-plus me-2 text-primary"),
-                    html.Span(
-                        "Añadir usuario",
-                        className="fw-bold small text-uppercase text-muted",
-                    ),
-                ],
+                html.Span(
+                    "Añadir usuario",
+                    className="fw-bold small text-uppercase text-muted",
+                ),
                 className="bg-white border-bottom py-2 px-4",
             ),
             dbc.CardBody(
@@ -155,7 +149,7 @@ def build_page_usuarios():
                                         className="fw-bold small text-muted mb-1 d-block",
                                     ),
                                     dbc.Button(
-                                        [html.I(className="fas fa-plus me-2"), "Añadir"],
+                                        "Añadir",
                                         id="admin-add-user-btn",
                                         color="primary",
                                         className="rounded-3 w-100 fw-bold shadow-sm",
@@ -177,10 +171,7 @@ def build_page_usuarios():
     return html.Div(
         [
             html.Div(
-                html.H4(
-                    [html.I(className="fas fa-users me-2 text-primary"), "Usuarios"],
-                    className="mb-0 fw-bold",
-                ),
+                html.H4("Usuarios", className="mb-0 fw-bold"),
                 className="px-4 pt-4 pb-3 border-bottom",
                 style={"background": "#fff"},
             ),
@@ -195,13 +186,10 @@ def build_page_usuarios():
             dbc.Card(
                 [
                     dbc.CardHeader(
-                        [
-                            html.I(className="fas fa-users me-2 text-primary"),
-                            html.Span(
-                                "Gestión de usuarios",
-                                className="fw-bold small text-uppercase text-muted",
-                            ),
-                        ],
+                        html.Span(
+                            "Gestión de usuarios",
+                            className="fw-bold small text-uppercase text-muted",
+                        ),
                         className="bg-white border-bottom py-2 px-4",
                     ),
                     dbc.CardBody(

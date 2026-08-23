@@ -153,10 +153,7 @@ def _zone_panel_body(loc_uuid: str):
 
     if not zones:
         return dbc.Alert(
-            [
-                html.I(className="fas fa-info-circle me-2"),
-                "Esta ubicación no tiene zonas registradas.",
-            ],
+            "Esta ubicación no tiene zonas registradas.",
             color="info",
             className="rounded-3 border-0 m-3",
         )
@@ -186,10 +183,8 @@ def _zone_panel_body(loc_uuid: str):
             if tipo_zona
             else html.Span("—", className="text-muted small")
         )
-        icon = "fa-circle fa-xs text-muted" if is_leaf else "fa-layer-group text-primary"
         name_cell = html.Div(
             [
-                html.I(className=f"fas {icon} me-2"),
                 html.Span(nombre, className="fw-semibold"),
                 *(
                     [
@@ -278,7 +273,6 @@ def _role_indicator(role: str) -> html.Span:
     is_admin_role = role == "admin"
     dot_color = "#ef4444" if is_admin_role else "#9ca3af"
     text_color = "#dc2626" if is_admin_role else "#6b7280"
-    icon = "fa-shield-halved" if is_admin_role else "fa-user"
     return html.Span(
         [
             html.Span(
@@ -293,7 +287,6 @@ def _role_indicator(role: str) -> html.Span:
                     "flexShrink": 0,
                 }
             ),
-            html.I(className=f"fas {icon} me-1", style={"fontSize": "0.7rem"}),
             _ROLE_LABELS.get(role, role),
         ],
         className="d-inline-flex align-items-center small fw-semibold",
@@ -305,7 +298,7 @@ def _render_users_table(users: dict) -> html.Div:
     if not users:
         return html.Div(
             dbc.Alert(
-                [html.I(className="fas fa-info-circle me-2"), "No hay usuarios registrados."],
+                "No hay usuarios registrados.",
                 color="info",
                 className="rounded-3 border-0 m-3",
             ),
@@ -457,10 +450,7 @@ def _loc_row(loc: dict) -> html.Tr:
     return html.Tr(
         [
             html.Td(
-                [
-                    html.I(className="fas fa-store me-2 text-primary"),
-                    html.Span(loc.get("name", "—"), className="fw-semibold"),
-                ],
+                html.Span(loc.get("name", "—"), className="fw-semibold"),
                 className="align-middle py-3 px-4",
             ),
             html.Td(
@@ -563,7 +553,7 @@ def _render_locs_tree(orgs: list) -> html.Div:
                         html.Tr(
                             html.Td(
                                 html.Span(
-                                    [html.I(className="fas fa-inbox me-2"), "Sin ubicaciones"],
+                                    "Sin ubicaciones",
                                     className="text-muted fst-italic small",
                                 ),
                                 colSpan=5,
@@ -587,7 +577,6 @@ def _render_locs_tree(orgs: list) -> html.Div:
                             [
                                 dbc.Col(
                                     [
-                                        html.I(className="fas fa-building me-2 text-primary"),
                                         html.Span(org.get("name", "—"), className="fw-bold me-2"),
                                         html.Span(
                                             f"{n} ubicación{'es' if n != 1 else ''}",
@@ -978,10 +967,7 @@ def open_access_panel(access_clicks, _cancel):
     dm.reload_if_changed()
     current = _get_user_org_access(username)
     options = [{"label": o["label"], "value": o["value"]} for o in dm.opciones_orgs]
-    info = [
-        html.I(className="fas fa-info-circle me-2 text-info"),
-        f"Organizaciones accesibles para '{username}'. Sin selección, el usuario no verá datos.",
-    ]
+    info = f"Organizaciones accesibles para '{username}'. Sin selección, el usuario no verá datos."
     return _SHOW, f"Acceso — {username}", info, options, current, username
 
 

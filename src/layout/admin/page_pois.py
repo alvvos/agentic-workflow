@@ -9,14 +9,11 @@ def build_page_pois():
         children=dbc.Card(
             [
                 dbc.CardHeader(
-                    [
-                        html.I(className="fas fa-map-pin me-2 text-primary"),
-                        html.Span(
-                            id="admin-poi-modal-title",
-                            children="Añadir POI",
-                            className="fw-bold",
-                        ),
-                    ],
+                    html.Span(
+                        id="admin-poi-modal-title",
+                        children="Añadir POI",
+                        className="fw-bold",
+                    ),
                     className="bg-white border-bottom py-2 px-4",
                 ),
                 dbc.CardBody(
@@ -175,13 +172,13 @@ def build_page_pois():
                     dbc.ButtonGroup(
                         [
                             dbc.Button(
-                                [html.I(className="fas fa-save me-2"), "Guardar POI"],
+                                "Guardar POI",
                                 id="admin-poi-modal-save",
                                 color="primary",
                                 className="rounded-start-3 fw-bold shadow-sm",
                             ),
                             dbc.Button(
-                                [html.I(className="fas fa-times me-2"), "Cancelar"],
+                                "Cancelar",
                                 id="admin-poi-modal-cancel",
                                 color="secondary",
                                 outline=True,
@@ -199,10 +196,7 @@ def build_page_pois():
     return html.Div(
         [
             html.Div(
-                html.H4(
-                    [html.I(className="fas fa-map-pin me-2 text-primary"), "POIs"],
-                    className="mb-0 fw-bold",
-                ),
+                html.H4("POIs", className="mb-0 fw-bold"),
                 className="px-4 pt-4 pb-3 border-bottom",
                 style={"background": "#fff"},
             ),
@@ -241,30 +235,21 @@ def build_page_pois():
                                     dbc.ButtonGroup(
                                         [
                                             dbc.Button(
-                                                [
-                                                    html.I(className="fas fa-plus me-2"),
-                                                    "Añadir POI",
-                                                ],
+                                                "Añadir POI",
                                                 id="admin-poi-add-btn",
                                                 color="primary",
                                                 outline=True,
                                                 className="rounded-start-3 fw-bold",
                                             ),
                                             dbc.Button(
-                                                [
-                                                    html.I(className="fas fa-satellite me-2"),
-                                                    "Esri Places",
-                                                ],
+                                                "Esri Places",
                                                 id="admin-pois-sync-btn",
                                                 color="success",
                                                 outline=True,
                                                 className="fw-bold",
                                             ),
                                             dbc.Button(
-                                                [
-                                                    html.I(className="fab fa-google me-2"),
-                                                    "Google Places",
-                                                ],
+                                                "Google Places",
                                                 id="admin-pois-google-sync-btn",
                                                 color="info",
                                                 outline=True,
@@ -289,13 +274,10 @@ def build_page_pois():
             dbc.Card(
                 [
                     dbc.CardHeader(
-                        [
-                            html.I(className="fas fa-map-pin me-2 text-primary"),
-                            html.Span(
-                                "Puntos de interés",
-                                className="fw-bold small text-uppercase text-muted",
-                            ),
-                        ],
+                        html.Span(
+                            "Puntos de interés",
+                            className="fw-bold small text-uppercase text-muted",
+                        ),
                         className="bg-white border-bottom py-2 px-4",
                     ),
                     dbc.CardBody(

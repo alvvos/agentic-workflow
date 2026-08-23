@@ -9,10 +9,7 @@ def build_page_ubicaciones():
         children=dbc.Card(
             [
                 dbc.CardHeader(
-                    [
-                        html.I(className="fas fa-sitemap me-2 text-primary"),
-                        html.Span(id="admin-zone-modal-title", className="fw-bold"),
-                    ],
+                    html.Span(id="admin-zone-modal-title", className="fw-bold"),
                     className="bg-white border-bottom py-2 px-4",
                 ),
                 dbc.CardBody(
@@ -23,13 +20,13 @@ def build_page_ubicaciones():
                     dbc.ButtonGroup(
                         [
                             dbc.Button(
-                                [html.I(className="fas fa-save me-2"), "Publicar jerarquía"],
+                                "Publicar jerarquía",
                                 id="admin-zone-modal-save",
                                 color="primary",
                                 className="rounded-start-3 fw-bold shadow-sm",
                             ),
                             dbc.Button(
-                                [html.I(className="fas fa-times me-2"), "Cerrar"],
+                                "Cerrar",
                                 id="admin-zone-modal-cancel",
                                 color="secondary",
                                 outline=True,
@@ -47,10 +44,7 @@ def build_page_ubicaciones():
     return html.Div(
         [
             html.Div(
-                html.H4(
-                    [html.I(className="fas fa-building me-2 text-primary"), "Ubicaciones"],
-                    className="mb-0 fw-bold",
-                ),
+                html.H4("Ubicaciones", className="mb-0 fw-bold"),
                 className="px-4 pt-4 pb-3 border-bottom",
                 style={"background": "#fff"},
             ),

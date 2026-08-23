@@ -26,7 +26,7 @@ def build_admin_shell():
             ),
             *[
                 dcc.Link(
-                    [html.I(className=f"{icon} me-3"), label],
+                    label,
                     id=nav_id,
                     href=href,
                     className="admin-nav-link d-flex align-items-center px-3 py-2 mb-1 rounded-3 text-decoration-none",

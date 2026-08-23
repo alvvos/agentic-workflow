@@ -58,20 +58,13 @@ def _render_table(location_uuid: str) -> html.Div:
     for poi in pois:
         cat = poi["categoria"]
         cat_meta = poi_cats.get(cat, {})
-        icono = cat_meta.get("icono", "fas fa-map-pin")
         color_badge = cat_meta.get("color_badge", "secondary")
         cat_label = cat_meta.get("label", cat)
-        icon_full = f"{icono} text-{color_badge}"
         rows.append(
             html.Tr(
                 [
                     html.Td(
-                        html.Span(
-                            [
-                                html.I(className=f"{icon_full} me-2"),
-                                poi["nombre"],
-                            ]
-                        ),
+                        html.Span(poi["nombre"]),
                         className="align-middle fw-bold small",
                     ),
                     html.Td(
