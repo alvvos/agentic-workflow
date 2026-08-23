@@ -29,6 +29,7 @@ def build_chat_fab() -> html.Div:
     return html.Div(
         dbc.Button(
             [
+                html.I(className="fas fa-comment-dots me-2", style={"fontSize": "0.9rem"}),
                 html.Span("Asistente", className="fw-bold", style={"fontSize": "0.85rem"}),
             ],
             id="chat-fab",
@@ -42,7 +43,7 @@ def build_chat_fab() -> html.Div:
                 "color": "white",
                 "border": "none",
                 "borderRadius": "50px",
-                "padding": "12px 22px",
+                "padding": "11px 20px",
                 "boxShadow": "0 4px 18px rgba(0,82,204,0.40)",
                 "display": "flex",
                 "alignItems": "center",
@@ -61,13 +62,61 @@ def build_chat_modal() -> dbc.Modal:
             dbc.ModalHeader(
                 html.Div(
                     [
-                        html.I(className="fas fa-robot me-2", style={"color": _C_PRIMARY}),
-                        html.Span("Asistente PM", style={"fontWeight": "700", "fontSize": "1rem"}),
+                        html.Div(
+                            html.I(
+                                className="fas fa-robot",
+                                style={"fontSize": "0.85rem", "color": "white"},
+                            ),
+                            style={
+                                "width": "30px",
+                                "height": "30px",
+                                "borderRadius": "8px",
+                                "background": f"linear-gradient(135deg, {_C_PRIMARY} 0%, #003d99 100%)",
+                                "display": "flex",
+                                "alignItems": "center",
+                                "justifyContent": "center",
+                                "marginRight": "10px",
+                                "flexShrink": "0",
+                            },
+                        ),
+                        html.Div(
+                            [
+                                html.Span(
+                                    "Asistente",
+                                    style={
+                                        "fontWeight": "700",
+                                        "fontSize": "0.95rem",
+                                        "lineHeight": "1.1",
+                                    },
+                                ),
+                                html.Div(
+                                    [
+                                        html.Span(
+                                            style={
+                                                "display": "inline-block",
+                                                "width": "6px",
+                                                "height": "6px",
+                                                "borderRadius": "50%",
+                                                "backgroundColor": "#22c55e",
+                                                "marginRight": "5px",
+                                                "verticalAlign": "middle",
+                                            }
+                                        ),
+                                        html.Span(
+                                            "Sonnet 4.6 · 14 herramientas",
+                                            style={"fontSize": "0.68rem", "color": _C_MUTED},
+                                        ),
+                                    ],
+                                    className="d-flex align-items-center",
+                                ),
+                            ],
+                            className="d-flex flex-column justify-content-center",
+                        ),
                     ],
                     className="d-flex align-items-center",
                 ),
                 close_button=True,
-                style={"borderBottom": f"1px solid {_C_GRID}"},
+                style={"borderBottom": f"1px solid {_C_GRID}", "padding": "12px 16px"},
             ),
             dbc.ModalBody(
                 html.Div(
@@ -76,17 +125,18 @@ def build_chat_modal() -> dbc.Modal:
                         html.Div(
                             [
                                 dbc.Button(
-                                    [html.I(className="fas fa-plus me-1"), "Nueva"],
+                                    [html.I(className="fas fa-plus me-1"), "Nueva conversación"],
                                     id="chat-new-btn",
                                     size="sm",
-                                    color="primary",
-                                    outline=True,
+                                    color="light",
                                     n_clicks=0,
-                                    className="w-100 mb-2",
+                                    className="w-100 mb-2 border",
                                     style={
-                                        "fontSize": "0.76rem",
+                                        "fontSize": "0.74rem",
                                         "borderRadius": "8px",
                                         "padding": "5px 8px",
+                                        "color": "#374151",
+                                        "fontWeight": "500",
                                     },
                                 ),
                                 html.Div(
@@ -134,23 +184,29 @@ def build_chat_modal() -> dbc.Modal:
                             [
                                 dbc.Input(
                                     id="chat-input",
-                                    placeholder="Pregunta o escribe @… para mencionar una ubicación",
+                                    placeholder="Escribe tu pregunta o @ubicación…",
                                     type="text",
                                     debounce=False,
                                     n_submit=0,
                                     style={
                                         "fontSize": "0.88rem",
-                                        "borderRadius": "8px 0 0 8px",
-                                        "border": f"1px solid {_C_GRID}",
+                                        "borderRadius": "10px 0 0 10px",
+                                        "border": "1.5px solid #d1d5db",
                                         "borderRight": "none",
+                                        "background": "#fafafa",
                                     },
                                 ),
                                 dbc.Button(
-                                    html.I(className="fas fa-paper-plane"),
+                                    html.I(className="fas fa-arrow-up"),
                                     id="chat-send",
                                     n_clicks=0,
                                     color="primary",
-                                    style={"borderRadius": "0 8px 8px 0", "padding": "8px 18px"},
+                                    style={
+                                        "borderRadius": "0 10px 10px 0",
+                                        "padding": "0 16px",
+                                        "borderLeft": "none",
+                                        "background": _C_PRIMARY,
+                                    },
                                 ),
                                 dcc.Loading(
                                     html.Div(id="chat-loading-sink", style={"display": "none"}),
@@ -169,7 +225,7 @@ def build_chat_modal() -> dbc.Modal:
                     ],
                     className="d-flex flex-column w-100",
                 ),
-                style={"borderTop": f"1px solid {_C_GRID}", "padding": "10px 20px"},
+                style={"borderTop": f"1px solid {_C_GRID}", "padding": "10px 16px"},
             ),
             dcc.Store(id="chat-messages-store", data=[]),
             dcc.Store(id="chat-stream-id", data=None),
@@ -444,8 +500,8 @@ def initial_history_content() -> list:
 def _welcome_message() -> html.Div:
     return _bubble(
         "assistant",
-        "Hola. Soy tu asistente de análisis. Puedo consultarte datos de tráfico "
-        "y del entorno geoespacial de la ubicación activa. ¿En qué te ayudo?",
+        "Hola. Consulto tráfico, perfil geoespacial, previsiones, anomalías, "
+        "ratios de conversión y datos externos de la ubicación activa. ¿En qué te ayudo?",
     )
 
 

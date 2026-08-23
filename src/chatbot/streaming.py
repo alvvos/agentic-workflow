@@ -28,8 +28,10 @@ from src.chatbot.tools import (  # noqa: E402
     get_active_features,
     get_anomalies,
     get_cruise_calls,
+    get_dwell_profile,
     get_external_features,
     get_forecast,
+    get_funnel_ratios,
     get_gis_data,
     get_hourly_breakdown,
     get_location_info,
@@ -54,6 +56,8 @@ _TOOL_LABELS = {
     "get_external_features": "Consultando series externas…",
     "get_cruise_calls": "Consultando escalas de cruceros…",
     "get_model_metrics": "Consultando métricas del modelo…",
+    "get_funnel_ratios": "Calculando ratios de conversión…",
+    "get_dwell_profile": "Consultando perfil de permanencia…",
 }
 
 _TOOL_FN = {
@@ -69,6 +73,8 @@ _TOOL_FN = {
     "get_external_features": lambda args: get_external_features(**args),
     "get_cruise_calls": lambda args: get_cruise_calls(**args),
     "get_model_metrics": lambda args: get_model_metrics(**args),
+    "get_funnel_ratios": lambda args: get_funnel_ratios(**args),
+    "get_dwell_profile": lambda args: get_dwell_profile(**args),
 }
 
 
@@ -102,6 +108,8 @@ _TOOLS_UUID_PARAM = {
     "get_external_features",
     "get_cruise_calls",
     "get_model_metrics",
+    "get_funnel_ratios",
+    "get_dwell_profile",
 }
 _TOOLS_ID_PARAM = {"get_pm_data", "get_weather_holidays"}
 _TOOLS_SESSION = {
@@ -117,6 +125,7 @@ _TOOLS_ZONE_INJECT = {
     "get_hourly_breakdown",
     "get_pm_data",
     "get_model_metrics",
+    "get_dwell_profile",
 }
 
 
