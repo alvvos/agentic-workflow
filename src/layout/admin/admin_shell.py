@@ -25,7 +25,7 @@ def build_admin_shell():
                 },
             ),
             *[
-                html.A(
+                dcc.Link(
                     [html.I(className=f"{icon} me-3"), label],
                     id=nav_id,
                     href=href,
