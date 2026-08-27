@@ -16,6 +16,8 @@ Si no se pasa nada, calcula automáticamente el siguiente patch del último tag.
    - Si el working tree está limpio: salta al paso 3.
 
 3. **Commit** (solo si había cambios): `git commit -m "<mensaje proporcionado>"`.
+   - El commit ejecutará los pre-commit hooks automáticamente. Muestra siempre la salida completa del hook al usuario (resultado de cada check: black, ruff, etc.).
+   - Si algún hook falla y modifica ficheros (black reformatea), re-stagea y vuelve a hacer commit; muestra la salida del segundo intento también.
 
 4. **Tag y push**:
    ```bash

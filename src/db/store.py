@@ -41,7 +41,9 @@ def _build_pool() -> ConnectionPool:
         f"user={os.getenv('DB_USER', 'agentic')} "
         f"password={os.getenv('DB_PASSWORD', '')} "
         f"dbname={os.getenv('DB_NAME', 'agentic')} "
-        f"connect_timeout={min(int(pool_timeout), 10)}"
+        f"connect_timeout={min(int(pool_timeout), 10)} "
+        # TCP keepalive: detecta conexiones muertas en ~30s en lugar de esperar el timeout del pool
+        "keepalives=1 keepalives_idle=30 keepalives_interval=10 keepalives_count=3"
     )
     pool = ConnectionPool(
         conninfo,
@@ -49,6 +51,8 @@ def _build_pool() -> ConnectionPool:
         max_size=int(os.getenv("DB_POOL_MAX", "10")),
         timeout=pool_timeout,
         reconnect_timeout=pool_timeout,
+        # Comprueba la salud de las conexiones idle cada 60s y las reemplaza si están muertas
+        max_idle=60.0,
         open=False,
     )
     try:
