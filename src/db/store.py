@@ -145,6 +145,11 @@ class PgConn:
         except Exception:
             pass
 
+    def __del__(self) -> None:
+        # Garantiza que la conexión vuelve al pool cuando el thread-local la suelta
+        # (importante para hilos de streaming que nunca llaman close() explícitamente)
+        self.close()
+
 
 # ── Public API ─────────────────────────────────────────────────────────────────
 
