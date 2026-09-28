@@ -1602,6 +1602,27 @@ _SOURCE_REGISTRY_SEED = [
         },
     },
     {
+        "fuente": "ine_estadisticas",
+        "periodicidad": "mensual",
+        "categoria": "turismo",
+        "descripcion": "Estadísticas de turismo INE: EOH (ocupación hotelera) y EGATUR (gasto turístico). Series mensuales por CCAA.",
+        "url_referencia": "https://servicios.ine.es/wstempus/js/ES/",
+        "cobertura_desde": "2019-01",
+        "latencia_dias": 25,
+        "paises": ["ES"],
+        "esquema_params": None,
+        "ejemplo_params": {},
+        "config": {
+            "tipo_conector": "ine_estadisticas",
+            "series": {
+                "EOT1763": "eoh_viajeros_total",
+                "EOT1766": "eoh_pernoctaciones_total",
+                "FREG520": "egatur_gasto_medio_diario",
+            },
+            "use_replicated": ["eoh_viajeros_total", "eoh_pernoctaciones_total"],
+        },
+    },
+    {
         "fuente": "esri_places",
         "periodicidad": "mensual",
         "categoria": "contexto_espacial",

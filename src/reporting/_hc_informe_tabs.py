@@ -46,15 +46,49 @@ _ZONE_LABEL_SHORT = {0: "Caja / Checkout", 1: "Interior (tienda)", 2: "Exterior 
 _ZONE_ICON = {0: "fas fa-cash-register", 1: "fas fa-store", 2: "fas fa-street-view"}
 _ZONE_COLOR = {0: "#6c757d", 1: "#0052CC", 2: "#28A745"}
 
-# (señal_id, display_label, unit_suffix, agg_method)
-_SIGNAL_CFG: list[tuple[str, str, str, str]] = [
-    ("llueve", "Días con lluvia", " días", "count_positive"),
-    ("temp_max", "Temperatura máx. media", "°C", "mean"),
-    ("temp_min", "Temperatura mín. media", "°C", "mean"),
-    ("escala_crucero", "Escalas de crucero", "", "count_positive"),
-    ("n_pasajeros_crucero_dia", "Pasajeros crucero (est.)", "", "sum_int"),
-    ("n_pasajeros_crucero_oficial", "Pasajeros crucero (of.)", "", "sum_int"),
-]
+# señal_id → (display_label, unit_suffix, agg_method)
+_SIGNAL_REGISTRY: dict[str, tuple[str, str, str]] = {
+    "llueve": ("Días con lluvia", " días", "count_positive"),
+    "temp_max": ("Temperatura máx. media", "°C", "mean"),
+    "temp_min": ("Temperatura mín. media", "°C", "mean"),
+    "escala_crucero": ("Escalas de crucero", "", "count_positive"),
+    "n_pasajeros_crucero_dia": ("Pasajeros crucero (est.)", "", "sum_int"),
+    "n_pasajeros_crucero_oficial": ("Pasajeros crucero (of.)", "", "sum_int"),
+    "n_eventos_culturales_dia": ("Eventos culturales", "", "sum_int"),
+    "eoh_viajeros_total": ("Viajeros hoteleros (mes)", "", "monthly_value"),
+    "eoh_pernoctaciones_total": ("Pernoctaciones hoteleras (mes)", "", "monthly_value"),
+    "egatur_gasto_medio_diario": ("Gasto diario turista intl.", "€/día", "mean"),
+}
+
+# Ordered list of signals to show per city; __default__ applies to unlisted cities
+_CITY_SIGNAL_ORDER: dict[str, list[str]] = {
+    "__default__": ["llueve", "temp_max", "temp_min"],
+    "Madrid": [
+        "llueve",
+        "temp_max",
+        "temp_min",
+        "n_eventos_culturales_dia",
+        "eoh_viajeros_total",
+        "eoh_pernoctaciones_total",
+        "egatur_gasto_medio_diario",
+    ],
+    "Málaga": [
+        "llueve",
+        "temp_max",
+        "temp_min",
+        "escala_crucero",
+        "n_pasajeros_crucero_dia",
+        "n_pasajeros_crucero_oficial",
+    ],
+    "Malaga": [
+        "llueve",
+        "temp_max",
+        "temp_min",
+        "escala_crucero",
+        "n_pasajeros_crucero_dia",
+        "n_pasajeros_crucero_oficial",
+    ],
+}
 
 _DIA_NAMES = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"]
 _DIA_NAMES_ES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
@@ -151,6 +185,9 @@ def _agg_señal(serie: pd.Series, method: str) -> float | int | None:
     if method == "sum_int":
         v = int(serie.sum())
         return v if v > 0 else None
+    if method == "monthly_value":
+        v = serie[serie > 0]
+        return int(v.max()) if not v.empty else None
     return None
 
 
@@ -517,6 +554,27 @@ def _sentence_señal(
             _t(f" {per}"),
         ]
 
+    elif señal_id == "eoh_viajeros_total":
+        inicio = [
+            _t("Los hoteles de Madrid registraron "),
+            _bold(_fmt_val(val_act, "", "monthly_value")),
+            _t(f" viajeros {per}"),
+        ]
+
+    elif señal_id == "eoh_pernoctaciones_total":
+        inicio = [
+            _t("Se registraron "),
+            _bold(_fmt_val(val_act, "", "monthly_value")),
+            _t(f" pernoctaciones hoteleras {per}"),
+        ]
+
+    elif señal_id == "egatur_gasto_medio_diario":
+        inicio = [
+            _t("El gasto medio diario del turista internacional fue de "),
+            _bold(_fmt_val(val_act, suffix, method)),
+            _t(f" {per}"),
+        ]
+
     else:
         inicio = [_bold(_fmt_val(val_act, suffix, method)), _t(f" {per}")]
 
@@ -581,7 +639,12 @@ def _sub_header(icon_cls: str, text: str, color: str) -> html.Div:
 # ── Calendar ─────────────────────────────────────────────────────────────────
 
 
-def _build_calendar(fmin: date, fmax: date, festivos: dict[date, str]) -> html.Div:
+def _build_calendar(
+    fmin: date,
+    fmax: date,
+    festivos: dict[date, str],
+    eventos: dict[date, int] | None = None,
+) -> html.Div:
     start = fmin - timedelta(days=fmin.weekday())
     end_d = fmax + timedelta(days=(6 - fmax.weekday()))
 
@@ -623,6 +686,7 @@ def _build_calendar(fmin: date, fmax: date, festivos: dict[date, str]) -> html.D
                 bg, color, fw, border = "#ffffff", "#212529", "normal", "1px solid #e9ecef"
 
             festivo_name = festivos.get(d, "")
+            n_eventos = eventos.get(d, 0) if eventos else 0
             children: list = [
                 html.Span(
                     str(d.day), style={"display": "block", "fontWeight": fw, "fontSize": "0.9rem"}
@@ -641,6 +705,19 @@ def _build_calendar(fmin: date, fmax: date, festivos: dict[date, str]) -> html.D
                             "lineHeight": "1.15",
                             "color": "#856404",
                             "wordBreak": "break-word",
+                        },
+                    )
+                )
+            if n_eventos > 0 and in_period:
+                children.append(
+                    html.Span(
+                        "●",
+                        title=f"{n_eventos} eventos",
+                        style={
+                            "fontSize": "0.5rem",
+                            "display": "block",
+                            "color": "#0052CC",
+                            "lineHeight": "1",
                         },
                     )
                 )
@@ -1029,6 +1106,7 @@ def _tab_contexto_exterior(
     fmax_msaa: date,
     df: pd.DataFrame | None = None,
     zonas_data: list[dict] | None = None,
+    ciudad: str = "",
 ) -> html.Div:
     # ── Tráfico exterior ──────────────────────────────────────────────────────
     traffic = (
@@ -1053,9 +1131,11 @@ def _tab_contexto_exterior(
                 .fetchall()
             }
 
-            for señal_id, _label, suffix, method in _SIGNAL_CFG:
-                if señal_id not in available:
+            signal_ids = _CITY_SIGNAL_ORDER.get(ciudad) or _CITY_SIGNAL_ORDER["__default__"]
+            for señal_id in signal_ids:
+                if señal_id not in available or señal_id not in _SIGNAL_REGISTRY:
                     continue
+                _label, suffix, method = _SIGNAL_REGISTRY[señal_id]
                 try:
                     s_act = get_señal_diaria(
                         location_uuid, señal_id, pd.Timestamp(fmin_p), pd.Timestamp(fecha_max)
@@ -1210,6 +1290,7 @@ def render_informe_tabs(
                         fmax_msaa,
                         df=df,
                         zonas_data=zonas_data,
+                        ciudad=ciudad,
                     ),
                     style={"paddingTop": "12px"},
                 ),
@@ -1273,12 +1354,40 @@ def render_periodo_calendar(
     festivos = _get_festivos(pais_codigo, ciudad, years)
     festivos_en_periodo = {d: n for d, n in festivos.items() if fmin_p <= d <= fecha_max}
 
+    # Fetch event counts per day for cities that track cultural events
+    eventos: dict[date, int] | None = None
+    city_signals = _CITY_SIGNAL_ORDER.get(ciudad, _CITY_SIGNAL_ORDER["__default__"])
+    if location_uuid and "n_eventos_culturales_dia" in city_signals:
+        try:
+            from src.db.queries import get_señal_diaria
+
+            s = get_señal_diaria(
+                location_uuid,
+                "n_eventos_culturales_dia",
+                pd.Timestamp(fmin_p),
+                pd.Timestamp(fecha_max),
+            )
+            if s is not None and not s.empty:
+                eventos = {
+                    (pd.Timestamp(d).date() if not isinstance(d, date) else d): int(v)
+                    for d, v in s.items()
+                    if v > 0
+                }
+        except Exception:
+            pass
+
+    has_eventos = bool(eventos)
     legend = html.Div(
         [
             html.Span("■ Festivo  ", style={"color": "#856404", "fontSize": "0.72rem"}),
             html.Span("■ Sábado  ", style={"color": "#6c757d", "fontSize": "0.72rem"}),
             html.Span("■ Domingo  ", style={"color": "#adb5bd", "fontSize": "0.72rem"}),
             html.Span("■ Laborable", style={"color": "#495057", "fontSize": "0.72rem"}),
+            *(
+                [html.Span("  ● Eventos", style={"color": "#0052CC", "fontSize": "0.72rem"})]
+                if has_eventos
+                else []
+            ),
         ]
     )
     festivos_list = (
@@ -1310,7 +1419,7 @@ def render_periodo_calendar(
                     style={"fontSize": "0.88rem", "color": "#1e293b"},
                 ),
                 legend,
-                _build_calendar(fmin_p, fecha_max, festivos),
+                _build_calendar(fmin_p, fecha_max, festivos, eventos=eventos),
                 festivos_list,
             ]
         ),

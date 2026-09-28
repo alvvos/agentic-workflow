@@ -248,3 +248,57 @@ class TestModelCache:
         res = _run(df_synthetic, falso_hoy=old_date, horizonte=7)
         assert res.get("status") == "success"
         assert res.get("cache_hit") is False
+
+
+# ── Gap handling ──────────────────────────────────────────────────────────────
+
+
+def _make_df_with_gaps(
+    gap_start: int, gap_len: int, n_days: int = 120, seed: int = 42
+) -> pd.DataFrame:
+    """_make_df but with gap_len consecutive rows removed — simulates a node outage.
+
+    When ml_predictivo reindexes to a full calendar range, the removed dates
+    become rows with total_visits=0 and es_gap=1.
+    """
+    df = _make_df(n_days=n_days, seed=seed)
+    drop_idx = list(range(gap_start, min(gap_start + gap_len, len(df))))
+    return df.drop(index=drop_idx).reset_index(drop=True)
+
+
+class TestGapHandling:
+    # With n_days=120 and falso_hoy=today-1, after feature engineering dropna
+    # (loses ~14 rows for lag_14d), n≈105.  split_train=73, split_cal=89.
+    # Post-dropna row 73 ≈ original index 87 ≈ today-33;
+    # post-dropna row 89 ≈ original index 103 ≈ today-17.
+    # gap_start=87, gap_len=12 reliably lands a block inside the calibration window.
+    _GAP_IN_CAL = dict(gap_start=87, gap_len=12)
+
+    def test_success_with_gaps_in_calibration(self):
+        df = _make_df_with_gaps(**self._GAP_IN_CAL)
+        res = _run(df)
+        assert res.get("status") == "success", res.get("error")
+
+    def test_q_conf_not_inflated_by_gap(self):
+        """Gap days excluded from calibration → q_conf ≤ 2× the clean-data value."""
+        q_clean = _run(_make_df())["metricas"]["q_conf"]
+        q_gapped = _run(_make_df_with_gaps(**self._GAP_IN_CAL))["metricas"]["q_conf"]
+        assert q_gapped is not None, "q_conf should not be None with gaps"
+        assert (
+            q_gapped <= q_clean * 2.0
+        ), f"q_conf inflated by gaps: {q_gapped:.1f} vs clean {q_clean:.1f}"
+
+    def test_bands_still_valid_with_gaps(self):
+        """Bands must satisfy 0 ≤ lower ≤ pred ≤ upper even with calibration gaps."""
+        res = _run(_make_df_with_gaps(**self._GAP_IN_CAL), horizonte=7)
+        g = res["grafica"]
+        assert g["lower"] is not None and g["upper"] is not None
+        for lo, pred, hi in zip(g["lower"], g["predichos"], g["upper"]):
+            assert 0 <= lo <= pred <= hi, f"Band violated: {lo} <= {pred} <= {hi}"
+
+    def test_all_gap_calibration_still_returns_result(self):
+        """If the entire calibration window is gaps, q_conf is None but no crash."""
+        # gap_len=20 covers the whole calibration window (~16 rows)
+        df = _make_df_with_gaps(gap_start=87, gap_len=20)
+        res = _run(df)
+        assert res.get("status") == "success", res.get("error")

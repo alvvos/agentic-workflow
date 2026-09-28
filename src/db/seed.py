@@ -214,6 +214,34 @@ def seed_feature_registry() -> int:
         )
     )
 
+    # INE turismo — EOH + EGATUR para Madrid (Comunidad de Madrid)
+    for key, nota in [
+        (
+            "eoh_viajeros_total",
+            "Viajeros totales en hoteles — INE EOH serie EOT1763. Comunidad de Madrid. Mensual.",
+        ),
+        (
+            "eoh_pernoctaciones_total",
+            "Pernoctaciones totales en hoteles — INE EOH serie EOT1766. Comunidad de Madrid. Mensual.",
+        ),
+        (
+            "egatur_gasto_medio_diario",
+            "Gasto medio diario por turista internacional (€) — INE EGATUR serie FREG520. Comunidad de Madrid. Mensual.",
+        ),
+    ]:
+        entries.append(
+            (
+                key,
+                "ine_estadisticas",
+                "turismo",
+                json.dumps(["5c13b57d-782d-4458-911b-64cd40eebb55"]),
+                None,
+                "con_cobertura",
+                None,
+                nota,
+            )
+        )
+
     conn.executemany(
         """
         INSERT INTO señales
@@ -355,6 +383,7 @@ def seed_feature_flags() -> dict:
     ]
     # cruceros: contexto, ingesta mensual (calendario portuario)
     crucero_keys = ["n_pasajeros_crucero_dia"]
+    ine_keys = ["eoh_viajeros_total", "eoh_pernoctaciones_total", "egatur_gasto_medio_diario"]
 
     active_rows = [(fk, loc, "active", "diaria") for fk in climate_keys for loc in locs]
     inactive_rows = [(fk, loc, "inactive", "mensual") for fk in geo_keys for loc in locs]
@@ -364,15 +393,22 @@ def seed_feature_flags() -> dict:
     contexto_mensual_rows = [
         (fk, loc, "contexto", "mensual") for fk in crucero_keys for loc in locs
     ]
+    ine_rows = [(fk, loc, "contexto", "mensual") for fk in ine_keys for loc in locs]
 
-    for batch in (active_rows, inactive_rows, contexto_diaria_rows, contexto_mensual_rows):
+    for batch in (
+        active_rows,
+        inactive_rows,
+        contexto_diaria_rows,
+        contexto_mensual_rows,
+        ine_rows,
+    ):
         if batch:
             conn.executemany(sql, batch)
 
     return {
         "active": len(active_rows),
         "inactive": len(inactive_rows),
-        "contexto": len(contexto_diaria_rows) + len(contexto_mensual_rows),
+        "contexto": len(contexto_diaria_rows) + len(contexto_mensual_rows) + len(ine_rows),
     }
 
 
