@@ -60,7 +60,6 @@ _SIGNAL_REGISTRY: dict[str, tuple[str, str, str]] = {
     "egatur_gasto_medio_diario": ("Gasto diario turista intl.", "€/día", "mean"),
 }
 
-# Ordered list of signals to show per city; __default__ applies to unlisted cities
 # agg function for _render_signal_yoy_chart; exported to health_check city-chart auto-renderer
 _METHOD_TO_AGG: dict[str, str] = {
     "monthly_value": "max",
@@ -69,34 +68,43 @@ _METHOD_TO_AGG: dict[str, str] = {
     "count_positive": "sum",
 }
 
-_CITY_SIGNAL_ORDER: dict[str, list[str]] = {
-    "__default__": ["llueve", "temp_max", "temp_min"],
-    "Madrid": [
-        "llueve",
-        "temp_max",
-        "temp_min",
-        "n_eventos_culturales_dia",
-        "eoh_viajeros_total",
-        "eoh_pernoctaciones_total",
-        "egatur_gasto_medio_diario",
-    ],
-    "Málaga": [
-        "llueve",
-        "temp_max",
-        "temp_min",
-        "escala_crucero",
-        "n_pasajeros_crucero_dia",
-        "n_pasajeros_crucero_oficial",
-    ],
-    "Malaga": [
-        "llueve",
-        "temp_max",
-        "temp_min",
-        "escala_crucero",
-        "n_pasajeros_crucero_dia",
-        "n_pasajeros_crucero_oficial",
-    ],
-}
+
+def _get_context_signals(location_uuid: str, include_active: bool = False) -> list[str]:
+    """
+    Devuelve las señales de contexto de una ubicación ordenadas por `orden`.
+
+    include_active=True  → incluye señales con status 'active' (clima) además de 'contexto'.
+    include_active=False → solo señales con status='contexto' (señales ciudad-específicas).
+    """
+    try:
+        from src.db.store import get_conn
+
+        if include_active:
+            rows = (
+                get_conn()
+                .execute(
+                    "SELECT señal_id FROM activacion_señales "
+                    "WHERE ubicacion_id = ? AND status != 'inactive' "
+                    "ORDER BY orden, señal_id",
+                    [location_uuid],
+                )
+                .fetchall()
+            )
+        else:
+            rows = (
+                get_conn()
+                .execute(
+                    "SELECT señal_id FROM activacion_señales "
+                    "WHERE ubicacion_id = ? AND status = 'contexto' "
+                    "ORDER BY orden, señal_id",
+                    [location_uuid],
+                )
+                .fetchall()
+            )
+        return [r[0] for r in rows]
+    except Exception:
+        return []
+
 
 _DIA_NAMES = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"]
 _DIA_NAMES_ES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
@@ -1142,7 +1150,7 @@ def _tab_contexto_exterior(
                 .fetchall()
             }
 
-            signal_ids = _CITY_SIGNAL_ORDER.get(ciudad) or _CITY_SIGNAL_ORDER["__default__"]
+            signal_ids = _get_context_signals(location_uuid, include_active=True)
             for señal_id in signal_ids:
                 if señal_id not in available or señal_id not in _SIGNAL_REGISTRY:
                     continue
@@ -1367,7 +1375,9 @@ def render_periodo_calendar(
 
     # Fetch event counts per day for cities that track cultural events
     eventos: dict[date, int] | None = None
-    city_signals = _CITY_SIGNAL_ORDER.get(ciudad, _CITY_SIGNAL_ORDER["__default__"])
+    city_signals = (
+        set(_get_context_signals(location_uuid, include_active=True)) if location_uuid else set()
+    )
     if location_uuid and "n_eventos_culturales_dia" in city_signals:
         try:
             from src.db.queries import get_señal_diaria

@@ -445,19 +445,49 @@ def seed_feature_flags() -> dict:
         if k in existing_fr
     ]
 
+    _ORDER = {
+        "llueve": 1,
+        "temp_max": 2,
+        "temp_min": 3,
+        "n_eventos_culturales_dia": 10,
+        "escala_crucero": 20,
+        "n_pasajeros_crucero_dia": 21,
+        "n_pasajeros_crucero_oficial": 22,
+        "eoh_viajeros_total": 20,
+        "eoh_pernoctaciones_total": 21,
+        "egatur_gasto_medio_diario": 22,
+    }
+
     sql_as = """
-        INSERT INTO activacion_señales (señal_id, ubicacion_id, status, periodicidad)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO activacion_señales (señal_id, ubicacion_id, status, periodicidad, orden)
+        VALUES (?, ?, ?, ?, ?)
         ON CONFLICT (señal_id, ubicacion_id) DO UPDATE
             SET status       = EXCLUDED.status,
-                periodicidad = EXCLUDED.periodicidad
+                periodicidad = EXCLUDED.periodicidad,
+                orden        = EXCLUDED.orden
     """
     batches_as = [
-        [(fk, loc, "active", "diaria") for fk in climate_keys for loc in all_locs],
-        [(fk, loc, "inactive", "mensual") for fk in geo_keys for loc in all_locs],
-        [(fk, loc, "contexto", "diaria") for fk in ev_diaria_keys for loc in all_locs],
-        [(fk, loc, "contexto", "mensual") for fk in crucero_keys for loc in malaga_locs],
-        [(fk, loc, "contexto", "mensual") for fk in ine_keys for loc in madrid_locs],
+        [
+            (fk, loc, "active", "diaria", _ORDER.get(fk, 99))
+            for fk in climate_keys
+            for loc in all_locs
+        ],
+        [(fk, loc, "inactive", "mensual", 99) for fk in geo_keys for loc in all_locs],
+        [
+            (fk, loc, "contexto", "diaria", _ORDER.get(fk, 99))
+            for fk in ev_diaria_keys
+            for loc in all_locs
+        ],
+        [
+            (fk, loc, "contexto", "mensual", _ORDER.get(fk, 99))
+            for fk in crucero_keys
+            for loc in malaga_locs
+        ],
+        [
+            (fk, loc, "contexto", "mensual", _ORDER.get(fk, 99))
+            for fk in ine_keys
+            for loc in madrid_locs
+        ],
     ]
     for batch in batches_as:
         if batch:

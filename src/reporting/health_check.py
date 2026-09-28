@@ -1678,21 +1678,17 @@ def _render_senal_contexto_modal(
                 charts.append(c)
 
     # ── City-bag signals: auto-render desde _SIGNAL_REGISTRY ─────────────────
-    # Cualquier señal añadida a _CITY_SIGNAL_ORDER[ciudad] + _SIGNAL_REGISTRY
+    # Cualquier señal con status='contexto' en activacion_señales para esta ubicación
     # aparece aquí automáticamente sin más cambios de código.
     city_charts: list = []
     try:
         from src.reporting._hc_informe_tabs import (
-            _CITY_SIGNAL_ORDER,
             _METHOD_TO_AGG,
             _SIGNAL_REGISTRY,
+            _get_context_signals,
         )
 
-        ciudad_row = conn.execute(
-            "SELECT ciudad FROM ubicaciones WHERE ubicacion_id = ?", [location_uuid]
-        ).fetchone()
-        ciudad = (ciudad_row[0] or "").strip() if ciudad_row else ""
-        city_bag = _CITY_SIGNAL_ORDER.get(ciudad) or _CITY_SIGNAL_ORDER.get("__default__", [])
+        city_bag = _get_context_signals(location_uuid)
 
         available_fks = set(df_ts["feature_key"].unique()) if ts_rows else set()
         rendered = set(yoy_keys) if ts_rows else set()

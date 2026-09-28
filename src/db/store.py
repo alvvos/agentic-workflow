@@ -572,6 +572,7 @@ def _apply_ddl(conn: PgConn) -> None:
     _migrate_activacion_señales(conn)
     _migrate_señales(conn)
     _migrate_señales_fks(conn)
+    _migrate_activacion_señales_orden(conn)
     _migrate_activacion_señales_contexto(conn)
     _migrate_activacion_señales_periodicidad(conn)
     _migrate_señales_display(conn)
@@ -1146,6 +1147,13 @@ def _migrate_registries(conn: PgConn) -> None:
             "funcion_agregacion=EXCLUDED.funcion_agregacion, modo_visualizacion=EXCLUDED.modo_visualizacion",
             list(row),
         )
+
+
+def _migrate_activacion_señales_orden(conn: PgConn) -> None:
+    """Añade columna orden a activacion_señales para controlar el orden de visualización."""
+    conn.execute(
+        "ALTER TABLE activacion_señales ADD COLUMN IF NOT EXISTS orden INT NOT NULL DEFAULT 99"
+    )
 
 
 def _migrate_activacion_señales_contexto(conn: PgConn) -> None:
