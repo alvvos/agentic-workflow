@@ -61,6 +61,14 @@ _SIGNAL_REGISTRY: dict[str, tuple[str, str, str]] = {
 }
 
 # Ordered list of signals to show per city; __default__ applies to unlisted cities
+# agg function for _render_signal_yoy_chart; exported to health_check city-chart auto-renderer
+_METHOD_TO_AGG: dict[str, str] = {
+    "monthly_value": "max",
+    "mean": "mean",
+    "sum_int": "sum",
+    "count_positive": "sum",
+}
+
 _CITY_SIGNAL_ORDER: dict[str, list[str]] = {
     "__default__": ["llueve", "temp_max", "temp_min"],
     "Madrid": [
@@ -576,7 +584,10 @@ def _sentence_señal(
         ]
 
     else:
-        inicio = [_bold(_fmt_val(val_act, suffix, method)), _t(f" {per}")]
+        label = _SIGNAL_REGISTRY.get(
+            señal_id, (señal_id.replace("_", " ").title(), suffix, method)
+        )[0]
+        inicio = [_t(f"{label}: "), _bold(_fmt_val(val_act, suffix, method)), _t(f" {per}")]
 
     ref_sa = _fmt_val(val_sa, ref_suffix, method) if val_sa is not None else None
     ref_msa = _fmt_val(val_msa, ref_suffix, method) if val_msa is not None else None

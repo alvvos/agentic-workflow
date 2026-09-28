@@ -1677,6 +1677,53 @@ def _render_senal_contexto_modal(
             if c:
                 charts.append(c)
 
+    # ── City-bag signals: auto-render desde _SIGNAL_REGISTRY ─────────────────
+    # Cualquier señal añadida a _CITY_SIGNAL_ORDER[ciudad] + _SIGNAL_REGISTRY
+    # aparece aquí automáticamente sin más cambios de código.
+    city_charts: list = []
+    try:
+        from src.reporting._hc_informe_tabs import (
+            _CITY_SIGNAL_ORDER,
+            _METHOD_TO_AGG,
+            _SIGNAL_REGISTRY,
+        )
+
+        ciudad_row = conn.execute(
+            "SELECT ciudad FROM ubicaciones WHERE ubicacion_id = ?", [location_uuid]
+        ).fetchone()
+        ciudad = (ciudad_row[0] or "").strip() if ciudad_row else ""
+        city_bag = _CITY_SIGNAL_ORDER.get(ciudad) or _CITY_SIGNAL_ORDER.get("__default__", [])
+
+        available_fks = set(df_ts["feature_key"].unique()) if ts_rows else set()
+        rendered = set(yoy_keys) if ts_rows else set()
+
+        for fk in city_bag:
+            if fk not in available_fks or fk in rendered or fk not in _SIGNAL_REGISTRY:
+                continue
+            label, suffix, method = _SIGNAL_REGISTRY[fk]
+            agg_fn = _METHOD_TO_AGG.get(method, "sum")
+            c = _render_signal_yoy_chart(
+                df_ts[df_ts["feature_key"] == fk],
+                fk,
+                label,
+                suffix or "—",
+                primary_color,
+                uid,
+                anio_actual,
+                anio_prev,
+                _MESES_ES,
+                agg_fn,
+                fecha_max=fecha_max,
+                ventana=ventana,
+                tooltip_text="",
+                icon_cls="fas fa-chart-bar",
+                primary_color=primary_color,
+            )
+            if c:
+                city_charts.append(c)
+    except Exception:
+        pass
+
     # cruceros notas + fallback
     _cr_meta = feature_meta.get("n_pasajeros_crucero_oficial", {})
     cruceros_notas = _cr_meta.get("notas", "")
@@ -1691,7 +1738,7 @@ def _render_senal_contexto_modal(
         primary_color=primary_color,
     )
 
-    if not charts and not cruceros_section:
+    if not charts and not city_charts and not cruceros_section:
         return None
 
     return html.Div(
@@ -1716,6 +1763,28 @@ def _render_senal_contexto_modal(
                     )
                 ]
                 if charts
+                else []
+            ),
+            *(
+                [
+                    html.Div(
+                        [
+                            html.H6(
+                                "Contexto de ciudad · comparativa interanual",
+                                className="fw-bold mb-1 mt-3",
+                                style={"color": _C_DARK, "fontSize": "0.98rem"},
+                            ),
+                            html.P(
+                                f"Barras sólidas = {anio_actual} · barras translúcidas = {anio_prev}. "
+                                "Agregación mensual.",
+                                className="text-muted mb-3",
+                                style={"fontSize": "0.80rem"},
+                            ),
+                            html.Div(city_charts),
+                        ]
+                    )
+                ]
+                if city_charts
                 else []
             ),
             *(

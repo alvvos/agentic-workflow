@@ -1619,7 +1619,11 @@ _SOURCE_REGISTRY_SEED = [
                 "EOT1766": "eoh_pernoctaciones_total",
                 "FREG520": "egatur_gasto_medio_diario",
             },
-            "use_replicated": ["eoh_viajeros_total", "eoh_pernoctaciones_total"],
+            "use_replicated": [
+                "eoh_viajeros_total",
+                "eoh_pernoctaciones_total",
+                "egatur_gasto_medio_diario",
+            ],
         },
     },
     {
