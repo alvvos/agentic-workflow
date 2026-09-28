@@ -4,6 +4,13 @@ import os
 import dash
 import dash_bootstrap_components as dbc
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(name)s [%(levelname)s] %(message)s",
