@@ -120,11 +120,12 @@ class PgConn:
     executemany() → batched INSERT/UPDATE via psycopg cursor.executemany
     """
 
-    __slots__ = ("_conn", "_cur")
+    __slots__ = ("_conn", "_cur", "_closed")
 
     def __init__(self, raw: psycopg.Connection):
         self._conn = raw
         self._cur: psycopg.Cursor = raw.cursor()
+        self._closed = False
 
     def execute(self, sql: str, params=None) -> _PgResult:
         self._cur.execute(_norm_sql(sql), params)
@@ -136,6 +137,9 @@ class PgConn:
         self._cur.executemany(_norm_sql(sql), params_list)
 
     def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
         try:
             self._cur.close()
         except Exception:
@@ -146,8 +150,8 @@ class PgConn:
             pass
 
     def __del__(self) -> None:
-        # Garantiza que la conexión vuelve al pool cuando el thread-local la suelta
-        # (importante para hilos de streaming que nunca llaman close() explícitamente)
+        # Safety net para hilos de streaming que nunca llaman close() explícitamente.
+        # _closed evita el double-putconn si close() ya fue llamado antes.
         self.close()
 
 
@@ -164,15 +168,12 @@ def get_conn(read_only: bool = False) -> PgConn:  # noqa: ARG001  (read_only kep
 
     conn_obj: Optional[PgConn] = getattr(_local, "conn", None)
     if conn_obj is None or conn_obj._conn.closed:
-        # Devolver la conexión cerrada al pool ANTES de pedir una nueva.
-        # Sin esto, cada reconexión (ej. idle timeout de Postgres) pierde
-        # un slot del pool y eventualmente lo agota (PoolTimeout → 504).
+        # Limpiar _local.conn ANTES de cerrar para que un __del__ concurrente
+        # no vea una conexión ya cerrada en el thread-local y la doble-devuelva.
+        _local.conn = None
         if conn_obj is not None:
-            try:
-                _pool().putconn(conn_obj._conn)
-            except Exception:
-                pass
-            _local.conn = None
+            # close() cierra el cursor y devuelve la conn al pool con guardia _closed.
+            conn_obj.close()
         raw = _pool().getconn()
         raw.autocommit = True
         conn_obj = PgConn(raw)
@@ -190,11 +191,13 @@ def get_conn(read_only: bool = False) -> PgConn:  # noqa: ARG001  (read_only kep
 def close_conn() -> None:
     conn_obj: Optional[PgConn] = getattr(_local, "conn", None)
     if conn_obj is not None:
-        conn_obj.close()
+        # Limpiar _local.conn antes de close() para que __del__ no vea la conn
+        # todavía registrada si el GC corre durante close().
         try:
             del _local.conn
         except AttributeError:
             pass
+        conn_obj.close()
 
 
 # ── DDL ───────────────────────────────────────────────────────────────────────
