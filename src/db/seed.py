@@ -367,24 +367,83 @@ def seed_feature_flags() -> dict:
     malaga_locs = [r[0] for r in loc_rows if (r[1] or "").strip() in ("Málaga", "Malaga")]
     madrid_locs = [r[0] for r in loc_rows if (r[1] or "").strip() == "Madrid"]
 
+    # ── Migración 2026-09-28: eliminar FK doble en activacion_señales ───────────
+    # activacion_señales.señal_id tenía dos FK: → señales y → feature_registry.
+    # feature_registry es la tabla canónica; el FK hacia señales es obsoleto.
+    conn.execute("ALTER TABLE activacion_señales DROP CONSTRAINT IF EXISTS fk_activacion_señales")
+
+    # ── Asegurar que los keys INE existen en feature_registry (requerido por FK) ─
+    conn.executemany(
+        """
+        INSERT INTO feature_registry
+            (feature_key, source, categoria, label, agg_fn, display_mode, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (feature_key) DO NOTHING
+        """,
+        [
+            (
+                "eoh_viajeros_total",
+                "ine_estadisticas",
+                "turismo",
+                "Viajeros en hoteles",
+                "max",
+                "yoy",
+                "con_cobertura",
+            ),
+            (
+                "eoh_pernoctaciones_total",
+                "ine_estadisticas",
+                "turismo",
+                "Pernoctaciones en hoteles",
+                "max",
+                "yoy",
+                "con_cobertura",
+            ),
+            (
+                "egatur_gasto_medio_diario",
+                "ine_estadisticas",
+                "turismo",
+                "Gasto medio por turista",
+                "mean",
+                "yoy",
+                "con_cobertura",
+            ),
+        ],
+    )
+
+    existing_fr = {
+        r[0] for r in conn.execute("SELECT feature_key FROM feature_registry").fetchall()
+    }
+
     climate_keys = [
         r[0]
         for r in conn.execute("SELECT señal_id FROM señales WHERE fuente = 'open_meteo'").fetchall()
+        if r[0] in existing_fr
     ]
     geo_keys = [
-        r[0] for r in conn.execute("SELECT señal_id FROM señales WHERE fuente = 'esri'").fetchall()
+        r[0]
+        for r in conn.execute("SELECT señal_id FROM señales WHERE fuente = 'esri'").fetchall()
+        if r[0] in existing_fr
     ]
     ev_diaria_keys = [
-        "ev_vacaciones_escolares",
-        "ev_festivo_regional",
-        "ev_rank_deportivo",
-        "ev_rank_concierto",
-        "ev_rank_festival",
-        "ev_rank_municipal",
-        "ev_rank_total",
+        k
+        for k in [
+            "ev_vacaciones_escolares",
+            "ev_festivo_regional",
+            "ev_rank_deportivo",
+            "ev_rank_concierto",
+            "ev_rank_festival",
+            "ev_rank_municipal",
+            "ev_rank_total",
+        ]
+        if k in existing_fr
     ]
-    crucero_keys = ["n_pasajeros_crucero_dia"]
-    ine_keys = ["eoh_viajeros_total", "eoh_pernoctaciones_total", "egatur_gasto_medio_diario"]
+    crucero_keys = [k for k in ["n_pasajeros_crucero_dia"] if k in existing_fr]
+    ine_keys = [
+        k
+        for k in ["eoh_viajeros_total", "eoh_pernoctaciones_total", "egatur_gasto_medio_diario"]
+        if k in existing_fr
+    ]
 
     sql_as = """
         INSERT INTO activacion_señales (señal_id, ubicacion_id, status, periodicidad)

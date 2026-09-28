@@ -59,15 +59,30 @@ def _fetch_serie(codigo: str, nult: int = 24) -> list[dict]:
         return []
 
 
-def _parse_year_month(fecha_str: str) -> tuple[int, int] | None:
-    """Extrae (year, month) de la cadena ISO devuelta por la API del INE."""
+def _extract_year_month(punto: dict) -> tuple[int, int] | None:
+    """Extrae (year, month) de un data point de la API Tempus3 del INE.
+
+    La API devuelve Fecha como Unix timestamp en ms, pero también incluye
+    Anyo (año) y FK_Periodo (mes, 1-12) como campos estructurados fiables.
+    """
     try:
-        # Formato: "2026-07-01T00:00:00.000+02:00"
-        ts = fecha_str[:10]  # "2026-07-01"
-        year, month, _ = ts.split("-")
-        return int(year), int(month)
+        year = int(punto["Anyo"])
+        month = int(punto["FK_Periodo"])
+        if 1 <= month <= 12:
+            return year, month
+    except (KeyError, TypeError, ValueError):
+        pass
+    # Fallback: timestamp ms → date
+    try:
+        from datetime import datetime, timezone
+
+        ts_ms = punto.get("Fecha")
+        if ts_ms is not None:
+            dt = datetime.fromtimestamp(int(ts_ms) / 1000, tz=timezone.utc)
+            return dt.year, dt.month
     except Exception:
-        return None
+        pass
+    return None
 
 
 # ── Interfaz pública ──────────────────────────────────────────────────────────
@@ -95,7 +110,6 @@ def sync(ubicacion_id: str, cfg: dict, verbose: bool = True) -> int:
             continue
 
         for punto in data_points:
-            fecha_str = punto.get("Fecha", "")
             valor = punto.get("Valor")
             if valor is None or valor == "":
                 continue
@@ -103,7 +117,7 @@ def sync(ubicacion_id: str, cfg: dict, verbose: bool = True) -> int:
                 valor_f = float(valor)
             except (TypeError, ValueError):
                 continue
-            ym = _parse_year_month(fecha_str)
+            ym = _extract_year_month(punto)
             if ym is None:
                 continue
             year, month = ym
