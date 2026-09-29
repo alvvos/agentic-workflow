@@ -722,6 +722,183 @@ def _calendar_comercial_section(
 
         accordion_items.append(dbc.AccordionItem(body, title=title, item_id=event_key))
 
+    # ── Eventos propios ───────────────────────────────────────────────────────
+    _TIPO_STYLE: dict[str, tuple[str, str]] = {
+        "promocion": ("fas fa-percent", "#D97706"),
+        "oferta": ("fas fa-tags", "#2563EB"),
+        "lanzamiento": ("fas fa-rocket", "#059669"),
+        "otro": ("fas fa-calendar-plus", "#6B7280"),
+    }
+
+    if location_uuid:
+        try:
+            from src.db.store import get_conn
+
+            ep_rows = (
+                get_conn()
+                .execute(
+                    "SELECT id, nombre, tipo, descripcion, fecha_inicio, fecha_fin "
+                    "FROM eventos_propios "
+                    "WHERE ubicacion_id = ? AND activo = TRUE "
+                    "ORDER BY fecha_inicio DESC",
+                    [location_uuid],
+                )
+                .fetchall()
+            )
+            for ep_id, ep_nombre, ep_tipo, ep_desc, ep_fi, ep_ff in ep_rows:
+                ep_fi = ep_fi if isinstance(ep_fi, date) else date.fromisoformat(str(ep_fi))
+                ep_ff = ep_ff if isinstance(ep_ff, date) else date.fromisoformat(str(ep_ff))
+                ep_icon, ep_color = _TIPO_STYLE.get(ep_tipo or "otro", _TIPO_STYLE["otro"])
+
+                idx_ts = pd.to_datetime(pd.date_range(fmin_df, fmax_df, freq="D"))
+                flag_s = pd.Series(
+                    [1.0 if ep_fi <= d.date() <= ep_ff else 0.0 for d in idx_ts], index=idx_ts
+                )
+                v_ts2 = v_daily.copy()
+                v_ts2.index = pd.to_datetime(v_ts2.index)
+                merged2 = pd.DataFrame({"flag": flag_s, "v": v_ts2}).dropna()
+
+                g0_ep = merged2.loc[merged2["flag"] == 0, "v"].to_numpy()
+                g1_ep = merged2.loc[merged2["flag"] == 1, "v"].to_numpy()
+
+                if len(g1_ep) >= 5 and len(g0_ep) >= 5:
+                    effect_ep, p_ep = _mann_whitney_np(g0_ep, g1_ep)
+                    abs_ep = abs(effect_ep)
+                    if p_ep > 0.1 or abs_ep < 0.1:
+                        imp_l, imp_c, imp_bg2 = "Sin impacto detectado", "#6B7280", "#F9FAFB"
+                    elif abs_ep < 0.25:
+                        imp_l, imp_c, imp_bg2 = "Impacto leve", "#78716C", "#F5F5F4"
+                    elif abs_ep < 0.45:
+                        imp_l, imp_c, imp_bg2 = "Impacto moderado", "#92400E", "#FFFBEB"
+                    else:
+                        imp_l, imp_c, imp_bg2 = "Impacto alto", "#B91C1C", "#FEF2F2"
+                    sign_ep = "↑" if effect_ep >= 0 else "↓"
+                    r_ep = f"r = {sign_ep}{abs_ep:.2f}"
+                    p_ep_str = (
+                        "p < 0,001"
+                        if p_ep < 0.001
+                        else (
+                            "p < 0,01"
+                            if p_ep < 0.01
+                            else "p < 0,05" if p_ep < 0.05 else f"p = {p_ep:.2f}"
+                        )
+                    )
+                    impact_span = html.Span(
+                        [
+                            html.Span(
+                                imp_l,
+                                style={"fontSize": "0.73rem", "fontWeight": "700", "color": imp_c},
+                            ),
+                            html.Span(
+                                f" · {r_ep} · {p_ep_str}",
+                                style={"fontSize": "0.68rem", "color": imp_c, "opacity": "0.8"},
+                            ),
+                        ],
+                        style={
+                            "marginLeft": "auto",
+                            "backgroundColor": imp_bg2,
+                            "border": f"1px solid {imp_c}22",
+                            "borderRadius": "6px",
+                            "padding": "2px 8px",
+                            "whiteSpace": "nowrap",
+                        },
+                    )
+                else:
+                    impact_span = html.Span(
+                        "Sin datos suficientes",
+                        style={
+                            "marginLeft": "auto",
+                            "fontSize": "0.72rem",
+                            "color": "#9CA3AF",
+                            "fontStyle": "italic",
+                        },
+                    )
+
+                overlap_start = max(ep_fi, fmin_p)
+                overlap_end = min(ep_ff, fecha_max)
+                if overlap_start <= overlap_end:
+                    ep_period_chip = html.Span(
+                        [
+                            html.I(className="fas fa-calendar-day me-1"),
+                            f"{_fmt_date_es(ep_fi)} – {_fmt_date_es(ep_ff)}",
+                        ],
+                        style={
+                            "fontSize": "0.75rem",
+                            "color": "#6B7280",
+                            "backgroundColor": "#F3F4F6",
+                            "borderRadius": "4px",
+                            "padding": "2px 7px",
+                            "display": "inline-block",
+                            "marginBottom": "6px",
+                        },
+                    )
+                else:
+                    ep_period_chip = html.Span(
+                        f"{_fmt_date_es(ep_fi)} – {_fmt_date_es(ep_ff)}",
+                        style={
+                            "fontSize": "0.75rem",
+                            "color": "#9CA3AF",
+                            "display": "inline-block",
+                            "marginBottom": "6px",
+                        },
+                    )
+
+                ep_title = html.Div(
+                    [
+                        html.I(className=f"{ep_icon} me-2", style={"color": ep_color}),
+                        html.Span(
+                            ep_nombre,
+                            style={"fontWeight": "600", "fontSize": "0.88rem", "color": "#1F2937"},
+                        ),
+                        html.Span(
+                            ep_tipo.capitalize() if ep_tipo else "Otro",
+                            style={
+                                "fontSize": "0.70rem",
+                                "color": ep_color,
+                                "backgroundColor": f"{ep_color}18",
+                                "borderRadius": "4px",
+                                "padding": "1px 6px",
+                                "marginLeft": "6px",
+                            },
+                        ),
+                        impact_span,
+                    ],
+                    style={
+                        "display": "flex",
+                        "alignItems": "center",
+                        "width": "100%",
+                        "gap": "4px",
+                    },
+                )
+
+                ep_body = html.Div(
+                    [
+                        ep_period_chip,
+                        (
+                            html.P(
+                                ep_desc or "",
+                                style={
+                                    "fontSize": "0.82rem",
+                                    "color": "#6B7280",
+                                    "marginBottom": "4px",
+                                },
+                            )
+                            if ep_desc
+                            else None
+                        ),
+                        html.Span(
+                            f"{len(g1_ep) if len(g1_ep) >= 5 else '< 5'} días de evento",
+                            style={"fontSize": "0.72rem", "color": "#9CA3AF"},
+                        ),
+                    ]
+                )
+
+                accordion_items.append(
+                    dbc.AccordionItem(ep_body, title=ep_title, item_id=f"ep_{ep_id}")
+                )
+        except Exception:
+            pass
+
     if not accordion_items:
         return None
 

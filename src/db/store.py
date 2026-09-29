@@ -530,6 +530,26 @@ _DDL: list[str] = [
         ultima_ejecucion TIMESTAMPTZ
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS eventos_propios (
+        id            BIGSERIAL    PRIMARY KEY,
+        ubicacion_id  TEXT         NOT NULL REFERENCES ubicaciones(ubicacion_id) ON DELETE CASCADE,
+        nombre        TEXT         NOT NULL,
+        tipo          TEXT         NOT NULL DEFAULT 'otro'
+                          CHECK (tipo IN ('promocion', 'oferta', 'lanzamiento', 'otro')),
+        descripcion   TEXT,
+        fecha_inicio  DATE         NOT NULL,
+        fecha_fin     DATE         NOT NULL,
+        activo        BOOLEAN      NOT NULL DEFAULT TRUE,
+        created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        CONSTRAINT ck_eventos_propios_fechas CHECK (fecha_fin >= fecha_inicio)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_eventos_propios_ubicacion
+        ON eventos_propios (ubicacion_id, fecha_inicio)
+        WHERE activo = TRUE
+    """,
 ]
 
 _VISITAS_COLS = [
