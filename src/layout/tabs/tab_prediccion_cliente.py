@@ -34,35 +34,74 @@ _DEMO_BASE = {
 }
 _DEMO_BASE_DEFAULT = 3_000
 
-# Factores de ajuste día de semana (L=0 … D=6)
-_DEMO_DOW = [0.82, 0.85, 0.90, 0.93, 1.10, 1.42, 1.28]
+# DOW factors por tipo — L=0 … D=6
+# Exterior: Gran Vía es destino turístico, sábado/domingo disparan fuerte
+# Interior: moderado, la compra activa tiene menos estacionalidad semanal
+# Caja: la tasa de conversión es estable; el finde sube, pero menos
+_DOW_BY_TYPE = {
+    "exterior": [0.76, 0.80, 0.87, 0.91, 1.06, 1.62, 1.48],
+    "interior": [0.84, 0.87, 0.92, 0.96, 1.11, 1.33, 1.18],
+    "caja": [0.88, 0.91, 0.94, 0.97, 1.07, 1.22, 1.10],
+}
+# Ruido por tipo: exterior más expuesto a eventos/clima, caja más estable
+_NOISE_BY_TYPE = {"exterior": 0.09, "interior": 0.05, "caja": 0.03}
+# Ancho de banda de confianza (base + slope·log)
+_BAND_BY_TYPE = {"exterior": (0.09, 0.020), "interior": (0.06, 0.013), "caja": (0.04, 0.009)}
+# Tendencia de crecimiento diaria
+_TREND_BY_TYPE = {"exterior": 0.003, "interior": 0.005, "caja": 0.004}
+# Rango de accuracy por tipo
+_ACC_BY_TYPE = {"exterior": (67.0, 75.5), "interior": (74.0, 82.5), "caja": (77.0, 84.5)}
+_MAE_PCT_BY_TYPE = {"exterior": (0.07, 0.12), "interior": (0.04, 0.08), "caja": (0.03, 0.06)}
+
+
+def _zone_type(nombre: str) -> str:
+    n = nombre.lower()
+    if "exterior" in n or "calle" in n:
+        return "exterior"
+    if "caja" in n or "checkout" in n:
+        return "caja"
+    return "interior"
 
 
 def _demo_results(zone_nombre: str, falso_hoy: str, horizonte: int) -> dict:
     """Genera resultados de predicción verosímiles para el Showroom."""
+    ztype = _zone_type(zone_nombre)
     rng = random.Random(zone_nombre + falso_hoy)
+    # rng_macro: misma semilla para todas las zonas → el día "bueno/malo" es compartido,
+    # manteniendo el funnel (exterior > interior > caja) en cada fecha del horizonte.
+    rng_macro = random.Random(falso_hoy)
+
     base = next(
         (v for k, v in _DEMO_BASE.items() if k in zone_nombre.lower()),
         _DEMO_BASE_DEFAULT,
     )
+    dow_factors = _DOW_BY_TYPE[ztype]
+    noise_mag = _NOISE_BY_TYPE[ztype]
+    band_b, band_s = _BAND_BY_TYPE[ztype]
+    trend_rate = _TREND_BY_TYPE[ztype]
+
     hoy = datetime.strptime(falso_hoy, "%Y-%m-%d")
     fechas, predichos, reales, lower, upper = [], [], [], [], []
     for h in range(horizonte):
         d = hoy + timedelta(days=h)
         dow = d.weekday()
-        trend = 1 + 0.004 * h
-        noise = 1 + rng.uniform(-0.06, 0.06)
-        val = int(base * _DEMO_DOW[dow] * trend * noise)
-        band = int(val * (0.07 + 0.012 * math.log1p(h)))
+        trend = 1 + trend_rate * h
+        macro = 1 + rng_macro.uniform(-0.04, 0.04)  # mismo para todas las zonas ese día
+        micro = 1 + rng.uniform(-noise_mag, noise_mag)
+        val = int(base * dow_factors[dow] * trend * macro * micro)
+        band = int(val * (band_b + band_s * math.log1p(h)))
         fechas.append(d.strftime("%Y-%m-%d"))
         predichos.append(val)
         reales.append(None)
         lower.append(max(0, val - band))
         upper.append(val + band)
-    # Backtest: últimos 14 días con reales ≈ predichos + ruido pequeño
-    reales_bt = [int(v * (1 + rng.uniform(-0.04, 0.04))) for v in predichos[:14]]
-    acc = round(rng.uniform(72.0, 82.5), 1)
-    mae = round(base * rng.uniform(0.05, 0.09), 1)
+
+    bt_noise = {"exterior": 0.06, "interior": 0.04, "caja": 0.025}[ztype]
+    reales_bt = [int(v * (1 + rng.uniform(-bt_noise, bt_noise))) for v in predichos[:14]]
+    acc_lo, acc_hi = _ACC_BY_TYPE[ztype]
+    mae_lo, mae_hi = _MAE_PCT_BY_TYPE[ztype]
+    acc = round(rng.uniform(acc_lo, acc_hi), 1)
+    mae = round(base * rng.uniform(mae_lo, mae_hi), 1)
     return {
         "status": "success",
         "cache_hit": False,
@@ -71,7 +110,7 @@ def _demo_results(zone_nombre: str, falso_hoy: str, horizonte: int) -> dict:
             "mae": mae,
             "wmape_pct": round(100 - acc, 1),
             "arboles_optimos": rng.randint(90, 140),
-            "q_conf": round(rng.uniform(0.88, 0.93), 3),
+            "q_conf": round(rng.uniform(0.80, 0.90), 3),
         },
         "grafica": {
             "fechas": fechas,
