@@ -599,22 +599,58 @@ def _fmt_date_es(d: date) -> str:
     return f"{d.day} {months[d.month - 1]}"
 
 
-def _impact_stat(effect: float, p: float) -> tuple[str, str]:
-    """Returns (label, color) for a Mann-Whitney impact."""
+_GROUP_META = [
+    ("alto", "▲ Impacto alto", "#b91c1c", "#fff1f2"),
+    ("moderado", "▲ Impacto moderado", "#92400e", "#fffbeb"),
+    ("leve", "Impacto leve", "#6b7280", "#f9fafb"),
+    ("tendencia", "Tendencia (muestra pequeña)", "#1d4ed8", "#eff6ff"),
+    ("sin_impacto", "Sin impacto detectado", "#9ca3af", "#f9fafb"),
+    ("sin_datos", "Sin datos históricos", "#d1d5db", "#f9fafb"),
+]
+
+
+def _compute_event_stats(g0, g1) -> tuple[str, str, str]:
+    """Returns (group_key, stat_txt, stat_color) for a Mann-Whitney comparison.
+
+    For events with < 10 event days, uses uplift % instead of a non-significant
+    test result — avoids "Sin impacto" when only 1-2 occurrences exist in history.
+    """
+    import numpy as np
+
+    n0, n1 = len(g0), len(g1)
+
+    uplift_str = ""
+    if n1 > 0 and n0 > 0:
+        base_mean = float(np.mean(g0))
+        if base_mean > 0:
+            uplift = (float(np.mean(g1)) - base_mean) / base_mean * 100
+            s = "+" if uplift >= 0 else ""
+            uplift_str = f"{s}{uplift:.0f}% vs base"
+
+    if n0 < 5 or n1 < 5:
+        note = f" · {uplift_str}" if uplift_str else ""
+        return "sin_datos", f"n={n1} días{note}", "#9ca3af"
+
+    effect, p = _mann_whitney_np(g0, g1)
     abs_e = abs(effect)
     sign = "↑" if effect >= 0 else "↓"
     r_str = f"r={sign}{abs_e:.2f}"
     p_str = (
         "p<0,001" if p < 0.001 else "p<0,01" if p < 0.01 else "p<0,05" if p < 0.05 else f"p={p:.2f}"
     )
+
     if p > 0.1 or abs_e < 0.1:
-        return "Sin impacto", "#9ca3af"
-    elif abs_e < 0.25:
-        return f"Leve · {r_str} · {p_str}", "#78716c"
-    elif abs_e < 0.45:
-        return f"Moderado · {r_str} · {p_str}", "#92400e"
+        if n1 < 10 and uplift_str:
+            return "tendencia", f"n={n1} días · {uplift_str}", "#1d4ed8"
+        return "sin_impacto", "Sin impacto detectado", "#9ca3af"
+    elif abs_e >= 0.45:
+        note = f" · {uplift_str}" if uplift_str else ""
+        return "alto", f"{r_str} · {p_str}{note}", "#b91c1c"
+    elif abs_e >= 0.25:
+        note = f" · {uplift_str}" if uplift_str else ""
+        return "moderado", f"{r_str} · {p_str}{note}", "#92400e"
     else:
-        return f"Alto · {r_str} · {p_str}", "#b91c1c"
+        return "leve", f"{r_str} · {p_str}", "#6b7280"
 
 
 def _calendar_comercial_section(
@@ -650,7 +686,34 @@ def _calendar_comercial_section(
     # Build event_days dict: {date: (short_label, bg, fg, border)}
     # Lower-priority sources first (supercalendario), own events overwrite last
     event_days: dict[date, tuple[str, str, str, str]] = {}
-    legend_items: list = []  # list of html nodes for legend
+    # events_by_group accumulates legend rows keyed by impact group
+    events_by_group: dict[str, list] = {k: [] for k, *_ in _GROUP_META}
+
+    def _swatch(cell_bg, cell_fg, cell_border):
+        return html.Span(
+            "■",
+            style={
+                "color": cell_fg,
+                "backgroundColor": cell_bg,
+                "border": f"1px solid {cell_border}",
+                "borderRadius": "3px",
+                "padding": "0 3px",
+                "marginRight": "5px",
+                "fontSize": "0.8rem",
+                "display": "inline-block",
+            },
+        )
+
+    def _legend_row(*children):
+        return html.Div(
+            list(children),
+            style={
+                "marginBottom": "3px",
+                "display": "flex",
+                "alignItems": "baseline",
+                "gap": "3px",
+            },
+        )
 
     # ── Supercalendario ───────────────────────────────────────────────────────
     for event_key, meta in _COMMERCIAL_EVENTS.items():
@@ -678,38 +741,16 @@ def _calendar_comercial_section(
         merged = pd.DataFrame({"flag": flag_s, "v": v_ts}).dropna()
         g0 = merged.loc[merged["flag"] == 0, "v"].to_numpy()
         g1 = merged.loc[merged["flag"] == 1, "v"].to_numpy()
+        grp, stat_txt, stat_color = _compute_event_stats(g0, g1)
 
-        if len(g0) >= 5 and len(g1) >= 5:
-            effect, p = _mann_whitney_np(g0, g1)
-            imp_txt, imp_color = _impact_stat(effect, p)
-        else:
-            imp_txt, imp_color = "Sin datos suficientes", "#9ca3af"
-
-        legend_items.append(
-            html.Div(
-                [
-                    html.Span(
-                        "■",
-                        style={
-                            "color": cell_fg,
-                            "backgroundColor": cell_bg,
-                            "border": f"1px solid {cell_border}",
-                            "borderRadius": "3px",
-                            "padding": "0 3px",
-                            "marginRight": "5px",
-                            "fontSize": "0.8rem",
-                        },
-                    ),
-                    html.Span(
-                        meta["label"],
-                        style={"fontSize": "0.76rem", "color": "#374151", "fontWeight": "500"},
-                    ),
-                    html.Span(
-                        f"  {imp_txt}",
-                        style={"fontSize": "0.72rem", "color": imp_color},
-                    ),
-                ],
-                style={"marginBottom": "3px"},
+        events_by_group[grp].append(
+            _legend_row(
+                _swatch(cell_bg, cell_fg, cell_border),
+                html.Span(
+                    meta["label"],
+                    style={"fontSize": "0.76rem", "color": "#374151", "fontWeight": "500"},
+                ),
+                html.Span(stat_txt, style={"fontSize": "0.71rem", "color": stat_color}),
             )
         )
 
@@ -733,9 +774,6 @@ def _calendar_comercial_section(
         except Exception:
             ep_rows = []
 
-    if ep_rows and legend_items:
-        legend_items.append(html.Hr(style={"margin": "6px 0", "borderColor": "#e5e7eb"}))
-
     _TIPO_ICON = {
         "promocion": "fas fa-percent",
         "oferta": "fas fa-tags",
@@ -743,7 +781,7 @@ def _calendar_comercial_section(
         "otro": "fas fa-calendar-plus",
     }
 
-    for ep_id, ep_nombre, ep_tipo, ep_desc, ep_fi, ep_ff in ep_rows:
+    for _ep_id, ep_nombre, ep_tipo, _ep_desc, ep_fi, ep_ff in ep_rows:
         ep_fi = ep_fi if isinstance(ep_fi, date) else date.fromisoformat(str(ep_fi))
         ep_ff = ep_ff if isinstance(ep_ff, date) else date.fromisoformat(str(ep_ff))
         cell_bg, cell_fg, cell_border = _TIPO_CELL.get(ep_tipo or "otro", _TIPO_CELL["otro"])
@@ -765,53 +803,56 @@ def _calendar_comercial_section(
         merged2 = pd.DataFrame({"flag": flag_ep, "v": v_ts2}).dropna()
         g0_ep = merged2.loc[merged2["flag"] == 0, "v"].to_numpy()
         g1_ep = merged2.loc[merged2["flag"] == 1, "v"].to_numpy()
-
-        if len(g0_ep) >= 5 and len(g1_ep) >= 5:
-            effect_ep, p_ep = _mann_whitney_np(g0_ep, g1_ep)
-            imp_txt_ep, imp_color_ep = _impact_stat(effect_ep, p_ep)
-        else:
-            imp_txt_ep, imp_color_ep = "Sin datos suficientes", "#9ca3af"
+        grp_ep, stat_txt_ep, stat_color_ep = _compute_event_stats(g0_ep, g1_ep)
 
         ep_icon = _TIPO_ICON.get(ep_tipo or "otro", _TIPO_ICON["otro"])
         tipo_label = (ep_tipo or "otro").capitalize()
 
-        legend_items.append(
-            html.Div(
-                [
-                    html.Span(
-                        "■",
-                        style={
-                            "color": cell_fg,
-                            "backgroundColor": cell_bg,
-                            "border": f"1px solid {cell_border}",
-                            "borderRadius": "3px",
-                            "padding": "0 3px",
-                            "marginRight": "5px",
-                            "fontSize": "0.8rem",
-                        },
-                    ),
-                    html.I(
-                        className=f"{ep_icon} me-1", style={"color": cell_fg, "fontSize": "0.7rem"}
-                    ),
-                    html.Span(
-                        ep_nombre,
-                        style={"fontSize": "0.76rem", "color": "#374151", "fontWeight": "500"},
-                    ),
-                    html.Span(
-                        f" · {tipo_label}",
-                        style={"fontSize": "0.70rem", "color": cell_fg},
-                    ),
-                    html.Span(
-                        f"  {imp_txt_ep}",
-                        style={"fontSize": "0.72rem", "color": imp_color_ep},
-                    ),
-                ],
-                style={"marginBottom": "3px"},
+        events_by_group[grp_ep].append(
+            _legend_row(
+                _swatch(cell_bg, cell_fg, cell_border),
+                html.I(className=f"{ep_icon} me-1", style={"color": cell_fg, "fontSize": "0.7rem"}),
+                html.Span(
+                    ep_nombre,
+                    style={"fontSize": "0.76rem", "color": "#374151", "fontWeight": "500"},
+                ),
+                html.Span(f"· {tipo_label}", style={"fontSize": "0.70rem", "color": cell_fg}),
+                html.Span(stat_txt_ep, style={"fontSize": "0.71rem", "color": stat_color_ep}),
             )
         )
 
     if not event_days and not ep_rows:
         return None
+
+    # ── Build grouped legend ──────────────────────────────────────────────────
+    grouped_legend: list = []
+    for grp_key, grp_label, grp_color, grp_bg in _GROUP_META:
+        rows = events_by_group.get(grp_key, [])
+        if not rows:
+            continue
+        grouped_legend.append(
+            html.Div(
+                html.Span(
+                    grp_label,
+                    style={
+                        "fontWeight": "700",
+                        "fontSize": "0.69rem",
+                        "color": grp_color,
+                        "textTransform": "uppercase",
+                        "letterSpacing": "0.4px",
+                    },
+                ),
+                style={
+                    "backgroundColor": grp_bg,
+                    "borderLeft": f"3px solid {grp_color}",
+                    "borderRadius": "0 4px 4px 0",
+                    "padding": "2px 7px",
+                    "marginTop": "8px",
+                    "marginBottom": "4px",
+                },
+            )
+        )
+        grouped_legend.extend(rows)
 
     # ── Calendar legend header ────────────────────────────────────────────────
     cal_legend = html.Div(
@@ -829,7 +870,7 @@ def _calendar_comercial_section(
             _sub_header("fas fa-calendar-alt", "Calendario comercial", "#8E44AD"),
             cal_legend,
             _build_calendar(fmin_p, fecha_max, festivos or {}, event_days=event_days),
-            html.Div(legend_items, className="mt-2") if legend_items else None,
+            html.Div(grouped_legend, className="mt-2") if grouped_legend else None,
         ],
         className="mt-3",
     )
