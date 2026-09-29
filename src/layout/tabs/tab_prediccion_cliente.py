@@ -638,6 +638,9 @@ def _zona_card_insuficiente(nombre: str, color: str) -> dbc.Card:
     )
 
 
+_FUNNEL_ORDER = {"exterior": 0, "interior": 1, "caja": 2}
+
+
 def _build_zone_tree(zonas: list[dict]) -> tuple[list, dict]:
     children_map: dict[str, list] = {z["zona_id"]: [] for z in zonas}
     roots: list = []
@@ -647,6 +650,7 @@ def _build_zone_tree(zonas: list[dict]) -> tuple[list, dict]:
             children_map[pid].append(z)
         else:
             roots.append(z)
+    roots.sort(key=lambda z: _FUNNEL_ORDER.get(_zone_type(z.get("nombre", "")), 1))
     for zid in children_map:
         children_map[zid].sort(key=lambda z: z.get("nombre", ""))
     return roots, children_map
