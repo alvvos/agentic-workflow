@@ -394,6 +394,352 @@ def _impacto_badge(
         return None
 
 
+# ── Commercial calendar ──────────────────────────────────────────────────────
+
+_COMMERCIAL_EVENTS: dict[str, dict] = {
+    "rebajas_invierno": {
+        "label": "Rebajas de invierno",
+        "icon": "fas fa-tag",
+        "color": "#2563EB",
+        "desc": "Temporada de descuentos post-Navidad (enero–febrero). Alto potencial de tráfico en moda y complementos.",
+        "cfg_key": "rebajas_invierno",
+        "paises": ["ES"],
+    },
+    "rebajas_verano": {
+        "label": "Rebajas de verano",
+        "icon": "fas fa-sun",
+        "color": "#D97706",
+        "desc": "Temporada de rebajas estival (julio–septiembre). Impacto moderado en fashion; menor en otros segmentos.",
+        "cfg_key": "rebajas_verano",
+        "paises": ["ES"],
+    },
+    "black_friday": {
+        "label": "Black Friday",
+        "icon": "fas fa-bolt",
+        "color": "#1F2937",
+        "desc": "Semana de descuentos masivos (último viernes de noviembre y días previos). Pico de tráfico concentrado.",
+        "cfg_key": "black_friday",
+        "paises": ["ES", "MX"],
+    },
+    "cyber_monday": {
+        "label": "Cyber Monday",
+        "icon": "fas fa-laptop",
+        "color": "#4F46E5",
+        "desc": "Lunes de ofertas digitales tras el Black Friday. Impacto más online que físico.",
+        "cfg_key": "cyber_monday",
+        "paises": ["ES", "MX"],
+    },
+    "navidad_compras": {
+        "label": "Campaña de Navidad",
+        "icon": "fas fa-gift",
+        "color": "#DC2626",
+        "desc": "Compras navideñas (1–24 dic). Máximo pico anual de tráfico en retail.",
+        "cfg_key": "navidad_compras",
+        "paises": ["ES", "MX"],
+    },
+    "reyes_compras": {
+        "label": "Campaña de Reyes",
+        "icon": "fas fa-star",
+        "color": "#7C3AED",
+        "desc": "Compras para Reyes Magos (2–5 enero). Segundo gran pico de tráfico en diciembre–enero.",
+        "cfg_key": "reyes_compras",
+        "paises": ["ES"],
+    },
+    "san_valentin": {
+        "label": "San Valentín",
+        "icon": "fas fa-heart",
+        "color": "#EC4899",
+        "desc": "Semana del 14 de febrero. Impacto notable en complementos, cosmética y regalos.",
+        "cfg_key": "san_valentin",
+        "paises": ["ES", "MX"],
+    },
+    "dia_madre": {
+        "label": "Día de la Madre (ES)",
+        "icon": "fas fa-heart",
+        "color": "#EC4899",
+        "desc": "Primer domingo de mayo y semana previa. Impacto en moda, cosmética y hogar.",
+        "cfg_key": "dia_madre",
+        "paises": ["ES"],
+    },
+    "buen_fin_mx": {
+        "label": "Buen Fin",
+        "icon": "fas fa-bolt",
+        "color": "#1F2937",
+        "desc": "Tercer viernes de noviembre (4 días). Equivalente mexicano al Black Friday.",
+        "cfg_key": "buen_fin_mx",
+        "paises": ["MX"],
+    },
+    "dia_muertos": {
+        "label": "Día de Muertos",
+        "icon": "fas fa-skull",
+        "color": "#7C3AED",
+        "desc": "31 oct – 2 nov. Impulso en decoración, disfraces y temporada Halloween.",
+        "cfg_key": "dia_muertos",
+        "paises": ["MX"],
+    },
+    "dia_madre_mx": {
+        "label": "Día de la Madre (MX)",
+        "icon": "fas fa-heart",
+        "color": "#BE185D",
+        "desc": "10 de mayo (fecha fija). Impacto intenso y concentrado en moda y regalos.",
+        "cfg_key": "dia_madre_mx",
+        "paises": ["MX"],
+    },
+    "regreso_clases_mx": {
+        "label": "Regreso a clases",
+        "icon": "fas fa-school",
+        "color": "#059669",
+        "desc": "Agosto: compras de útiles y ropa escolar. Impacto fuerte en formatos de bazar y moda.",
+        "cfg_key": "regreso_clases_mx",
+        "paises": ["MX"],
+    },
+}
+
+
+def _event_date_ranges(year: int, event_key: str) -> list[tuple[date, date]]:
+    """Returns (start, end) windows when the event is active for the given calendar year."""
+
+    def _last_weekday_of_month(y: int, month: int, weekday: int) -> date:
+        import calendar as _cal
+
+        last = date(y, month, _cal.monthrange(y, month)[1])
+        while last.weekday() != weekday:
+            last -= timedelta(days=1)
+        return last
+
+    def _nth_weekday_of_month(y: int, month: int, weekday: int, n: int) -> date:
+        d = date(y, month, 1)
+        count = 0
+        while True:
+            if d.weekday() == weekday:
+                count += 1
+                if count == n:
+                    return d
+            d += timedelta(days=1)
+
+    if event_key == "rebajas_invierno":
+        return [(date(year, 1, 2), date(year, 2, 15))]
+    if event_key == "rebajas_verano":
+        return [(date(year, 7, 1), date(year, 9, 15))]
+    if event_key == "black_friday":
+        bf = _last_weekday_of_month(year, 11, 4)  # last Friday
+        return [(bf - timedelta(days=3), bf + timedelta(days=1))]  # Mon–Sat
+    if event_key == "cyber_monday":
+        bf = _last_weekday_of_month(year, 11, 4)
+        cm = bf + timedelta(days=3)  # Monday after BF
+        return [(cm, cm + timedelta(days=1))]
+    if event_key == "navidad_compras":
+        return [(date(year, 12, 1), date(year, 12, 24))]
+    if event_key == "reyes_compras":
+        return [(date(year, 1, 2), date(year, 1, 5))]
+    if event_key == "san_valentin":
+        return [(date(year, 2, 7), date(year, 2, 14))]
+    if event_key == "dia_madre":
+        first_sun = _nth_weekday_of_month(year, 5, 6, 1)
+        return [(first_sun - timedelta(days=6), first_sun)]
+    if event_key == "buen_fin_mx":
+        third_fri = _nth_weekday_of_month(year, 11, 4, 3)
+        return [(third_fri, third_fri + timedelta(days=3))]
+    if event_key == "dia_muertos":
+        return [(date(year, 10, 31), date(year, 11, 2))]
+    if event_key == "dia_madre_mx":
+        return [(date(year, 5, 9), date(year, 5, 11))]
+    if event_key == "regreso_clases_mx":
+        return [(date(year, 8, 15), date(year, 8, 31))]
+    return []
+
+
+def _build_event_flag_series(fmin: date, fmax: date, event_key: str) -> pd.Series:
+    """Daily 0/1 Series indexed by Timestamp across [fmin, fmax]."""
+    active: set[date] = set()
+    for year in range(fmin.year - 1, fmax.year + 2):
+        for start, end in _event_date_ranges(year, event_key):
+            d = max(start, fmin)
+            while d <= min(end, fmax):
+                active.add(d)
+                d += timedelta(days=1)
+    idx = pd.date_range(fmin, fmax, freq="D")
+    return pd.Series([1.0 if d.date() in active else 0.0 for d in idx], index=idx)
+
+
+def _fmt_date_es(d: date) -> str:
+    months = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+    return f"{d.day} {months[d.month - 1]}"
+
+
+def _calendar_comercial_section(
+    df: pd.DataFrame,
+    fmin_p: date,
+    fecha_max: date,
+    location_uuid: str | None,
+) -> html.Div | None:
+    """Accordion card with commercial calendar events and impact on visits."""
+    if df is None or df.empty:
+        return None
+    if "fecha_dt" not in df.columns or "unique_visitors" not in df.columns:
+        return None
+
+    try:
+        from src.db.queries import get_org_info
+
+        org = get_org_info(location_uuid) if location_uuid else {}
+        config_cal: dict = org.get("config_calendario", {})
+        pais: str = (org.get("pais_codigo") or "ES").upper()
+    except Exception:
+        config_cal = {}
+        pais = "ES"
+
+    v_daily = df.groupby("fecha_dt")["unique_visitors"].sum().sort_index()
+    if v_daily.empty or len(v_daily) < 20:
+        return None
+
+    fmin_df = min(v_daily.index)
+    fmax_df = max(v_daily.index)
+
+    accordion_items = []
+
+    for event_key, meta in _COMMERCIAL_EVENTS.items():
+        if pais not in meta["paises"]:
+            continue
+        if not config_cal.get(meta["cfg_key"], True):
+            continue
+
+        flag_s = _build_event_flag_series(fmin_df, fmax_df, event_key)
+        flag_s.index = pd.to_datetime(flag_s.index)
+        v_ts = v_daily.copy()
+        v_ts.index = pd.to_datetime(v_ts.index)
+        merged = pd.DataFrame({"flag": flag_s, "v": v_ts}).dropna()
+        if len(merged) < 20:
+            continue
+
+        g0 = merged.loc[merged["flag"] == 0, "v"].to_numpy()
+        g1 = merged.loc[merged["flag"] == 1, "v"].to_numpy()
+        if len(g0) < 5 or len(g1) < 5:
+            continue
+
+        effect, p = _mann_whitney_np(g0, g1)
+
+        # Impact label
+        abs_e = abs(effect)
+        if p > 0.1 or abs_e < 0.1:
+            imp_label, imp_color, imp_bg = "Sin impacto detectado", "#6B7280", "#F9FAFB"
+        elif abs_e < 0.25:
+            imp_label, imp_color, imp_bg = "Impacto leve", "#78716C", "#F5F5F4"
+        elif abs_e < 0.45:
+            imp_label, imp_color, imp_bg = "Impacto moderado", "#92400E", "#FFFBEB"
+        else:
+            imp_label, imp_color, imp_bg = "Impacto alto", "#B91C1C", "#FEF2F2"
+        sign = "↑" if effect >= 0 else "↓"
+        r_str = f"r = {sign}{abs_e:.2f}"
+        if p < 0.001:
+            p_str = "p < 0,001"
+        elif p < 0.01:
+            p_str = "p < 0,01"
+        elif p < 0.05:
+            p_str = "p < 0,05"
+        else:
+            p_str = f"p = {p:.2f}"
+
+        # Windows in current analysis period
+        windows_in_period = []
+        for year in range(fmin_p.year - 1, fecha_max.year + 2):
+            for start, end in _event_date_ranges(year, event_key):
+                overlap_start = max(start, fmin_p)
+                overlap_end = min(end, fecha_max)
+                if overlap_start <= overlap_end:
+                    windows_in_period.append((overlap_start, overlap_end))
+
+        if windows_in_period:
+            period_str = " · ".join(
+                f"{_fmt_date_es(s)} – {_fmt_date_es(e)}" for s, e in windows_in_period
+            )
+            period_chip = html.Span(
+                [html.I(className="fas fa-calendar-day me-1"), period_str],
+                style={
+                    "fontSize": "0.75rem",
+                    "color": "#6B7280",
+                    "backgroundColor": "#F3F4F6",
+                    "borderRadius": "4px",
+                    "padding": "2px 7px",
+                    "display": "inline-block",
+                    "marginBottom": "6px",
+                },
+            )
+        else:
+            period_chip = html.Span(
+                "Sin ventana activa en el período analizado",
+                style={"fontSize": "0.75rem", "color": "#9CA3AF", "fontStyle": "italic"},
+            )
+
+        title = html.Div(
+            [
+                html.I(className=f"{meta['icon']} me-2", style={"color": meta["color"]}),
+                html.Span(
+                    meta["label"],
+                    style={"fontWeight": "600", "fontSize": "0.88rem", "color": "#1F2937"},
+                ),
+                html.Span(
+                    [
+                        html.Span(
+                            imp_label,
+                            style={
+                                "fontSize": "0.73rem",
+                                "fontWeight": "700",
+                                "color": imp_color,
+                            },
+                        ),
+                        html.Span(
+                            f" · {r_str} · {p_str}",
+                            style={"fontSize": "0.68rem", "color": imp_color, "opacity": "0.8"},
+                        ),
+                    ],
+                    style={
+                        "marginLeft": "auto",
+                        "backgroundColor": imp_bg,
+                        "border": f"1px solid {imp_color}22",
+                        "borderRadius": "6px",
+                        "padding": "2px 8px",
+                        "whiteSpace": "nowrap",
+                    },
+                ),
+            ],
+            style={"display": "flex", "alignItems": "center", "width": "100%", "gap": "6px"},
+        )
+
+        body = html.Div(
+            [
+                period_chip,
+                html.P(
+                    meta["desc"],
+                    style={"fontSize": "0.82rem", "color": "#6B7280", "marginBottom": "4px"},
+                ),
+                html.Span(
+                    f"{len(g1)} días de evento · {len(g0)} días base · {len(merged)} días con datos",
+                    style={"fontSize": "0.72rem", "color": "#9CA3AF"},
+                ),
+            ]
+        )
+
+        accordion_items.append(dbc.AccordionItem(body, title=title, item_id=event_key))
+
+    if not accordion_items:
+        return None
+
+    return html.Div(
+        [
+            _sub_header("fas fa-calendar-alt", "Calendario comercial", "#8E44AD"),
+            dbc.Accordion(
+                accordion_items,
+                flush=True,
+                always_open=False,
+                start_collapsed=True,
+                style={"borderRadius": "8px", "overflow": "hidden"},
+            ),
+        ],
+        className="mt-3",
+    )
+
+
 # ── Sentence composition ─────────────────────────────────────────────────────
 
 
@@ -1225,6 +1571,7 @@ def _tab_contexto_interior(
     fmax_msaa: date,
     zonas_data: list[dict] | None = None,
     df: pd.DataFrame | None = None,
+    location_uuid: str | None = None,
 ) -> html.Div:
     dias_v = 28 if ventana == "mes" else 7
 
@@ -1237,18 +1584,11 @@ def _tab_contexto_interior(
         _visitor_blocks(zonas_data, {0, 1}, df, fmin_msaa, fmax_msaa, ventana) if zonas_data else []
     )
 
-    placeholder = html.Div(
-        html.P(
-            "Próximamente: competencia, promociones activas, lanzamientos de producto.",
-            className="text-muted fst-italic mb-0",
-            style={"fontSize": "0.82rem"},
-        ),
-        className="p-3 rounded-3 mt-3",
-        style={"backgroundColor": "#f8f9fa", "border": "1px dashed #dee2e6"},
-    )
+    cal_section = _calendar_comercial_section(df, fmin_p, fecha_max, location_uuid)
+    extra = [cal_section] if cal_section is not None else []
 
     return html.Div(
-        traffic + [_sentence_dias_apertura(ap_act, dias_v, ap_sa, ap_msa, ventana), placeholder]
+        traffic + [_sentence_dias_apertura(ap_act, dias_v, ap_sa, ap_msa, ventana)] + extra
     )
 
 
@@ -1330,6 +1670,7 @@ def render_informe_tabs(
                         fmax_msaa,
                         zonas_data=zonas_data,
                         df=df,
+                        location_uuid=location_uuid,
                     ),
                     style={"paddingTop": "12px"},
                 ),
