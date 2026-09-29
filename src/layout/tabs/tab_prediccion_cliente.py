@@ -160,9 +160,7 @@ def _demo_results(zone_nombre: str, falso_hoy: str, horizonte: int) -> dict:
             "upper": upper,
         },
         "grafica_bt": {
-            "fechas": [
-                (hoy - timedelta(days=horizonte - h)).strftime("%Y-%m-%d") for h in range(n_bt)
-            ],
+            "fechas": fechas[:n_bt],
             "reales": reales_bt,
             "predichos": predichos_bt,
             "lower": [max(0, p - band_bt) for p in predichos_bt],
