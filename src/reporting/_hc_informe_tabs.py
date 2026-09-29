@@ -396,103 +396,135 @@ def _impacto_badge(
 
 # ── Commercial calendar ──────────────────────────────────────────────────────
 
+# (label, cell_bg, cell_fg, cell_border)
 _COMMERCIAL_EVENTS: dict[str, dict] = {
     "rebajas_invierno": {
         "label": "Rebajas de invierno",
+        "short": "Reb.I",
         "icon": "fas fa-tag",
-        "color": "#2563EB",
+        "color": "#1d4ed8",
+        "cell": ("#dbeafe", "#1d4ed8", "#bfdbfe"),
         "desc": "Temporada de descuentos post-Navidad (enero–febrero). Alto potencial de tráfico en moda y complementos.",
         "cfg_key": "rebajas_invierno",
         "paises": ["ES"],
     },
     "rebajas_verano": {
         "label": "Rebajas de verano",
+        "short": "Reb.V",
         "icon": "fas fa-sun",
-        "color": "#D97706",
+        "color": "#b45309",
+        "cell": ("#fef3c7", "#b45309", "#fde68a"),
         "desc": "Temporada de rebajas estival (julio–septiembre). Impacto moderado en fashion; menor en otros segmentos.",
         "cfg_key": "rebajas_verano",
         "paises": ["ES"],
     },
     "black_friday": {
         "label": "Black Friday",
+        "short": "BF",
         "icon": "fas fa-bolt",
-        "color": "#1F2937",
+        "color": "#f9fafb",
+        "cell": ("#1f2937", "#f9fafb", "#111827"),
         "desc": "Semana de descuentos masivos (último viernes de noviembre y días previos). Pico de tráfico concentrado.",
         "cfg_key": "black_friday",
         "paises": ["ES", "MX"],
     },
     "cyber_monday": {
         "label": "Cyber Monday",
+        "short": "CM",
         "icon": "fas fa-laptop",
-        "color": "#4F46E5",
+        "color": "#3730a3",
+        "cell": ("#eef2ff", "#3730a3", "#c7d2fe"),
         "desc": "Lunes de ofertas digitales tras el Black Friday. Impacto más online que físico.",
         "cfg_key": "cyber_monday",
         "paises": ["ES", "MX"],
     },
     "navidad_compras": {
         "label": "Campaña de Navidad",
+        "short": "Navid",
         "icon": "fas fa-gift",
-        "color": "#DC2626",
+        "color": "#9d174d",
+        "cell": ("#fce7f3", "#9d174d", "#fbcfe8"),
         "desc": "Compras navideñas (1–24 dic). Máximo pico anual de tráfico en retail.",
         "cfg_key": "navidad_compras",
         "paises": ["ES", "MX"],
     },
     "reyes_compras": {
         "label": "Campaña de Reyes",
+        "short": "Reyes",
         "icon": "fas fa-star",
-        "color": "#7C3AED",
+        "color": "#6d28d9",
+        "cell": ("#f5f3ff", "#6d28d9", "#ddd6fe"),
         "desc": "Compras para Reyes Magos (2–5 enero). Segundo gran pico de tráfico en diciembre–enero.",
         "cfg_key": "reyes_compras",
         "paises": ["ES"],
     },
     "san_valentin": {
         "label": "San Valentín",
+        "short": "S.Val",
         "icon": "fas fa-heart",
-        "color": "#EC4899",
+        "color": "#be185d",
+        "cell": ("#fdf2f8", "#be185d", "#fbcfe8"),
         "desc": "Semana del 14 de febrero. Impacto notable en complementos, cosmética y regalos.",
         "cfg_key": "san_valentin",
         "paises": ["ES", "MX"],
     },
     "dia_madre": {
         "label": "Día de la Madre (ES)",
+        "short": "D.Mad",
         "icon": "fas fa-heart",
-        "color": "#EC4899",
+        "color": "#a21caf",
+        "cell": ("#fdf4ff", "#a21caf", "#f0abfc"),
         "desc": "Primer domingo de mayo y semana previa. Impacto en moda, cosmética y hogar.",
         "cfg_key": "dia_madre",
         "paises": ["ES"],
     },
     "buen_fin_mx": {
         "label": "Buen Fin",
+        "short": "BFin",
         "icon": "fas fa-bolt",
-        "color": "#1F2937",
+        "color": "#f9fafb",
+        "cell": ("#1f2937", "#f9fafb", "#111827"),
         "desc": "Tercer viernes de noviembre (4 días). Equivalente mexicano al Black Friday.",
         "cfg_key": "buen_fin_mx",
         "paises": ["MX"],
     },
     "dia_muertos": {
         "label": "Día de Muertos",
+        "short": "D.Mu",
         "icon": "fas fa-skull",
-        "color": "#7C3AED",
+        "color": "#6d28d9",
+        "cell": ("#f5f3ff", "#6d28d9", "#ddd6fe"),
         "desc": "31 oct – 2 nov. Impulso en decoración, disfraces y temporada Halloween.",
         "cfg_key": "dia_muertos",
         "paises": ["MX"],
     },
     "dia_madre_mx": {
         "label": "Día de la Madre (MX)",
+        "short": "D.MaMX",
         "icon": "fas fa-heart",
-        "color": "#BE185D",
+        "color": "#be185d",
+        "cell": ("#fdf2f8", "#be185d", "#fbcfe8"),
         "desc": "10 de mayo (fecha fija). Impacto intenso y concentrado en moda y regalos.",
         "cfg_key": "dia_madre_mx",
         "paises": ["MX"],
     },
     "regreso_clases_mx": {
         "label": "Regreso a clases",
+        "short": "R.Cl",
         "icon": "fas fa-school",
-        "color": "#059669",
+        "color": "#15803d",
+        "cell": ("#f0fdf4", "#15803d", "#bbf7d0"),
         "desc": "Agosto: compras de útiles y ropa escolar. Impacto fuerte en formatos de bazar y moda.",
         "cfg_key": "regreso_clases_mx",
         "paises": ["MX"],
     },
+}
+
+_TIPO_CELL: dict[str, tuple[str, str, str]] = {
+    "promocion": ("#fff7ed", "#c2410c", "#fed7aa"),
+    "oferta": ("#f0f9ff", "#0369a1", "#bae6fd"),
+    "lanzamiento": ("#f0fdf4", "#15803d", "#bbf7d0"),
+    "otro": ("#f9fafb", "#4b5563", "#e5e7eb"),
 }
 
 
@@ -567,13 +599,32 @@ def _fmt_date_es(d: date) -> str:
     return f"{d.day} {months[d.month - 1]}"
 
 
+def _impact_stat(effect: float, p: float) -> tuple[str, str]:
+    """Returns (label, color) for a Mann-Whitney impact."""
+    abs_e = abs(effect)
+    sign = "↑" if effect >= 0 else "↓"
+    r_str = f"r={sign}{abs_e:.2f}"
+    p_str = (
+        "p<0,001" if p < 0.001 else "p<0,01" if p < 0.01 else "p<0,05" if p < 0.05 else f"p={p:.2f}"
+    )
+    if p > 0.1 or abs_e < 0.1:
+        return "Sin impacto", "#9ca3af"
+    elif abs_e < 0.25:
+        return f"Leve · {r_str} · {p_str}", "#78716c"
+    elif abs_e < 0.45:
+        return f"Moderado · {r_str} · {p_str}", "#92400e"
+    else:
+        return f"Alto · {r_str} · {p_str}", "#b91c1c"
+
+
 def _calendar_comercial_section(
     df: pd.DataFrame,
     fmin_p: date,
     fecha_max: date,
     location_uuid: str | None,
+    festivos: dict[date, str] | None = None,
 ) -> html.Div | None:
-    """Accordion card with commercial calendar events and impact on visits."""
+    """Calendar grid + legend for commercial events and own events."""
     if df is None or df.empty:
         return None
     if "fecha_dt" not in df.columns or "unique_visitors" not in df.columns:
@@ -596,140 +647,74 @@ def _calendar_comercial_section(
     fmin_df = min(v_daily.index)
     fmax_df = max(v_daily.index)
 
-    accordion_items = []
+    # Build event_days dict: {date: (short_label, bg, fg, border)}
+    # Lower-priority sources first (supercalendario), own events overwrite last
+    event_days: dict[date, tuple[str, str, str, str]] = {}
+    legend_items: list = []  # list of html nodes for legend
 
+    # ── Supercalendario ───────────────────────────────────────────────────────
     for event_key, meta in _COMMERCIAL_EVENTS.items():
         if pais not in meta["paises"]:
             continue
         if not config_cal.get(meta["cfg_key"], True):
             continue
 
+        cell_bg, cell_fg, cell_border = meta["cell"]
+        short = meta["short"]
+
+        # Paint days in the analysis period
+        for year in range(fmin_p.year - 1, fecha_max.year + 2):
+            for start, end in _event_date_ranges(year, event_key):
+                d = max(start, fmin_p)
+                while d <= min(end, fecha_max):
+                    event_days[d] = (short, cell_bg, cell_fg, f"1px solid {cell_border}")
+                    d += timedelta(days=1)
+
+        # Compute impact using full history
         flag_s = _build_event_flag_series(fmin_df, fmax_df, event_key)
         flag_s.index = pd.to_datetime(flag_s.index)
         v_ts = v_daily.copy()
         v_ts.index = pd.to_datetime(v_ts.index)
         merged = pd.DataFrame({"flag": flag_s, "v": v_ts}).dropna()
-        if len(merged) < 20:
-            continue
-
         g0 = merged.loc[merged["flag"] == 0, "v"].to_numpy()
         g1 = merged.loc[merged["flag"] == 1, "v"].to_numpy()
-        if len(g0) < 5 or len(g1) < 5:
-            continue
 
-        effect, p = _mann_whitney_np(g0, g1)
-
-        # Impact label
-        abs_e = abs(effect)
-        if p > 0.1 or abs_e < 0.1:
-            imp_label, imp_color, imp_bg = "Sin impacto detectado", "#6B7280", "#F9FAFB"
-        elif abs_e < 0.25:
-            imp_label, imp_color, imp_bg = "Impacto leve", "#78716C", "#F5F5F4"
-        elif abs_e < 0.45:
-            imp_label, imp_color, imp_bg = "Impacto moderado", "#92400E", "#FFFBEB"
+        if len(g0) >= 5 and len(g1) >= 5:
+            effect, p = _mann_whitney_np(g0, g1)
+            imp_txt, imp_color = _impact_stat(effect, p)
         else:
-            imp_label, imp_color, imp_bg = "Impacto alto", "#B91C1C", "#FEF2F2"
-        sign = "↑" if effect >= 0 else "↓"
-        r_str = f"r = {sign}{abs_e:.2f}"
-        if p < 0.001:
-            p_str = "p < 0,001"
-        elif p < 0.01:
-            p_str = "p < 0,01"
-        elif p < 0.05:
-            p_str = "p < 0,05"
-        else:
-            p_str = f"p = {p:.2f}"
+            imp_txt, imp_color = "Sin datos suficientes", "#9ca3af"
 
-        # Windows in current analysis period
-        windows_in_period = []
-        for year in range(fmin_p.year - 1, fecha_max.year + 2):
-            for start, end in _event_date_ranges(year, event_key):
-                overlap_start = max(start, fmin_p)
-                overlap_end = min(end, fecha_max)
-                if overlap_start <= overlap_end:
-                    windows_in_period.append((overlap_start, overlap_end))
-
-        if windows_in_period:
-            period_str = " · ".join(
-                f"{_fmt_date_es(s)} – {_fmt_date_es(e)}" for s, e in windows_in_period
+        legend_items.append(
+            html.Div(
+                [
+                    html.Span(
+                        "■",
+                        style={
+                            "color": cell_fg,
+                            "backgroundColor": cell_bg,
+                            "border": f"1px solid {cell_border}",
+                            "borderRadius": "3px",
+                            "padding": "0 3px",
+                            "marginRight": "5px",
+                            "fontSize": "0.8rem",
+                        },
+                    ),
+                    html.Span(
+                        meta["label"],
+                        style={"fontSize": "0.76rem", "color": "#374151", "fontWeight": "500"},
+                    ),
+                    html.Span(
+                        f"  {imp_txt}",
+                        style={"fontSize": "0.72rem", "color": imp_color},
+                    ),
+                ],
+                style={"marginBottom": "3px"},
             )
-            period_chip = html.Span(
-                [html.I(className="fas fa-calendar-day me-1"), period_str],
-                style={
-                    "fontSize": "0.75rem",
-                    "color": "#6B7280",
-                    "backgroundColor": "#F3F4F6",
-                    "borderRadius": "4px",
-                    "padding": "2px 7px",
-                    "display": "inline-block",
-                    "marginBottom": "6px",
-                },
-            )
-        else:
-            period_chip = html.Span(
-                "Sin ventana activa en el período analizado",
-                style={"fontSize": "0.75rem", "color": "#9CA3AF", "fontStyle": "italic"},
-            )
-
-        title = html.Div(
-            [
-                html.I(className=f"{meta['icon']} me-2", style={"color": meta["color"]}),
-                html.Span(
-                    meta["label"],
-                    style={"fontWeight": "600", "fontSize": "0.88rem", "color": "#1F2937"},
-                ),
-                html.Span(
-                    [
-                        html.Span(
-                            imp_label,
-                            style={
-                                "fontSize": "0.73rem",
-                                "fontWeight": "700",
-                                "color": imp_color,
-                            },
-                        ),
-                        html.Span(
-                            f" · {r_str} · {p_str}",
-                            style={"fontSize": "0.68rem", "color": imp_color, "opacity": "0.8"},
-                        ),
-                    ],
-                    style={
-                        "marginLeft": "auto",
-                        "backgroundColor": imp_bg,
-                        "border": f"1px solid {imp_color}22",
-                        "borderRadius": "6px",
-                        "padding": "2px 8px",
-                        "whiteSpace": "nowrap",
-                    },
-                ),
-            ],
-            style={"display": "flex", "alignItems": "center", "width": "100%", "gap": "6px"},
         )
-
-        body = html.Div(
-            [
-                period_chip,
-                html.P(
-                    meta["desc"],
-                    style={"fontSize": "0.82rem", "color": "#6B7280", "marginBottom": "4px"},
-                ),
-                html.Span(
-                    f"{len(g1)} días de evento · {len(g0)} días base · {len(merged)} días con datos",
-                    style={"fontSize": "0.72rem", "color": "#9CA3AF"},
-                ),
-            ]
-        )
-
-        accordion_items.append(dbc.AccordionItem(body, title=title, item_id=event_key))
 
     # ── Eventos propios ───────────────────────────────────────────────────────
-    _TIPO_STYLE: dict[str, tuple[str, str]] = {
-        "promocion": ("fas fa-percent", "#D97706"),
-        "oferta": ("fas fa-tags", "#2563EB"),
-        "lanzamiento": ("fas fa-rocket", "#059669"),
-        "otro": ("fas fa-calendar-plus", "#6B7280"),
-    }
-
+    ep_rows: list = []
     if location_uuid:
         try:
             from src.db.store import get_conn
@@ -740,178 +725,111 @@ def _calendar_comercial_section(
                     "SELECT id, nombre, tipo, descripcion, fecha_inicio, fecha_fin "
                     "FROM eventos_propios "
                     "WHERE ubicacion_id = ? AND activo = TRUE "
-                    "ORDER BY fecha_inicio DESC",
+                    "ORDER BY fecha_inicio",
                     [location_uuid],
                 )
                 .fetchall()
             )
-            for ep_id, ep_nombre, ep_tipo, ep_desc, ep_fi, ep_ff in ep_rows:
-                ep_fi = ep_fi if isinstance(ep_fi, date) else date.fromisoformat(str(ep_fi))
-                ep_ff = ep_ff if isinstance(ep_ff, date) else date.fromisoformat(str(ep_ff))
-                ep_icon, ep_color = _TIPO_STYLE.get(ep_tipo or "otro", _TIPO_STYLE["otro"])
-
-                idx_ts = pd.to_datetime(pd.date_range(fmin_df, fmax_df, freq="D"))
-                flag_s = pd.Series(
-                    [1.0 if ep_fi <= d.date() <= ep_ff else 0.0 for d in idx_ts], index=idx_ts
-                )
-                v_ts2 = v_daily.copy()
-                v_ts2.index = pd.to_datetime(v_ts2.index)
-                merged2 = pd.DataFrame({"flag": flag_s, "v": v_ts2}).dropna()
-
-                g0_ep = merged2.loc[merged2["flag"] == 0, "v"].to_numpy()
-                g1_ep = merged2.loc[merged2["flag"] == 1, "v"].to_numpy()
-
-                if len(g1_ep) >= 5 and len(g0_ep) >= 5:
-                    effect_ep, p_ep = _mann_whitney_np(g0_ep, g1_ep)
-                    abs_ep = abs(effect_ep)
-                    if p_ep > 0.1 or abs_ep < 0.1:
-                        imp_l, imp_c, imp_bg2 = "Sin impacto detectado", "#6B7280", "#F9FAFB"
-                    elif abs_ep < 0.25:
-                        imp_l, imp_c, imp_bg2 = "Impacto leve", "#78716C", "#F5F5F4"
-                    elif abs_ep < 0.45:
-                        imp_l, imp_c, imp_bg2 = "Impacto moderado", "#92400E", "#FFFBEB"
-                    else:
-                        imp_l, imp_c, imp_bg2 = "Impacto alto", "#B91C1C", "#FEF2F2"
-                    sign_ep = "↑" if effect_ep >= 0 else "↓"
-                    r_ep = f"r = {sign_ep}{abs_ep:.2f}"
-                    p_ep_str = (
-                        "p < 0,001"
-                        if p_ep < 0.001
-                        else (
-                            "p < 0,01"
-                            if p_ep < 0.01
-                            else "p < 0,05" if p_ep < 0.05 else f"p = {p_ep:.2f}"
-                        )
-                    )
-                    impact_span = html.Span(
-                        [
-                            html.Span(
-                                imp_l,
-                                style={"fontSize": "0.73rem", "fontWeight": "700", "color": imp_c},
-                            ),
-                            html.Span(
-                                f" · {r_ep} · {p_ep_str}",
-                                style={"fontSize": "0.68rem", "color": imp_c, "opacity": "0.8"},
-                            ),
-                        ],
-                        style={
-                            "marginLeft": "auto",
-                            "backgroundColor": imp_bg2,
-                            "border": f"1px solid {imp_c}22",
-                            "borderRadius": "6px",
-                            "padding": "2px 8px",
-                            "whiteSpace": "nowrap",
-                        },
-                    )
-                else:
-                    impact_span = html.Span(
-                        "Sin datos suficientes",
-                        style={
-                            "marginLeft": "auto",
-                            "fontSize": "0.72rem",
-                            "color": "#9CA3AF",
-                            "fontStyle": "italic",
-                        },
-                    )
-
-                overlap_start = max(ep_fi, fmin_p)
-                overlap_end = min(ep_ff, fecha_max)
-                if overlap_start <= overlap_end:
-                    ep_period_chip = html.Span(
-                        [
-                            html.I(className="fas fa-calendar-day me-1"),
-                            f"{_fmt_date_es(ep_fi)} – {_fmt_date_es(ep_ff)}",
-                        ],
-                        style={
-                            "fontSize": "0.75rem",
-                            "color": "#6B7280",
-                            "backgroundColor": "#F3F4F6",
-                            "borderRadius": "4px",
-                            "padding": "2px 7px",
-                            "display": "inline-block",
-                            "marginBottom": "6px",
-                        },
-                    )
-                else:
-                    ep_period_chip = html.Span(
-                        f"{_fmt_date_es(ep_fi)} – {_fmt_date_es(ep_ff)}",
-                        style={
-                            "fontSize": "0.75rem",
-                            "color": "#9CA3AF",
-                            "display": "inline-block",
-                            "marginBottom": "6px",
-                        },
-                    )
-
-                ep_title = html.Div(
-                    [
-                        html.I(className=f"{ep_icon} me-2", style={"color": ep_color}),
-                        html.Span(
-                            ep_nombre,
-                            style={"fontWeight": "600", "fontSize": "0.88rem", "color": "#1F2937"},
-                        ),
-                        html.Span(
-                            ep_tipo.capitalize() if ep_tipo else "Otro",
-                            style={
-                                "fontSize": "0.70rem",
-                                "color": ep_color,
-                                "backgroundColor": f"{ep_color}18",
-                                "borderRadius": "4px",
-                                "padding": "1px 6px",
-                                "marginLeft": "6px",
-                            },
-                        ),
-                        impact_span,
-                    ],
-                    style={
-                        "display": "flex",
-                        "alignItems": "center",
-                        "width": "100%",
-                        "gap": "4px",
-                    },
-                )
-
-                ep_body = html.Div(
-                    [
-                        ep_period_chip,
-                        (
-                            html.P(
-                                ep_desc or "",
-                                style={
-                                    "fontSize": "0.82rem",
-                                    "color": "#6B7280",
-                                    "marginBottom": "4px",
-                                },
-                            )
-                            if ep_desc
-                            else None
-                        ),
-                        html.Span(
-                            f"{len(g1_ep) if len(g1_ep) >= 5 else '< 5'} días de evento",
-                            style={"fontSize": "0.72rem", "color": "#9CA3AF"},
-                        ),
-                    ]
-                )
-
-                accordion_items.append(
-                    dbc.AccordionItem(ep_body, title=ep_title, item_id=f"ep_{ep_id}")
-                )
         except Exception:
-            pass
+            ep_rows = []
 
-    if not accordion_items:
+    if ep_rows and legend_items:
+        legend_items.append(html.Hr(style={"margin": "6px 0", "borderColor": "#e5e7eb"}))
+
+    _TIPO_ICON = {
+        "promocion": "fas fa-percent",
+        "oferta": "fas fa-tags",
+        "lanzamiento": "fas fa-rocket",
+        "otro": "fas fa-calendar-plus",
+    }
+
+    for ep_id, ep_nombre, ep_tipo, ep_desc, ep_fi, ep_ff in ep_rows:
+        ep_fi = ep_fi if isinstance(ep_fi, date) else date.fromisoformat(str(ep_fi))
+        ep_ff = ep_ff if isinstance(ep_ff, date) else date.fromisoformat(str(ep_ff))
+        cell_bg, cell_fg, cell_border = _TIPO_CELL.get(ep_tipo or "otro", _TIPO_CELL["otro"])
+        short_ep = ep_nombre[:6]
+
+        # Paint days (own events overwrite supercalendario)
+        d = max(ep_fi, fmin_p)
+        while d <= min(ep_ff, fecha_max):
+            event_days[d] = (short_ep, cell_bg, cell_fg, f"1px solid {cell_border}")
+            d += timedelta(days=1)
+
+        # Compute impact using full history
+        idx_ts = pd.to_datetime(pd.date_range(fmin_df, fmax_df, freq="D"))
+        flag_ep = pd.Series(
+            [1.0 if ep_fi <= d2.date() <= ep_ff else 0.0 for d2 in idx_ts], index=idx_ts
+        )
+        v_ts2 = v_daily.copy()
+        v_ts2.index = pd.to_datetime(v_ts2.index)
+        merged2 = pd.DataFrame({"flag": flag_ep, "v": v_ts2}).dropna()
+        g0_ep = merged2.loc[merged2["flag"] == 0, "v"].to_numpy()
+        g1_ep = merged2.loc[merged2["flag"] == 1, "v"].to_numpy()
+
+        if len(g0_ep) >= 5 and len(g1_ep) >= 5:
+            effect_ep, p_ep = _mann_whitney_np(g0_ep, g1_ep)
+            imp_txt_ep, imp_color_ep = _impact_stat(effect_ep, p_ep)
+        else:
+            imp_txt_ep, imp_color_ep = "Sin datos suficientes", "#9ca3af"
+
+        ep_icon = _TIPO_ICON.get(ep_tipo or "otro", _TIPO_ICON["otro"])
+        tipo_label = (ep_tipo or "otro").capitalize()
+
+        legend_items.append(
+            html.Div(
+                [
+                    html.Span(
+                        "■",
+                        style={
+                            "color": cell_fg,
+                            "backgroundColor": cell_bg,
+                            "border": f"1px solid {cell_border}",
+                            "borderRadius": "3px",
+                            "padding": "0 3px",
+                            "marginRight": "5px",
+                            "fontSize": "0.8rem",
+                        },
+                    ),
+                    html.I(
+                        className=f"{ep_icon} me-1", style={"color": cell_fg, "fontSize": "0.7rem"}
+                    ),
+                    html.Span(
+                        ep_nombre,
+                        style={"fontSize": "0.76rem", "color": "#374151", "fontWeight": "500"},
+                    ),
+                    html.Span(
+                        f" · {tipo_label}",
+                        style={"fontSize": "0.70rem", "color": cell_fg},
+                    ),
+                    html.Span(
+                        f"  {imp_txt_ep}",
+                        style={"fontSize": "0.72rem", "color": imp_color_ep},
+                    ),
+                ],
+                style={"marginBottom": "3px"},
+            )
+        )
+
+    if not event_days and not ep_rows:
         return None
+
+    # ── Calendar legend header ────────────────────────────────────────────────
+    cal_legend = html.Div(
+        [
+            html.Span("■ Festivo  ", style={"color": "#856404", "fontSize": "0.72rem"}),
+            html.Span("■ Sábado  ", style={"color": "#6c757d", "fontSize": "0.72rem"}),
+            html.Span("■ Domingo  ", style={"color": "#adb5bd", "fontSize": "0.72rem"}),
+            html.Span("■ Laborable", style={"color": "#495057", "fontSize": "0.72rem"}),
+        ],
+        className="mb-1",
+    )
 
     return html.Div(
         [
             _sub_header("fas fa-calendar-alt", "Calendario comercial", "#8E44AD"),
-            dbc.Accordion(
-                accordion_items,
-                flush=True,
-                always_open=False,
-                start_collapsed=True,
-                style={"borderRadius": "8px", "overflow": "hidden"},
-            ),
+            cal_legend,
+            _build_calendar(fmin_p, fecha_max, festivos or {}, event_days=event_days),
+            html.Div(legend_items, className="mt-2") if legend_items else None,
         ],
         className="mt-3",
     )
@@ -1186,7 +1104,9 @@ def _build_calendar(
     fmax: date,
     festivos: dict[date, str],
     eventos: dict[date, int] | None = None,
+    event_days: dict[date, tuple[str, str, str, str]] | None = None,
 ) -> html.Div:
+    # event_days: {date: (short_label, bg, fg, border)}
     start = fmin - timedelta(days=fmin.weekday())
     end_d = fmax + timedelta(days=(6 - fmax.weekday()))
 
@@ -1215,11 +1135,15 @@ def _build_calendar(
             is_festivo = d in festivos
             is_sunday = d.weekday() == 6
             is_saturday = d.weekday() == 5
+            ev_style = (event_days or {}).get(d)  # (short_label, bg, fg, border)
 
             if not in_period:
                 bg, color, fw, border = "transparent", "#dee2e6", "normal", "none"
             elif is_festivo:
                 bg, color, fw, border = "#fff3cd", "#856404", "700", "1px solid #ffc107"
+            elif ev_style:
+                _, bg, color, border = ev_style
+                fw = "normal"
             elif is_sunday:
                 bg, color, fw, border = "#f8f9fa", "#adb5bd", "normal", "1px solid #e9ecef"
             elif is_saturday:
@@ -1250,6 +1174,21 @@ def _build_calendar(
                         },
                     )
                 )
+            elif ev_style and in_period:
+                ev_label = ev_style[0]
+                if ev_label:
+                    children.append(
+                        html.Span(
+                            ev_label,
+                            style={
+                                "fontSize": "0.52rem",
+                                "display": "block",
+                                "lineHeight": "1.15",
+                                "color": color,
+                                "wordBreak": "break-word",
+                            },
+                        )
+                    )
             if n_eventos > 0 and in_period:
                 children.append(
                     html.Span(
@@ -1761,7 +1700,7 @@ def _tab_contexto_interior(
         _visitor_blocks(zonas_data, {0, 1}, df, fmin_msaa, fmax_msaa, ventana) if zonas_data else []
     )
 
-    cal_section = _calendar_comercial_section(df, fmin_p, fecha_max, location_uuid)
+    cal_section = _calendar_comercial_section(df, fmin_p, fecha_max, location_uuid, festivos)
     extra = [cal_section] if cal_section is not None else []
 
     return html.Div(
