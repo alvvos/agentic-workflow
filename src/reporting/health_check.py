@@ -13,6 +13,7 @@ Filosofía:
 """
 
 import calendar
+import logging
 import os
 import re
 from datetime import date, timedelta
@@ -68,6 +69,8 @@ from src.reporting._hc_charts import (
 )
 from src.reporting._hc_informe_tabs import render_informe_tabs, render_periodo_calendar
 from src.reporting.geo_panel import generar_mapa_contexto, generar_panel_geo_visual
+
+log = logging.getLogger(__name__)
 
 
 def _clima_historico(lat: float, lon: float, fecha_inicio: str, fecha_fin: str) -> dict:
@@ -1641,8 +1644,8 @@ def _render_senal_contexto_modal(
             )
             if c:
                 city_charts.append(c)
-    except Exception:
-        pass
+    except Exception as exc:
+        log.warning("city_charts render failed: %s", exc)
 
     # cruceros notas + fallback
     _cr_meta = feature_meta.get("n_pasajeros_crucero_oficial", {})
