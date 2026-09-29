@@ -1698,12 +1698,13 @@ def _render_senal_contexto_modal(
                 continue
             label, suffix, method = _SIGNAL_REGISTRY[fk]
             agg_fn = _METHOD_TO_AGG.get(method, "sum")
+            _meta = feature_meta.get(fk, {})
             c = _render_signal_yoy_chart(
                 df_ts[df_ts["feature_key"] == fk],
                 fk,
                 label,
-                suffix or "—",
-                primary_color,
+                _meta.get("sublabel") or suffix or "—",
+                _meta.get("color") or primary_color,
                 uid,
                 anio_actual,
                 anio_prev,
@@ -1711,8 +1712,8 @@ def _render_senal_contexto_modal(
                 agg_fn,
                 fecha_max=fecha_max,
                 ventana=ventana,
-                tooltip_text="",
-                icon_cls="fas fa-chart-bar",
+                tooltip_text=_meta.get("notas", ""),
+                icon_cls=_meta.get("icon_cls") or "fas fa-chart-bar",
                 primary_color=primary_color,
             )
             if c:
