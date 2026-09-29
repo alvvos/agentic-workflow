@@ -153,17 +153,6 @@ def _color_zona(zona) -> str:
     return _zone_display(zona, zm)["color"]
 
 
-def _load_norm_tipo(conn) -> dict:
-    """Devuelve {raw_event_key: canonical_type} desde feature_registry."""
-    try:
-        rows = conn.execute(
-            "SELECT señal_id, tipo_canonico FROM señales " "WHERE tipo_canonico IS NOT NULL"
-        ).fetchall()
-        return {fk: canon for fk, canon in rows}
-    except Exception:
-        return {}
-
-
 # ── Data helpers ──────────────────────────────────────────────────────────────
 
 
@@ -724,8 +713,6 @@ def _render_pm_questions(
 
 # ── Eventos externos ─────────────────────────────────────────────────────────
 
-_DEFAULT_COLOR = "#0052CC"
-
 
 def _load_feature_meta(conn, location_uuid: str) -> dict:
     """
@@ -1092,70 +1079,6 @@ def _render_signal_yoy_chart(
         ],
         className="mb-4",
     )
-
-
-_SRC_COLOR: dict = {
-    # Keys genéricos usados por los sources reales (evento_key en store_calendario_org)
-    "concierto": "#e74c3c",
-    "festival": "#f39c12",
-    "deportivo": "#3498db",
-    "evento_municipal": "#e67e22",
-    "festivo_regional": "#27ae60",
-    "vacaciones_escolares": "#8e44ad",
-    "crucero": "#1abc9c",
-    # Keys de Ticketmaster (prefijo tm_)
-    "tm_concierto": "#e74c3c",
-    "tm_festival": "#f39c12",
-    "tm_deportivo": "#3498db",
-    # Keys legacy del mock Showroom (mantener para datos históricos)
-    "concierto_wizink": "#e74c3c",
-    "estreno_callao": "#8e44ad",
-    "festival_madrid": "#f39c12",
-    "manifestacion_gran_via": "#e67e22",
-    "partido_deportivo": "#3498db",
-}
-_SRC_LABEL: dict = {
-    "concierto": "Concierto",
-    "festival": "Festival",
-    "deportivo": "Deportivo",
-    "evento_municipal": "Municipal",
-    "festivo_regional": "Festivo",
-    "vacaciones_escolares": "Vacaciones",
-    "crucero": "Crucero",
-    "tm_concierto": "Concierto",
-    "tm_festival": "Festival",
-    "tm_deportivo": "Deportivo",
-    "concierto_wizink": "Concierto",
-    "estreno_callao": "Estreno",
-    "festival_madrid": "Festival",
-    "manifestacion_gran_via": "Manifestación",
-    "partido_deportivo": "Deportivo",
-}
-
-
-def _meta_extra(src: str, meta: dict) -> str:
-    """Resumen de metadata en una línea, según tipo de fuente."""
-    parts = []
-    if src == "crucero":
-        pax = meta.get("n_pasajeros") or meta.get("pasajeros")
-        if pax:
-            parts.append(f"{int(pax):,} pax".replace(",", "."))
-        terminal = meta.get("terminal")
-        if terminal:
-            parts.append(terminal)
-    else:
-        artista = meta.get("artista")
-        if artista:
-            parts.append(", ".join(artista[:2]) if isinstance(artista, list) else str(artista))
-        venue = meta.get("venue_nombre") or meta.get("venue")
-        if venue:
-            parts.append(str(venue))
-        aforo = meta.get("aforo")
-        if aforo and not artista:
-            parts.append(f"{int(aforo):,} aforo".replace(",", "."))
-        rsvp = meta.get("rsvp_count") or meta.get("going")
-        if rsvp and not aforo:
-            parts.append(f"{int(rsvp):,} asistentes".replace(",", "."))
 
 
 def _render_cruceros_section(
