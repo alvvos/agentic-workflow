@@ -215,17 +215,20 @@ def seed_feature_registry() -> int:
     )
 
     # INE turismo — EOH + EGATUR para Madrid (Comunidad de Madrid)
-    for key, nota in [
+    for key, agg_fn, nota in [
         (
             "eoh_viajeros_total",
+            "max",
             "Viajeros totales en hoteles — INE EOH serie EOT1763. Comunidad de Madrid. Mensual.",
         ),
         (
             "eoh_pernoctaciones_total",
+            "max",
             "Pernoctaciones totales en hoteles — INE EOH serie EOT1766. Comunidad de Madrid. Mensual.",
         ),
         (
             "egatur_gasto_medio_diario",
+            "mean",
             "Gasto medio diario por turista internacional (€) — INE EGATUR serie FREG520. Comunidad de Madrid. Mensual.",
         ),
     ]:
@@ -237,7 +240,7 @@ def seed_feature_registry() -> int:
                 json.dumps(["5c13b57d-782d-4458-911b-64cd40eebb55"]),
                 None,
                 "con_cobertura",
-                None,
+                agg_fn,
                 nota,
             )
         )
@@ -246,17 +249,19 @@ def seed_feature_registry() -> int:
         """
         INSERT INTO señales
             (señal_id, fuente, categoria, aplicabilidad_org, aplicabilidad_ubicacion,
-             status, notas)
-        VALUES (?,?,?,?,?,?,?)
+             status, funcion_agregacion, modo_visualizacion, notas)
+        VALUES (?,?,?,?,?,?,?,?,?)
         ON CONFLICT (señal_id) DO UPDATE
             SET fuente                  = EXCLUDED.fuente,
                 categoria               = EXCLUDED.categoria,
                 aplicabilidad_org       = EXCLUDED.aplicabilidad_org,
                 aplicabilidad_ubicacion = EXCLUDED.aplicabilidad_ubicacion,
                 status                  = EXCLUDED.status,
+                funcion_agregacion      = COALESCE(EXCLUDED.funcion_agregacion, señales.funcion_agregacion),
+                modo_visualizacion      = COALESCE(EXCLUDED.modo_visualizacion, señales.modo_visualizacion),
                 notas                   = COALESCE(EXCLUDED.notas, señales.notas)
         """,
-        [(e[0], e[1], e[2], e[3], e[4], e[5], e[7]) for e in entries],
+        [(e[0], e[1], e[2], e[3], e[4], e[5], e[6], "yoy", e[7]) for e in entries],
     )
     return len(entries)
 
