@@ -33,11 +33,13 @@ _DEFAULT_CFG: dict = {
         "EOT1763": "eoh_viajeros_total",
         "EOT1766": "eoh_pernoctaciones_total",
         "FREG520": "egatur_gasto_medio_diario",
+        "FREG800": "egatur_duracion_media_viaje",
     },
     "use_replicated": [
         "eoh_viajeros_total",
         "eoh_pernoctaciones_total",
         "egatur_gasto_medio_diario",
+        "egatur_duracion_media_viaje",
     ],
 }
 

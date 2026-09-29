@@ -58,6 +58,7 @@ _SIGNAL_REGISTRY: dict[str, tuple[str, str, str]] = {
     "eoh_viajeros_total": ("Viajeros hoteleros (mes)", "", "monthly_value"),
     "eoh_pernoctaciones_total": ("Pernoctaciones hoteleras (mes)", "", "monthly_value"),
     "egatur_gasto_medio_diario": ("Gasto diario turista intl.", "€/día", "mean"),
+    "egatur_duracion_media_viaje": ("Duración media viaje turista intl.", " días", "mean"),
 }
 
 # agg function for _render_signal_yoy_chart; exported to health_check city-chart auto-renderer
@@ -1069,6 +1070,13 @@ def _sentence_señal(
     elif señal_id == "egatur_gasto_medio_diario":
         inicio = [
             _t("El gasto medio diario del turista internacional fue de "),
+            _bold(_fmt_val(val_act, suffix, method)),
+            _t(f" {per}"),
+        ]
+
+    elif señal_id == "egatur_duracion_media_viaje":
+        inicio = [
+            _t("La duración media del viaje del turista internacional fue de "),
             _bold(_fmt_val(val_act, suffix, method)),
             _t(f" {per}"),
         ]

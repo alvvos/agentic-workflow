@@ -219,7 +219,11 @@ def enriquecer_con_geo(
 
 
 def get_catchment_rings(location_uuid: str):
-    """Retorna geometría de isócronas peatonales almacenada en ubicaciones."""
+    """Retorna geometría de isócronas peatonales almacenada en ubicaciones.
+
+    Si la ubicación tiene anillos_captacion_alias, sigue el alias una vez
+    para reutilizar los anillos de otra ubicación (ej. Showroom → Gran Vía).
+    """
     import json
 
     from src.db.store import get_conn
@@ -227,12 +231,30 @@ def get_catchment_rings(location_uuid: str):
     row = (
         get_conn()
         .execute(
-            "SELECT anillos_captacion FROM ubicaciones WHERE ubicacion_id = ?",
+            "SELECT anillos_captacion, anillos_captacion_alias FROM ubicaciones WHERE ubicacion_id = ?",
             [location_uuid],
         )
         .fetchone()
     )
-    if row and row[0]:
+    if not row:
+        return None
+    _, alias = row
+    if alias:
+        aliased = (
+            get_conn()
+            .execute(
+                "SELECT anillos_captacion FROM ubicaciones WHERE ubicacion_id = ?",
+                [alias],
+            )
+            .fetchone()
+        )
+        if aliased and aliased[0]:
+            try:
+                return json.loads(aliased[0])
+            except Exception:
+                return None
+        return None
+    if row[0]:
         try:
             return json.loads(row[0])
         except Exception:

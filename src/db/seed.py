@@ -231,6 +231,11 @@ def seed_feature_registry() -> int:
             "mean",
             "Gasto medio diario por turista internacional (€) — INE EGATUR serie FREG520. Comunidad de Madrid. Mensual.",
         ),
+        (
+            "egatur_duracion_media_viaje",
+            "mean",
+            "Duración media de los viajes de turistas internacionales (días) — INE EGATUR serie FREG800. Comunidad de Madrid. Mensual.",
+        ),
     ]:
         entries.append(
             (
@@ -413,6 +418,15 @@ def seed_feature_flags() -> dict:
                 "yoy",
                 "con_cobertura",
             ),
+            (
+                "egatur_duracion_media_viaje",
+                "ine_estadisticas",
+                "turismo",
+                "Duración media viaje turista intl.",
+                "mean",
+                "yoy",
+                "con_cobertura",
+            ),
         ],
     )
 
@@ -446,7 +460,12 @@ def seed_feature_flags() -> dict:
     crucero_keys = [k for k in ["n_pasajeros_crucero_dia"] if k in existing_fr]
     ine_keys = [
         k
-        for k in ["eoh_viajeros_total", "eoh_pernoctaciones_total", "egatur_gasto_medio_diario"]
+        for k in [
+            "eoh_viajeros_total",
+            "eoh_pernoctaciones_total",
+            "egatur_gasto_medio_diario",
+            "egatur_duracion_media_viaje",
+        ]
         if k in existing_fr
     ]
 
@@ -461,6 +480,7 @@ def seed_feature_flags() -> dict:
         "eoh_viajeros_total": 20,
         "eoh_pernoctaciones_total": 21,
         "egatur_gasto_medio_diario": 22,
+        "egatur_duracion_media_viaje": 23,
     }
 
     sql_as = """

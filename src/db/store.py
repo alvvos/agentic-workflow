@@ -603,6 +603,7 @@ def _apply_ddl(conn: PgConn) -> None:
     _migrar_tipo_conector(conn)
     _migrate_snapshots_geo_simple(conn)
     _migrate_señales_fill_gaps(conn)
+    _migrate_showroom_iso_alias(conn)
     _purgar_senales_obsoletas(conn)
     _sync_users_from_json(conn)
 
@@ -1217,6 +1218,19 @@ def _migrate_activacion_señales(conn: PgConn) -> None:
 
 def _migrate_ubicaciones(conn: PgConn) -> None:
     conn.execute("ALTER TABLE ubicaciones ADD COLUMN IF NOT EXISTS anillos_captacion TEXT")
+    conn.execute("ALTER TABLE ubicaciones ADD COLUMN IF NOT EXISTS anillos_captacion_alias TEXT")
+
+
+_SHOWROOM_UUID = "faf7d203-342e-44c6-96e3-1ed64d8252c3"
+_GV_UUID_ISO = "251e7f40-95c7-4678-aa48-df1b90e3461c"
+
+
+def _migrate_showroom_iso_alias(conn: PgConn) -> None:
+    """Showroom no tiene isócronas propias — reutiliza las de Miniso Madrid Gran Vía."""
+    conn.execute(
+        "UPDATE ubicaciones SET anillos_captacion_alias = ? WHERE ubicacion_id = ? AND anillos_captacion_alias IS NULL",
+        [_GV_UUID_ISO, _SHOWROOM_UUID],
+    )
 
 
 def _migrate_fk_constraints(conn: PgConn) -> None:
