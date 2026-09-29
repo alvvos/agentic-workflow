@@ -187,6 +187,41 @@ def write_month_uniform(
     return len(rows)
 
 
+def write_month_replicated(
+    year: int,
+    month: int,
+    total: float,
+    location_uuid: str,
+    feature_key: str,
+    verbose: bool = False,
+) -> int:
+    """
+    Almacena el valor total mensual replicado en cada día del mes (sin dividir).
+    Útil para métricas de stock mensual (viajeros totales, pernoctaciones).
+    Solo escribe meses ya cerrados. Idempotente.
+    """
+    if total <= 0:
+        return 0
+    today = date.today()
+    last_day = calendar.monthrange(year, month)[1]
+    if date(year, month, last_day) >= today:
+        return 0
+    rows = [
+        (str(date(year, month, d)), location_uuid, feature_key, total)
+        for d in range(1, last_day + 1)
+    ]
+    get_conn().executemany(
+        "INSERT INTO valores_señales (fecha, ubicacion_id, señal_id, valor) "
+        "VALUES (?,?,?,?) "
+        "ON CONFLICT (fecha, ubicacion_id, señal_id) "
+        "DO UPDATE SET valor = excluded.valor, ingerido_en = NOW()",
+        rows,
+    )
+    if verbose:
+        print(f"  [{feature_key}] {month:02d}/{year}: {total:,.0f} (replicado)")
+    return len(rows)
+
+
 def ensure_feature_registry(
     feature_key: str,
     source: str,

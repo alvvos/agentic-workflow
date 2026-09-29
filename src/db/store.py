@@ -120,11 +120,12 @@ class PgConn:
     executemany() → batched INSERT/UPDATE via psycopg cursor.executemany
     """
 
-    __slots__ = ("_conn", "_cur")
+    __slots__ = ("_conn", "_cur", "_closed")
 
     def __init__(self, raw: psycopg.Connection):
         self._conn = raw
         self._cur: psycopg.Cursor = raw.cursor()
+        self._closed = False
 
     def execute(self, sql: str, params=None) -> _PgResult:
         self._cur.execute(_norm_sql(sql), params)
@@ -136,6 +137,9 @@ class PgConn:
         self._cur.executemany(_norm_sql(sql), params_list)
 
     def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
         try:
             self._cur.close()
         except Exception:
@@ -146,8 +150,8 @@ class PgConn:
             pass
 
     def __del__(self) -> None:
-        # Garantiza que la conexión vuelve al pool cuando el thread-local la suelta
-        # (importante para hilos de streaming que nunca llaman close() explícitamente)
+        # Safety net para hilos de streaming que nunca llaman close() explícitamente.
+        # _closed evita el double-putconn si close() ya fue llamado antes.
         self.close()
 
 
@@ -164,15 +168,12 @@ def get_conn(read_only: bool = False) -> PgConn:  # noqa: ARG001  (read_only kep
 
     conn_obj: Optional[PgConn] = getattr(_local, "conn", None)
     if conn_obj is None or conn_obj._conn.closed:
-        # Devolver la conexión cerrada al pool ANTES de pedir una nueva.
-        # Sin esto, cada reconexión (ej. idle timeout de Postgres) pierde
-        # un slot del pool y eventualmente lo agota (PoolTimeout → 504).
+        # Limpiar _local.conn ANTES de cerrar para que un __del__ concurrente
+        # no vea una conexión ya cerrada en el thread-local y la doble-devuelva.
+        _local.conn = None
         if conn_obj is not None:
-            try:
-                _pool().putconn(conn_obj._conn)
-            except Exception:
-                pass
-            _local.conn = None
+            # close() cierra el cursor y devuelve la conn al pool con guardia _closed.
+            conn_obj.close()
         raw = _pool().getconn()
         raw.autocommit = True
         conn_obj = PgConn(raw)
@@ -190,11 +191,13 @@ def get_conn(read_only: bool = False) -> PgConn:  # noqa: ARG001  (read_only kep
 def close_conn() -> None:
     conn_obj: Optional[PgConn] = getattr(_local, "conn", None)
     if conn_obj is not None:
-        conn_obj.close()
+        # Limpiar _local.conn antes de close() para que __del__ no vea la conn
+        # todavía registrada si el GC corre durante close().
         try:
             del _local.conn
         except AttributeError:
             pass
+        conn_obj.close()
 
 
 # ── DDL ───────────────────────────────────────────────────────────────────────
@@ -527,6 +530,26 @@ _DDL: list[str] = [
         ultima_ejecucion TIMESTAMPTZ
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS eventos_propios (
+        id            BIGSERIAL    PRIMARY KEY,
+        ubicacion_id  TEXT         NOT NULL REFERENCES ubicaciones(ubicacion_id) ON DELETE CASCADE,
+        nombre        TEXT         NOT NULL,
+        tipo          TEXT         NOT NULL DEFAULT 'otro'
+                          CHECK (tipo IN ('promocion', 'oferta', 'lanzamiento', 'otro')),
+        descripcion   TEXT,
+        fecha_inicio  DATE         NOT NULL,
+        fecha_fin     DATE         NOT NULL,
+        activo        BOOLEAN      NOT NULL DEFAULT TRUE,
+        created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        CONSTRAINT ck_eventos_propios_fechas CHECK (fecha_fin >= fecha_inicio)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_eventos_propios_ubicacion
+        ON eventos_propios (ubicacion_id, fecha_inicio)
+        WHERE activo = TRUE
+    """,
 ]
 
 _VISITAS_COLS = [
@@ -549,6 +572,7 @@ _VISITAS_COLS = [
     ("histograma_frecuencia_28d", "TEXT"),
     ("histograma_frecuencia_mes", "TEXT"),
     ("histograma_frecuencia_anyo", "TEXT"),
+    ("imputado", "BOOLEAN NOT NULL DEFAULT FALSE"),
 ]
 
 
@@ -569,6 +593,7 @@ def _apply_ddl(conn: PgConn) -> None:
     _migrate_activacion_señales(conn)
     _migrate_señales(conn)
     _migrate_señales_fks(conn)
+    _migrate_activacion_señales_orden(conn)
     _migrate_activacion_señales_contexto(conn)
     _migrate_activacion_señales_periodicidad(conn)
     _migrate_señales_display(conn)
@@ -579,6 +604,7 @@ def _apply_ddl(conn: PgConn) -> None:
     _migrar_tipo_conector(conn)
     _migrate_snapshots_geo_simple(conn)
     _migrate_señales_fill_gaps(conn)
+    _migrate_showroom_iso_alias(conn)
     _purgar_senales_obsoletas(conn)
     _sync_users_from_json(conn)
 
@@ -921,6 +947,55 @@ def _migrate_señales_display(conn: PgConn) -> None:
             "sum",
             "Escalas de crucero scrapeadas de la web del puerto. Latencia 1 día. Fallback del dato oficial durante el período de lag.",
         ),
+        # turismo · INE — EOH + EGATUR
+        (
+            "eoh_viajeros_total",
+            "ine_estadisticas",
+            "turismo",
+            "yoy",
+            "Viajeros hoteleros",
+            "viajeros/mes",
+            "#2471A3",
+            "fas fa-hotel",
+            "max",
+            "Viajeros totales en hoteles (Comunidad de Madrid) — INE EOH serie EOT1763. Mensual.",
+        ),
+        (
+            "eoh_pernoctaciones_total",
+            "ine_estadisticas",
+            "turismo",
+            "yoy",
+            "Pernoctaciones hoteleras",
+            "noches/mes",
+            "#1A5276",
+            "fas fa-bed",
+            "max",
+            "Pernoctaciones totales en hoteles (Comunidad de Madrid) — INE EOH serie EOT1766. Mensual.",
+        ),
+        (
+            "egatur_gasto_medio_diario",
+            "ine_estadisticas",
+            "turismo",
+            "yoy",
+            "Gasto diario turista intl.",
+            "€/día",
+            "#C0392B",
+            "fas fa-euro-sign",
+            "mean",
+            "Gasto medio diario por turista internacional (€) — INE EGATUR serie FREG520. Comunidad de Madrid. Mensual.",
+        ),
+        (
+            "egatur_duracion_media_viaje",
+            "ine_estadisticas",
+            "turismo",
+            "yoy",
+            "Duración media viaje turista intl.",
+            "días",
+            "#8E44AD",
+            "fas fa-clock",
+            "mean",
+            "Duración media de los viajes de turistas internacionales (días) — INE EGATUR serie FREG800. Comunidad de Madrid. Mensual.",
+        ),
         # clima · calendario
         (
             "llueve",
@@ -1145,6 +1220,13 @@ def _migrate_registries(conn: PgConn) -> None:
         )
 
 
+def _migrate_activacion_señales_orden(conn: PgConn) -> None:
+    """Añade columna orden a activacion_señales para controlar el orden de visualización."""
+    conn.execute(
+        "ALTER TABLE activacion_señales ADD COLUMN IF NOT EXISTS orden INT NOT NULL DEFAULT 99"
+    )
+
+
 def _migrate_activacion_señales_contexto(conn: PgConn) -> None:
     """
     Añade 'contexto' al CHECK de activacion_señales.status.
@@ -1186,6 +1268,19 @@ def _migrate_activacion_señales(conn: PgConn) -> None:
 
 def _migrate_ubicaciones(conn: PgConn) -> None:
     conn.execute("ALTER TABLE ubicaciones ADD COLUMN IF NOT EXISTS anillos_captacion TEXT")
+    conn.execute("ALTER TABLE ubicaciones ADD COLUMN IF NOT EXISTS anillos_captacion_alias TEXT")
+
+
+_SHOWROOM_UUID = "faf7d203-342e-44c6-96e3-1ed64d8252c3"
+_GV_UUID_ISO = "251e7f40-95c7-4678-aa48-df1b90e3461c"
+
+
+def _migrate_showroom_iso_alias(conn: PgConn) -> None:
+    """Showroom no tiene isócronas propias — reutiliza las de Miniso Madrid Gran Vía."""
+    conn.execute(
+        "UPDATE ubicaciones SET anillos_captacion_alias = ? WHERE ubicacion_id = ? AND anillos_captacion_alias IS NULL",
+        [_GV_UUID_ISO, _SHOWROOM_UUID],
+    )
 
 
 def _migrate_fk_constraints(conn: PgConn) -> None:
@@ -1599,6 +1694,33 @@ _SOURCE_REGISTRY_SEED = [
             "feature_key": "n_pasajeros_crucero_oficial",
             "listing_url": "https://www.puertos.es/en/data/statistics/monthly",
             "hoja_excel": "Pasajeros crucero",
+        },
+    },
+    {
+        "fuente": "ine_estadisticas",
+        "periodicidad": "mensual",
+        "categoria": "turismo",
+        "descripcion": "Estadísticas de turismo INE: EOH (ocupación hotelera) y EGATUR (gasto turístico). Series mensuales por CCAA.",
+        "url_referencia": "https://servicios.ine.es/wstempus/js/ES/",
+        "cobertura_desde": "2019-01",
+        "latencia_dias": 25,
+        "paises": ["ES"],
+        "esquema_params": None,
+        "ejemplo_params": {},
+        "config": {
+            "tipo_conector": "ine_estadisticas",
+            "series": {
+                "EOT1763": "eoh_viajeros_total",
+                "EOT1766": "eoh_pernoctaciones_total",
+                "FREG520": "egatur_gasto_medio_diario",
+                "FREG800": "egatur_duracion_media_viaje",
+            },
+            "use_replicated": [
+                "eoh_viajeros_total",
+                "eoh_pernoctaciones_total",
+                "egatur_gasto_medio_diario",
+                "egatur_duracion_media_viaje",
+            ],
         },
     },
     {

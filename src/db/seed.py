@@ -214,21 +214,59 @@ def seed_feature_registry() -> int:
         )
     )
 
+    # INE turismo — EOH + EGATUR para Madrid (Comunidad de Madrid)
+    for key, agg_fn, nota in [
+        (
+            "eoh_viajeros_total",
+            "max",
+            "Viajeros totales en hoteles — INE EOH serie EOT1763. Comunidad de Madrid. Mensual.",
+        ),
+        (
+            "eoh_pernoctaciones_total",
+            "max",
+            "Pernoctaciones totales en hoteles — INE EOH serie EOT1766. Comunidad de Madrid. Mensual.",
+        ),
+        (
+            "egatur_gasto_medio_diario",
+            "mean",
+            "Gasto medio diario por turista internacional (€) — INE EGATUR serie FREG520. Comunidad de Madrid. Mensual.",
+        ),
+        (
+            "egatur_duracion_media_viaje",
+            "mean",
+            "Duración media de los viajes de turistas internacionales (días) — INE EGATUR serie FREG800. Comunidad de Madrid. Mensual.",
+        ),
+    ]:
+        entries.append(
+            (
+                key,
+                "ine_estadisticas",
+                "turismo",
+                json.dumps(["5c13b57d-782d-4458-911b-64cd40eebb55"]),
+                None,
+                "con_cobertura",
+                agg_fn,
+                nota,
+            )
+        )
+
     conn.executemany(
         """
         INSERT INTO señales
             (señal_id, fuente, categoria, aplicabilidad_org, aplicabilidad_ubicacion,
-             status, notas)
-        VALUES (?,?,?,?,?,?,?)
+             status, funcion_agregacion, modo_visualizacion, notas)
+        VALUES (?,?,?,?,?,?,?,?,?)
         ON CONFLICT (señal_id) DO UPDATE
             SET fuente                  = EXCLUDED.fuente,
                 categoria               = EXCLUDED.categoria,
                 aplicabilidad_org       = EXCLUDED.aplicabilidad_org,
                 aplicabilidad_ubicacion = EXCLUDED.aplicabilidad_ubicacion,
                 status                  = EXCLUDED.status,
+                funcion_agregacion      = COALESCE(EXCLUDED.funcion_agregacion, señales.funcion_agregacion),
+                modo_visualizacion      = COALESCE(EXCLUDED.modo_visualizacion, señales.modo_visualizacion),
                 notas                   = COALESCE(EXCLUDED.notas, señales.notas)
         """,
-        [(e[0], e[1], e[2], e[3], e[4], e[5], e[7]) for e in entries],
+        [(e[0], e[1], e[2], e[3], e[4], e[5], e[6], "yoy", e[7]) for e in entries],
     )
     return len(entries)
 
@@ -312,67 +350,194 @@ def seed_conversaciones() -> int:
 
 def seed_feature_flags() -> dict:
     """
-    Seeds activacion_señales for climate and geo features across all active locations.
-    - open_meteo → active  (climate variables always enter the model)
-    - esri       → inactive (no temporal signal; excluded globally)
-    Idempotent: ON CONFLICT DO UPDATE enforces the target state on every run.
-    Returns {'active': n, 'inactive': n}.
+    Seeds activacion_señales and config_fuentes for all active locations.
+
+    activacion_señales:
+      - open_meteo → active / diaria   (todas las ubicaciones)
+      - esri       → inactive / mensual (todas las ubicaciones)
+      - ev_*       → contexto / diaria  (todas las ubicaciones)
+      - cruceros   → contexto / mensual (solo ciudades Málaga)
+      - ine_*      → contexto / mensual (solo ciudades Madrid)
+
+    config_fuentes (auto-seed por ciudad, ON CONFLICT DO NOTHING):
+      - Madrid  → ine_estadisticas
+      - Málaga  → cruceros, puertos_estado
+
+    Idempotente. ON CONFLICT DO UPDATE para activacion_señales.
     """
     conn = get_conn()
 
-    locs = [
-        r[0]
-        for r in conn.execute("SELECT ubicacion_id FROM ubicaciones WHERE activa = TRUE").fetchall()
-    ]
-    if not locs:
-        return {"active": 0, "inactive": 0}
+    loc_rows = conn.execute(
+        "SELECT ubicacion_id, ciudad FROM ubicaciones WHERE activa = TRUE"
+    ).fetchall()
+    if not loc_rows:
+        return {"active": 0, "inactive": 0, "contexto": 0, "config_fuentes": 0}
+
+    all_locs = [r[0] for r in loc_rows]
+    malaga_locs = [r[0] for r in loc_rows if (r[1] or "").strip() in ("Málaga", "Malaga")]
+    madrid_locs = [r[0] for r in loc_rows if (r[1] or "").strip() == "Madrid"]
+
+    # ── Migración 2026-09-28: eliminar FK doble en activacion_señales ───────────
+    # activacion_señales.señal_id tenía dos FK: → señales y → feature_registry.
+    # feature_registry es la tabla canónica; el FK hacia señales es obsoleto.
+    conn.execute("ALTER TABLE activacion_señales DROP CONSTRAINT IF EXISTS fk_activacion_señales")
+
+    # ── Asegurar que los keys INE existen en feature_registry (requerido por FK) ─
+    conn.executemany(
+        """
+        INSERT INTO feature_registry
+            (feature_key, source, categoria, label, agg_fn, display_mode, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (feature_key) DO NOTHING
+        """,
+        [
+            (
+                "eoh_viajeros_total",
+                "ine_estadisticas",
+                "turismo",
+                "Viajeros en hoteles",
+                "max",
+                "yoy",
+                "con_cobertura",
+            ),
+            (
+                "eoh_pernoctaciones_total",
+                "ine_estadisticas",
+                "turismo",
+                "Pernoctaciones en hoteles",
+                "max",
+                "yoy",
+                "con_cobertura",
+            ),
+            (
+                "egatur_gasto_medio_diario",
+                "ine_estadisticas",
+                "turismo",
+                "Gasto medio por turista",
+                "mean",
+                "yoy",
+                "con_cobertura",
+            ),
+            (
+                "egatur_duracion_media_viaje",
+                "ine_estadisticas",
+                "turismo",
+                "Duración media viaje turista intl.",
+                "mean",
+                "yoy",
+                "con_cobertura",
+            ),
+        ],
+    )
+
+    existing_fr = {
+        r[0] for r in conn.execute("SELECT feature_key FROM feature_registry").fetchall()
+    }
 
     climate_keys = [
         r[0]
         for r in conn.execute("SELECT señal_id FROM señales WHERE fuente = 'open_meteo'").fetchall()
+        if r[0] in existing_fr
     ]
     geo_keys = [
-        r[0] for r in conn.execute("SELECT señal_id FROM señales WHERE fuente = 'esri'").fetchall()
+        r[0]
+        for r in conn.execute("SELECT señal_id FROM señales WHERE fuente = 'esri'").fetchall()
+        if r[0] in existing_fr
+    ]
+    ev_diaria_keys = [
+        k
+        for k in [
+            "ev_vacaciones_escolares",
+            "ev_festivo_regional",
+            "ev_rank_deportivo",
+            "ev_rank_concierto",
+            "ev_rank_festival",
+            "ev_rank_municipal",
+            "ev_rank_total",
+        ]
+        if k in existing_fr
+    ]
+    crucero_keys = [k for k in ["n_pasajeros_crucero_dia"] if k in existing_fr]
+    ine_keys = [
+        k
+        for k in [
+            "eoh_viajeros_total",
+            "eoh_pernoctaciones_total",
+            "egatur_gasto_medio_diario",
+            "egatur_duracion_media_viaje",
+        ]
+        if k in existing_fr
     ]
 
-    sql = """
-        INSERT INTO activacion_señales (señal_id, ubicacion_id, status, periodicidad)
-        VALUES (?, ?, ?, ?)
+    _ORDER = {
+        "llueve": 1,
+        "temp_max": 2,
+        "temp_min": 3,
+        "n_eventos_culturales_dia": 10,
+        "escala_crucero": 20,
+        "n_pasajeros_crucero_dia": 21,
+        "n_pasajeros_crucero_oficial": 22,
+        "eoh_viajeros_total": 20,
+        "eoh_pernoctaciones_total": 21,
+        "egatur_gasto_medio_diario": 22,
+        "egatur_duracion_media_viaje": 23,
+    }
+
+    sql_as = """
+        INSERT INTO activacion_señales (señal_id, ubicacion_id, status, periodicidad, orden)
+        VALUES (?, ?, ?, ?, ?)
         ON CONFLICT (señal_id, ubicacion_id) DO UPDATE
             SET status       = EXCLUDED.status,
-                periodicidad = EXCLUDED.periodicidad
+                periodicidad = EXCLUDED.periodicidad,
+                orden        = EXCLUDED.orden
     """
-
-    # clima: activas en ML, ingesta diaria
-    ev_diaria_keys = [
-        "ev_vacaciones_escolares",
-        "ev_festivo_regional",
-        "ev_rank_deportivo",
-        "ev_rank_concierto",
-        "ev_rank_festival",
-        "ev_rank_municipal",
-        "ev_rank_total",
+    batches_as = [
+        [
+            (fk, loc, "active", "diaria", _ORDER.get(fk, 99))
+            for fk in climate_keys
+            for loc in all_locs
+        ],
+        [(fk, loc, "inactive", "mensual", 99) for fk in geo_keys for loc in all_locs],
+        [
+            (fk, loc, "contexto", "diaria", _ORDER.get(fk, 99))
+            for fk in ev_diaria_keys
+            for loc in all_locs
+        ],
+        [
+            (fk, loc, "contexto", "mensual", _ORDER.get(fk, 99))
+            for fk in crucero_keys
+            for loc in malaga_locs
+        ],
+        [
+            (fk, loc, "contexto", "mensual", _ORDER.get(fk, 99))
+            for fk in ine_keys
+            for loc in madrid_locs
+        ],
     ]
-    # cruceros: contexto, ingesta mensual (calendario portuario)
-    crucero_keys = ["n_pasajeros_crucero_dia"]
-
-    active_rows = [(fk, loc, "active", "diaria") for fk in climate_keys for loc in locs]
-    inactive_rows = [(fk, loc, "inactive", "mensual") for fk in geo_keys for loc in locs]
-    contexto_diaria_rows = [
-        (fk, loc, "contexto", "diaria") for fk in ev_diaria_keys for loc in locs
-    ]
-    contexto_mensual_rows = [
-        (fk, loc, "contexto", "mensual") for fk in crucero_keys for loc in locs
-    ]
-
-    for batch in (active_rows, inactive_rows, contexto_diaria_rows, contexto_mensual_rows):
+    for batch in batches_as:
         if batch:
-            conn.executemany(sql, batch)
+            conn.executemany(sql_as, batch)
+
+    # ── config_fuentes: auto-seed por ciudad ─────────────────────────────────
+    cf_rows = []
+    for loc in madrid_locs:
+        cf_rows.append((loc, "ine_estadisticas", "{}"))
+    for loc in malaga_locs:
+        cf_rows.append((loc, "cruceros", "{}"))
+        cf_rows.append((loc, "puertos_estado", '{"port_authority": "Malaga"}'))
+    if cf_rows:
+        conn.executemany(
+            "INSERT INTO config_fuentes (ubicacion_id, fuente, params, activo) "
+            "VALUES (?, ?, ?::jsonb, TRUE) "
+            "ON CONFLICT (ubicacion_id, fuente) DO NOTHING",
+            cf_rows,
+        )
 
     return {
-        "active": len(active_rows),
-        "inactive": len(inactive_rows),
-        "contexto": len(contexto_diaria_rows) + len(contexto_mensual_rows),
+        "active": len(batches_as[0]),
+        "inactive": len(batches_as[1]),
+        "contexto": sum(len(b) for b in batches_as[2:]),
+        "config_fuentes": len(cf_rows),
     }
 
 

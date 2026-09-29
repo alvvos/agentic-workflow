@@ -12,6 +12,7 @@ import importlib
 _REGISTRO: dict[str, str] = {
     "http_json": "http_json",
     "meteorologia": "meteorologia",
+    "agenda_madrid": "agenda_madrid",
 }
 
 

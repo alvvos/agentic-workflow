@@ -46,15 +46,66 @@ _ZONE_LABEL_SHORT = {0: "Caja / Checkout", 1: "Interior (tienda)", 2: "Exterior 
 _ZONE_ICON = {0: "fas fa-cash-register", 1: "fas fa-store", 2: "fas fa-street-view"}
 _ZONE_COLOR = {0: "#6c757d", 1: "#0052CC", 2: "#28A745"}
 
-# (señal_id, display_label, unit_suffix, agg_method)
-_SIGNAL_CFG: list[tuple[str, str, str, str]] = [
-    ("llueve", "Días con lluvia", " días", "count_positive"),
-    ("temp_max", "Temperatura máx. media", "°C", "mean"),
-    ("temp_min", "Temperatura mín. media", "°C", "mean"),
-    ("escala_crucero", "Escalas de crucero", "", "count_positive"),
-    ("n_pasajeros_crucero_dia", "Pasajeros crucero (est.)", "", "sum_int"),
-    ("n_pasajeros_crucero_oficial", "Pasajeros crucero (of.)", "", "sum_int"),
-]
+# señal_id → (display_label, unit_suffix, agg_method)
+_SIGNAL_REGISTRY: dict[str, tuple[str, str, str]] = {
+    "llueve": ("Días con lluvia", " días", "count_positive"),
+    "temp_max": ("Temperatura máx. media", "°C", "mean"),
+    "temp_min": ("Temperatura mín. media", "°C", "mean"),
+    "escala_crucero": ("Escalas de crucero", "", "count_positive"),
+    "n_pasajeros_crucero_dia": ("Pasajeros crucero (est.)", "", "sum_int"),
+    "n_pasajeros_crucero_oficial": ("Pasajeros crucero (of.)", "", "sum_int"),
+    "n_eventos_culturales_dia": ("Eventos culturales", "", "sum_int"),
+    "eoh_viajeros_total": ("Viajeros hoteleros (mes)", "", "monthly_value"),
+    "eoh_pernoctaciones_total": ("Pernoctaciones hoteleras (mes)", "", "monthly_value"),
+    "egatur_gasto_medio_diario": ("Gasto diario turista intl.", "€/día", "mean"),
+    "egatur_duracion_media_viaje": ("Duración media viaje turista intl.", " días", "mean"),
+}
+
+# agg function for _render_signal_yoy_chart; exported to health_check city-chart auto-renderer
+_METHOD_TO_AGG: dict[str, str] = {
+    "monthly_value": "max",
+    "mean": "mean",
+    "sum_int": "sum",
+    "count_positive": "sum",
+}
+
+
+def _get_context_signals(location_uuid: str, include_active: bool = False) -> list[str]:
+    """
+    Devuelve las señales de contexto de una ubicación ordenadas por `orden`.
+
+    include_active=True  → incluye señales con status 'active' (clima) además de 'contexto'.
+    include_active=False → solo señales con status='contexto' (señales ciudad-específicas).
+    """
+    try:
+        from src.db.store import get_conn
+
+        if include_active:
+            rows = (
+                get_conn()
+                .execute(
+                    "SELECT señal_id FROM activacion_señales "
+                    "WHERE ubicacion_id = ? AND status != 'inactive' "
+                    "ORDER BY orden, señal_id",
+                    [location_uuid],
+                )
+                .fetchall()
+            )
+        else:
+            rows = (
+                get_conn()
+                .execute(
+                    "SELECT señal_id FROM activacion_señales "
+                    "WHERE ubicacion_id = ? AND status = 'contexto' "
+                    "ORDER BY orden, señal_id",
+                    [location_uuid],
+                )
+                .fetchall()
+            )
+        return [r[0] for r in rows]
+    except Exception:
+        return []
+
 
 _DIA_NAMES = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"]
 _DIA_NAMES_ES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
@@ -151,6 +202,9 @@ def _agg_señal(serie: pd.Series, method: str) -> float | int | None:
     if method == "sum_int":
         v = int(serie.sum())
         return v if v > 0 else None
+    if method == "monthly_value":
+        v = serie[serie > 0]
+        return int(v.max()) if not v.empty else None
     return None
 
 
@@ -341,6 +395,552 @@ def _impacto_badge(
         return None
 
 
+# ── Commercial calendar ──────────────────────────────────────────────────────
+
+# (label, cell_bg, cell_fg, cell_border)
+_COMMERCIAL_EVENTS: dict[str, dict] = {
+    "rebajas_invierno": {
+        "label": "Rebajas de invierno",
+        "short": "Reb.I",
+        "icon": "fas fa-tag",
+        "color": "#1d4ed8",
+        "cell": ("#dbeafe", "#1d4ed8", "#bfdbfe"),
+        "desc": "Temporada de descuentos post-Navidad (enero–febrero). Alto potencial de tráfico en moda y complementos.",
+        "cfg_key": "rebajas_invierno",
+        "paises": ["ES"],
+    },
+    "rebajas_verano": {
+        "label": "Rebajas de verano",
+        "short": "Reb.V",
+        "icon": "fas fa-sun",
+        "color": "#b45309",
+        "cell": ("#fef3c7", "#b45309", "#fde68a"),
+        "desc": "Temporada de rebajas estival (julio–septiembre). Impacto moderado en fashion; menor en otros segmentos.",
+        "cfg_key": "rebajas_verano",
+        "paises": ["ES"],
+    },
+    "black_friday": {
+        "label": "Black Friday",
+        "short": "BF",
+        "icon": "fas fa-bolt",
+        "color": "#f9fafb",
+        "cell": ("#1f2937", "#f9fafb", "#111827"),
+        "desc": "Semana de descuentos masivos (último viernes de noviembre y días previos). Pico de tráfico concentrado.",
+        "cfg_key": "black_friday",
+        "paises": ["ES", "MX"],
+    },
+    "cyber_monday": {
+        "label": "Cyber Monday",
+        "short": "CM",
+        "icon": "fas fa-laptop",
+        "color": "#3730a3",
+        "cell": ("#eef2ff", "#3730a3", "#c7d2fe"),
+        "desc": "Lunes de ofertas digitales tras el Black Friday. Impacto más online que físico.",
+        "cfg_key": "cyber_monday",
+        "paises": ["ES", "MX"],
+    },
+    "navidad_compras": {
+        "label": "Campaña de Navidad",
+        "short": "Navid",
+        "icon": "fas fa-gift",
+        "color": "#9d174d",
+        "cell": ("#fce7f3", "#9d174d", "#fbcfe8"),
+        "desc": "Compras navideñas (1–24 dic). Máximo pico anual de tráfico en retail.",
+        "cfg_key": "navidad_compras",
+        "paises": ["ES", "MX"],
+    },
+    "reyes_compras": {
+        "label": "Campaña de Reyes",
+        "short": "Reyes",
+        "icon": "fas fa-star",
+        "color": "#6d28d9",
+        "cell": ("#f5f3ff", "#6d28d9", "#ddd6fe"),
+        "desc": "Compras para Reyes Magos (2–5 enero). Segundo gran pico de tráfico en diciembre–enero.",
+        "cfg_key": "reyes_compras",
+        "paises": ["ES"],
+    },
+    "san_valentin": {
+        "label": "San Valentín",
+        "short": "S.Val",
+        "icon": "fas fa-heart",
+        "color": "#be185d",
+        "cell": ("#fdf2f8", "#be185d", "#fbcfe8"),
+        "desc": "Semana del 14 de febrero. Impacto notable en complementos, cosmética y regalos.",
+        "cfg_key": "san_valentin",
+        "paises": ["ES", "MX"],
+    },
+    "dia_madre": {
+        "label": "Día de la Madre (ES)",
+        "short": "D.Mad",
+        "icon": "fas fa-heart",
+        "color": "#a21caf",
+        "cell": ("#fdf4ff", "#a21caf", "#f0abfc"),
+        "desc": "Primer domingo de mayo y semana previa. Impacto en moda, cosmética y hogar.",
+        "cfg_key": "dia_madre",
+        "paises": ["ES"],
+    },
+    "buen_fin_mx": {
+        "label": "Buen Fin",
+        "short": "BFin",
+        "icon": "fas fa-bolt",
+        "color": "#f9fafb",
+        "cell": ("#1f2937", "#f9fafb", "#111827"),
+        "desc": "Tercer viernes de noviembre (4 días). Equivalente mexicano al Black Friday.",
+        "cfg_key": "buen_fin_mx",
+        "paises": ["MX"],
+    },
+    "dia_muertos": {
+        "label": "Día de Muertos",
+        "short": "D.Mu",
+        "icon": "fas fa-skull",
+        "color": "#6d28d9",
+        "cell": ("#f5f3ff", "#6d28d9", "#ddd6fe"),
+        "desc": "31 oct – 2 nov. Impulso en decoración, disfraces y temporada Halloween.",
+        "cfg_key": "dia_muertos",
+        "paises": ["MX"],
+    },
+    "dia_madre_mx": {
+        "label": "Día de la Madre (MX)",
+        "short": "D.MaMX",
+        "icon": "fas fa-heart",
+        "color": "#be185d",
+        "cell": ("#fdf2f8", "#be185d", "#fbcfe8"),
+        "desc": "10 de mayo (fecha fija). Impacto intenso y concentrado en moda y regalos.",
+        "cfg_key": "dia_madre_mx",
+        "paises": ["MX"],
+    },
+    "regreso_clases_mx": {
+        "label": "Regreso a clases",
+        "short": "R.Cl",
+        "icon": "fas fa-school",
+        "color": "#15803d",
+        "cell": ("#f0fdf4", "#15803d", "#bbf7d0"),
+        "desc": "Agosto: compras de útiles y ropa escolar. Impacto fuerte en formatos de bazar y moda.",
+        "cfg_key": "regreso_clases_mx",
+        "paises": ["MX"],
+    },
+}
+
+_TIPO_CELL: dict[str, tuple[str, str, str]] = {
+    "promocion": ("#fff7ed", "#c2410c", "#fed7aa"),
+    "oferta": ("#f0f9ff", "#0369a1", "#bae6fd"),
+    "lanzamiento": ("#f0fdf4", "#15803d", "#bbf7d0"),
+    "otro": ("#f9fafb", "#4b5563", "#e5e7eb"),
+}
+
+
+def _event_date_ranges(year: int, event_key: str) -> list[tuple[date, date]]:
+    """Returns (start, end) windows when the event is active for the given calendar year."""
+
+    def _last_weekday_of_month(y: int, month: int, weekday: int) -> date:
+        import calendar as _cal
+
+        last = date(y, month, _cal.monthrange(y, month)[1])
+        while last.weekday() != weekday:
+            last -= timedelta(days=1)
+        return last
+
+    def _nth_weekday_of_month(y: int, month: int, weekday: int, n: int) -> date:
+        d = date(y, month, 1)
+        count = 0
+        while True:
+            if d.weekday() == weekday:
+                count += 1
+                if count == n:
+                    return d
+            d += timedelta(days=1)
+
+    if event_key == "rebajas_invierno":
+        return [(date(year, 1, 2), date(year, 2, 15))]
+    if event_key == "rebajas_verano":
+        return [(date(year, 7, 1), date(year, 9, 15))]
+    if event_key == "black_friday":
+        bf = _last_weekday_of_month(year, 11, 4)  # last Friday
+        return [(bf - timedelta(days=3), bf + timedelta(days=1))]  # Mon–Sat
+    if event_key == "cyber_monday":
+        bf = _last_weekday_of_month(year, 11, 4)
+        cm = bf + timedelta(days=3)  # Monday after BF
+        return [(cm, cm + timedelta(days=1))]
+    if event_key == "navidad_compras":
+        return [(date(year, 12, 1), date(year, 12, 24))]
+    if event_key == "reyes_compras":
+        return [(date(year, 1, 2), date(year, 1, 5))]
+    if event_key == "san_valentin":
+        return [(date(year, 2, 7), date(year, 2, 14))]
+    if event_key == "dia_madre":
+        first_sun = _nth_weekday_of_month(year, 5, 6, 1)
+        return [(first_sun - timedelta(days=6), first_sun)]
+    if event_key == "buen_fin_mx":
+        third_fri = _nth_weekday_of_month(year, 11, 4, 3)
+        return [(third_fri, third_fri + timedelta(days=3))]
+    if event_key == "dia_muertos":
+        return [(date(year, 10, 31), date(year, 11, 2))]
+    if event_key == "dia_madre_mx":
+        return [(date(year, 5, 9), date(year, 5, 11))]
+    if event_key == "regreso_clases_mx":
+        return [(date(year, 8, 15), date(year, 8, 31))]
+    return []
+
+
+def _build_event_flag_series(fmin: date, fmax: date, event_key: str) -> pd.Series:
+    """Daily 0/1 Series indexed by Timestamp across [fmin, fmax]."""
+    active: set[date] = set()
+    for year in range(fmin.year - 1, fmax.year + 2):
+        for start, end in _event_date_ranges(year, event_key):
+            d = max(start, fmin)
+            while d <= min(end, fmax):
+                active.add(d)
+                d += timedelta(days=1)
+    idx = pd.date_range(fmin, fmax, freq="D")
+    return pd.Series([1.0 if d.date() in active else 0.0 for d in idx], index=idx)
+
+
+def _fmt_date_es(d: date) -> str:
+    months = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+    return f"{d.day} {months[d.month - 1]}"
+
+
+_GROUP_META = [
+    ("alto", "▲ Impacto alto", "#b91c1c", "#fff1f2"),
+    ("moderado", "▲ Impacto moderado", "#92400e", "#fffbeb"),
+    ("leve", "Impacto leve", "#6b7280", "#f9fafb"),
+    ("tendencia", "Tendencia (muestra pequeña)", "#1d4ed8", "#eff6ff"),
+    ("sin_impacto", "Sin impacto detectado", "#9ca3af", "#f9fafb"),
+    ("sin_datos", "Sin datos históricos", "#d1d5db", "#f9fafb"),
+]
+
+
+def _compute_event_stats(g0, g1) -> tuple[str, str, str]:
+    """Returns (group_key, stat_txt, stat_color) for a Mann-Whitney comparison.
+
+    For events with < 10 event days, uses uplift % instead of a non-significant
+    test result — avoids "Sin impacto" when only 1-2 occurrences exist in history.
+    """
+    import numpy as np
+
+    n0, n1 = len(g0), len(g1)
+
+    uplift_str = ""
+    if n1 > 0 and n0 > 0:
+        base_mean = float(np.mean(g0))
+        if base_mean > 0:
+            uplift = (float(np.mean(g1)) - base_mean) / base_mean * 100
+            s = "+" if uplift >= 0 else ""
+            uplift_str = f"{s}{uplift:.0f}% vs base"
+
+    if n0 < 5 or n1 < 5:
+        note = f" · {uplift_str}" if uplift_str else ""
+        return "sin_datos", f"n={n1} días{note}", "#9ca3af"
+
+    effect, p = _mann_whitney_np(g0, g1)
+    abs_e = abs(effect)
+    sign = "↑" if effect >= 0 else "↓"
+    r_str = f"r={sign}{abs_e:.2f}"
+    p_str = (
+        "p<0,001" if p < 0.001 else "p<0,01" if p < 0.01 else "p<0,05" if p < 0.05 else f"p={p:.2f}"
+    )
+
+    if p > 0.1 or abs_e < 0.1:
+        if n1 < 10 and uplift_str:
+            return "tendencia", f"n={n1} días · {uplift_str}", "#1d4ed8"
+        return "sin_impacto", "Sin impacto detectado", "#9ca3af"
+    elif abs_e >= 0.45:
+        note = f" · {uplift_str}" if uplift_str else ""
+        return "alto", f"{r_str} · {p_str}{note}", "#b91c1c"
+    elif abs_e >= 0.25:
+        note = f" · {uplift_str}" if uplift_str else ""
+        return "moderado", f"{r_str} · {p_str}{note}", "#92400e"
+    else:
+        return "leve", f"{r_str} · {p_str}", "#6b7280"
+
+
+def _calendar_comercial_section(
+    df: pd.DataFrame,
+    fmin_p: date,
+    fecha_max: date,
+    location_uuid: str | None,
+    festivos: dict[date, str] | None = None,
+) -> html.Div | None:
+    """Calendar grid + legend for commercial events and own events."""
+    if df is None or df.empty:
+        return None
+    if "fecha_dt" not in df.columns or "unique_visitors" not in df.columns:
+        return None
+
+    try:
+        from src.db.queries import get_org_info
+
+        org = get_org_info(location_uuid) if location_uuid else {}
+        config_cal: dict = org.get("config_calendario", {})
+        pais: str = (org.get("pais_codigo") or "ES").upper()
+    except Exception:
+        config_cal = {}
+        pais = "ES"
+
+    v_daily = df.groupby("fecha_dt")["unique_visitors"].sum().sort_index()
+    if v_daily.empty or len(v_daily) < 20:
+        return None
+
+    fmin_df = min(v_daily.index)
+    fmax_df = max(v_daily.index)
+
+    # Build event_days dict: {date: (short_label, bg, fg, border)}
+    # Lower-priority sources first (supercalendario), own events overwrite last
+    event_days: dict[date, tuple[str, str, str, str]] = {}
+    # events_by_group: {grp_key: [{"cell": (bg,fg,border), "label": str, "stat": str,
+    #                                "stat_color": str, "icon": str|None}]}
+    events_by_group: dict[str, list[dict]] = {k: [] for k, *_ in _GROUP_META}
+
+    # ── Supercalendario ───────────────────────────────────────────────────────
+    for event_key, meta in _COMMERCIAL_EVENTS.items():
+        if pais not in meta["paises"]:
+            continue
+        if not config_cal.get(meta["cfg_key"], True):
+            continue
+
+        cell_bg, cell_fg, cell_border = meta["cell"]
+        short = meta["short"]
+
+        # Paint days in the analysis period
+        for year in range(fmin_p.year - 1, fecha_max.year + 2):
+            for start, end in _event_date_ranges(year, event_key):
+                d = max(start, fmin_p)
+                while d <= min(end, fecha_max):
+                    event_days[d] = (short, cell_bg, cell_fg, f"1px solid {cell_border}")
+                    d += timedelta(days=1)
+
+        # Compute impact using full history
+        flag_s = _build_event_flag_series(fmin_df, fmax_df, event_key)
+        flag_s.index = pd.to_datetime(flag_s.index)
+        v_ts = v_daily.copy()
+        v_ts.index = pd.to_datetime(v_ts.index)
+        merged = pd.DataFrame({"flag": flag_s, "v": v_ts}).dropna()
+        g0 = merged.loc[merged["flag"] == 0, "v"].to_numpy()
+        g1 = merged.loc[merged["flag"] == 1, "v"].to_numpy()
+        grp, stat_txt, stat_color = _compute_event_stats(g0, g1)
+
+        events_by_group[grp].append(
+            {
+                "cell": (cell_bg, cell_fg, cell_border),
+                "label": meta["label"],
+                "stat": stat_txt,
+                "stat_color": stat_color,
+                "icon": None,
+            }
+        )
+
+    # ── Eventos propios ───────────────────────────────────────────────────────
+    ep_rows: list = []
+    if location_uuid:
+        try:
+            from src.db.store import get_conn
+
+            ep_rows = (
+                get_conn()
+                .execute(
+                    "SELECT id, nombre, tipo, descripcion, fecha_inicio, fecha_fin "
+                    "FROM eventos_propios "
+                    "WHERE ubicacion_id = ? AND activo = TRUE "
+                    "ORDER BY fecha_inicio",
+                    [location_uuid],
+                )
+                .fetchall()
+            )
+        except Exception:
+            ep_rows = []
+
+    _TIPO_ICON = {
+        "promocion": "fas fa-percent",
+        "oferta": "fas fa-tags",
+        "lanzamiento": "fas fa-rocket",
+        "otro": "fas fa-calendar-plus",
+    }
+
+    for _ep_id, ep_nombre, ep_tipo, _ep_desc, ep_fi, ep_ff in ep_rows:
+        ep_fi = ep_fi if isinstance(ep_fi, date) else date.fromisoformat(str(ep_fi))
+        ep_ff = ep_ff if isinstance(ep_ff, date) else date.fromisoformat(str(ep_ff))
+        cell_bg, cell_fg, cell_border = _TIPO_CELL.get(ep_tipo or "otro", _TIPO_CELL["otro"])
+        short_ep = ep_nombre[:6]
+
+        # Paint days (own events overwrite supercalendario)
+        d = max(ep_fi, fmin_p)
+        while d <= min(ep_ff, fecha_max):
+            event_days[d] = (short_ep, cell_bg, cell_fg, f"1px solid {cell_border}")
+            d += timedelta(days=1)
+
+        # Compute impact using full history
+        idx_ts = pd.to_datetime(pd.date_range(fmin_df, fmax_df, freq="D"))
+        flag_ep = pd.Series(
+            [1.0 if ep_fi <= d2.date() <= ep_ff else 0.0 for d2 in idx_ts], index=idx_ts
+        )
+        v_ts2 = v_daily.copy()
+        v_ts2.index = pd.to_datetime(v_ts2.index)
+        merged2 = pd.DataFrame({"flag": flag_ep, "v": v_ts2}).dropna()
+        g0_ep = merged2.loc[merged2["flag"] == 0, "v"].to_numpy()
+        g1_ep = merged2.loc[merged2["flag"] == 1, "v"].to_numpy()
+        grp_ep, stat_txt_ep, stat_color_ep = _compute_event_stats(g0_ep, g1_ep)
+
+        ep_icon = _TIPO_ICON.get(ep_tipo or "otro", _TIPO_ICON["otro"])
+        tipo_label = (ep_tipo or "otro").capitalize()
+
+        events_by_group[grp_ep].append(
+            {
+                "cell": (cell_bg, cell_fg, cell_border),
+                "label": ep_nombre,
+                "stat": stat_txt_ep,
+                "stat_color": stat_color_ep,
+                "icon": ep_icon,
+                "sublabel": tipo_label,
+            }
+        )
+
+    if not event_days and not ep_rows:
+        return None
+
+    # ── Compact accordion grouped by impact ───────────────────────────────────
+    first_active: str | None = None
+    accordion_items = []
+    for grp_key, grp_label, grp_color, grp_bg in _GROUP_META:
+        entries = events_by_group.get(grp_key, [])
+        if not entries:
+            continue
+        if first_active is None:
+            first_active = grp_key
+
+        event_rows = []
+        for e in entries:
+            bg, fg, border = e["cell"]
+            swatch = html.Span(
+                "■",
+                style={
+                    "color": fg,
+                    "backgroundColor": bg,
+                    "border": f"1px solid {border}",
+                    "borderRadius": "3px",
+                    "padding": "0 3px",
+                    "marginRight": "6px",
+                    "fontSize": "0.78rem",
+                    "display": "inline-block",
+                },
+            )
+            icon_el = (
+                html.I(className=f"{e['icon']} me-1", style={"color": fg, "fontSize": "0.68rem"})
+                if e.get("icon")
+                else None
+            )
+            sublabel_el = (
+                html.Span(
+                    f"· {e['sublabel']}",
+                    style={"fontSize": "0.68rem", "color": fg, "marginLeft": "3px"},
+                )
+                if e.get("sublabel")
+                else None
+            )
+            event_rows.append(
+                html.Div(
+                    [
+                        c
+                        for c in [
+                            swatch,
+                            icon_el,
+                            html.Span(
+                                e["label"],
+                                style={
+                                    "fontSize": "0.75rem",
+                                    "color": "#374151",
+                                    "fontWeight": "500",
+                                },
+                            ),
+                            sublabel_el,
+                            html.Span(
+                                e["stat"],
+                                style={
+                                    "fontSize": "0.70rem",
+                                    "color": e["stat_color"],
+                                    "marginLeft": "6px",
+                                },
+                            ),
+                        ]
+                        if c is not None
+                    ],
+                    style={
+                        "display": "flex",
+                        "alignItems": "center",
+                        "padding": "3px 0",
+                        "borderBottom": "1px solid #f3f4f6",
+                    },
+                )
+            )
+
+        title_el = html.Span(
+            [
+                html.Span("●  ", style={"color": grp_color, "fontSize": "0.85rem"}),
+                html.Span(
+                    grp_label,
+                    style={"fontSize": "0.76rem", "fontWeight": "600", "color": grp_color},
+                ),
+                dbc.Badge(
+                    str(len(entries)),
+                    pill=True,
+                    color="light",
+                    style={
+                        "color": grp_color,
+                        "border": f"1px solid {grp_color}",
+                        "fontSize": "0.65rem",
+                        "marginLeft": "7px",
+                    },
+                ),
+            ],
+            style={"display": "inline-flex", "alignItems": "center"},
+        )
+
+        accordion_items.append(
+            dbc.AccordionItem(
+                html.Div(event_rows, style={"paddingTop": "2px"}),
+                title=title_el,
+                item_id=grp_key,
+                style={
+                    "borderLeft": f"3px solid {grp_color}",
+                    "marginBottom": "2px",
+                    "borderRadius": "0 4px 4px 0",
+                },
+            )
+        )
+
+    impact_accordion = (
+        dbc.Accordion(
+            accordion_items,
+            active_item=first_active,
+            flush=True,
+            className="mt-2",
+            style={"fontSize": "0.78rem"},
+        )
+        if accordion_items
+        else None
+    )
+
+    # ── Calendar legend header ────────────────────────────────────────────────
+    cal_legend = html.Div(
+        [
+            html.Span("■ Festivo  ", style={"color": "#856404", "fontSize": "0.72rem"}),
+            html.Span("■ Sábado  ", style={"color": "#6c757d", "fontSize": "0.72rem"}),
+            html.Span("■ Domingo  ", style={"color": "#adb5bd", "fontSize": "0.72rem"}),
+            html.Span("■ Laborable", style={"color": "#495057", "fontSize": "0.72rem"}),
+        ],
+        className="mb-1",
+    )
+
+    return html.Div(
+        [
+            _sub_header("fas fa-calendar-alt", "Calendario comercial", "#8E44AD"),
+            cal_legend,
+            _build_calendar(fmin_p, fecha_max, festivos or {}, event_days=event_days),
+            impact_accordion,
+        ],
+        className="mt-3",
+    )
+
+
 # ── Sentence composition ─────────────────────────────────────────────────────
 
 
@@ -517,8 +1117,39 @@ def _sentence_señal(
             _t(f" {per}"),
         ]
 
+    elif señal_id == "eoh_viajeros_total":
+        inicio = [
+            _t("Los hoteles de Madrid registraron "),
+            _bold(_fmt_val(val_act, "", "monthly_value")),
+            _t(f" viajeros {per}"),
+        ]
+
+    elif señal_id == "eoh_pernoctaciones_total":
+        inicio = [
+            _t("Se registraron "),
+            _bold(_fmt_val(val_act, "", "monthly_value")),
+            _t(f" pernoctaciones hoteleras {per}"),
+        ]
+
+    elif señal_id == "egatur_gasto_medio_diario":
+        inicio = [
+            _t("El gasto medio diario del turista internacional fue de "),
+            _bold(_fmt_val(val_act, suffix, method)),
+            _t(f" {per}"),
+        ]
+
+    elif señal_id == "egatur_duracion_media_viaje":
+        inicio = [
+            _t("La duración media del viaje del turista internacional fue de "),
+            _bold(_fmt_val(val_act, suffix, method)),
+            _t(f" {per}"),
+        ]
+
     else:
-        inicio = [_bold(_fmt_val(val_act, suffix, method)), _t(f" {per}")]
+        label = _SIGNAL_REGISTRY.get(
+            señal_id, (señal_id.replace("_", " ").title(), suffix, method)
+        )[0]
+        inicio = [_t(f"{label}: "), _bold(_fmt_val(val_act, suffix, method)), _t(f" {per}")]
 
     ref_sa = _fmt_val(val_sa, ref_suffix, method) if val_sa is not None else None
     ref_msa = _fmt_val(val_msa, ref_suffix, method) if val_msa is not None else None
@@ -581,7 +1212,23 @@ def _sub_header(icon_cls: str, text: str, color: str) -> html.Div:
 # ── Calendar ─────────────────────────────────────────────────────────────────
 
 
-def _build_calendar(fmin: date, fmax: date, festivos: dict[date, str]) -> html.Div:
+def _build_calendar(
+    fmin: date,
+    fmax: date,
+    festivos: dict[date, str],
+    eventos: dict[date, int] | None = None,
+    event_days: dict[date, tuple[str, str, str, str]] | None = None,
+    dias_ok: set[date] | None = None,
+    dias_imp: set[date] | None = None,
+) -> html.Div:
+    # event_days: {date: (short_label, bg, fg, border)}
+    # dias_ok: dates with real (non-imputed) data — when provided, past days not in
+    #          dias_ok|dias_imp are shown as missing
+    # dias_imp: dates whose data was mean-imputed (imputado=TRUE)
+    hoy = date.today()
+    completeness_mode = dias_ok is not None
+    _dias_imp = dias_imp or set()
+
     start = fmin - timedelta(days=fmin.weekday())
     end_d = fmax + timedelta(days=(6 - fmax.weekday()))
 
@@ -610,11 +1257,23 @@ def _build_calendar(fmin: date, fmax: date, festivos: dict[date, str]) -> html.D
             is_festivo = d in festivos
             is_sunday = d.weekday() == 6
             is_saturday = d.weekday() == 5
+            ev_style = (event_days or {}).get(d)  # (short_label, bg, fg, border)
+
+            is_past = d < hoy
+            is_missing = completeness_mode and in_period and is_past and d not in dias_ok and d not in _dias_imp  # type: ignore[operator]
+            is_imputado = in_period and d in _dias_imp
 
             if not in_period:
                 bg, color, fw, border = "transparent", "#dee2e6", "normal", "none"
+            elif is_missing:
+                bg, color, fw, border = "#fee2e2", "#b91c1c", "normal", "1px solid #fca5a5"
+            elif is_imputado:
+                bg, color, fw, border = "#fffbeb", "#92400e", "normal", "1px solid #fcd34d"
             elif is_festivo:
                 bg, color, fw, border = "#fff3cd", "#856404", "700", "1px solid #ffc107"
+            elif ev_style:
+                _, bg, color, border = ev_style
+                fw = "normal"
             elif is_sunday:
                 bg, color, fw, border = "#f8f9fa", "#adb5bd", "normal", "1px solid #e9ecef"
             elif is_saturday:
@@ -623,12 +1282,39 @@ def _build_calendar(fmin: date, fmax: date, festivos: dict[date, str]) -> html.D
                 bg, color, fw, border = "#ffffff", "#212529", "normal", "1px solid #e9ecef"
 
             festivo_name = festivos.get(d, "")
+            n_eventos = eventos.get(d, 0) if eventos else 0
             children: list = [
                 html.Span(
                     str(d.day), style={"display": "block", "fontWeight": fw, "fontSize": "0.9rem"}
                 )
             ]
-            if festivo_name and in_period:
+            if is_missing and in_period:
+                children.append(
+                    html.Span(
+                        "×",
+                        title="Sin datos",
+                        style={
+                            "fontSize": "0.55rem",
+                            "display": "block",
+                            "lineHeight": "1",
+                            "color": "#b91c1c",
+                        },
+                    )
+                )
+            elif is_imputado and in_period:
+                children.append(
+                    html.Span(
+                        "≈",
+                        title="Estimado por media",
+                        style={
+                            "fontSize": "0.6rem",
+                            "display": "block",
+                            "lineHeight": "1",
+                            "color": "#92400e",
+                        },
+                    )
+                )
+            elif festivo_name and in_period:
                 short = festivo_name.split("(")[0].strip()
                 if len(short) > 12:
                     short = short[:11] + "…"
@@ -641,6 +1327,34 @@ def _build_calendar(fmin: date, fmax: date, festivos: dict[date, str]) -> html.D
                             "lineHeight": "1.15",
                             "color": "#856404",
                             "wordBreak": "break-word",
+                        },
+                    )
+                )
+            elif ev_style and in_period:
+                ev_label = ev_style[0]
+                if ev_label:
+                    children.append(
+                        html.Span(
+                            ev_label,
+                            style={
+                                "fontSize": "0.52rem",
+                                "display": "block",
+                                "lineHeight": "1.15",
+                                "color": color,
+                                "wordBreak": "break-word",
+                            },
+                        )
+                    )
+            if n_eventos > 0 and in_period:
+                children.append(
+                    html.Span(
+                        "●",
+                        title=f"{n_eventos} eventos",
+                        style={
+                            "fontSize": "0.5rem",
+                            "display": "block",
+                            "color": "#0052CC",
+                            "lineHeight": "1",
                         },
                     )
                 )
@@ -1029,6 +1743,7 @@ def _tab_contexto_exterior(
     fmax_msaa: date,
     df: pd.DataFrame | None = None,
     zonas_data: list[dict] | None = None,
+    ciudad: str = "",
 ) -> html.Div:
     # ── Tráfico exterior ──────────────────────────────────────────────────────
     traffic = (
@@ -1053,9 +1768,11 @@ def _tab_contexto_exterior(
                 .fetchall()
             }
 
-            for señal_id, _label, suffix, method in _SIGNAL_CFG:
-                if señal_id not in available:
+            signal_ids = _get_context_signals(location_uuid, include_active=True)
+            for señal_id in signal_ids:
+                if señal_id not in available or señal_id not in _SIGNAL_REGISTRY:
                     continue
+                _label, suffix, method = _SIGNAL_REGISTRY[señal_id]
                 try:
                     s_act = get_señal_diaria(
                         location_uuid, señal_id, pd.Timestamp(fmin_p), pd.Timestamp(fecha_max)
@@ -1126,6 +1843,7 @@ def _tab_contexto_interior(
     fmax_msaa: date,
     zonas_data: list[dict] | None = None,
     df: pd.DataFrame | None = None,
+    location_uuid: str | None = None,
 ) -> html.Div:
     dias_v = 28 if ventana == "mes" else 7
 
@@ -1138,18 +1856,11 @@ def _tab_contexto_interior(
         _visitor_blocks(zonas_data, {0, 1}, df, fmin_msaa, fmax_msaa, ventana) if zonas_data else []
     )
 
-    placeholder = html.Div(
-        html.P(
-            "Próximamente: competencia, promociones activas, lanzamientos de producto.",
-            className="text-muted fst-italic mb-0",
-            style={"fontSize": "0.82rem"},
-        ),
-        className="p-3 rounded-3 mt-3",
-        style={"backgroundColor": "#f8f9fa", "border": "1px dashed #dee2e6"},
-    )
+    cal_section = _calendar_comercial_section(df, fmin_p, fecha_max, location_uuid, festivos)
+    extra = [cal_section] if cal_section is not None else []
 
     return html.Div(
-        traffic + [_sentence_dias_apertura(ap_act, dias_v, ap_sa, ap_msa, ventana), placeholder]
+        traffic + [_sentence_dias_apertura(ap_act, dias_v, ap_sa, ap_msa, ventana)] + extra
     )
 
 
@@ -1210,6 +1921,7 @@ def render_informe_tabs(
                         fmax_msaa,
                         df=df,
                         zonas_data=zonas_data,
+                        ciudad=ciudad,
                     ),
                     style={"paddingTop": "12px"},
                 ),
@@ -1230,6 +1942,7 @@ def render_informe_tabs(
                         fmax_msaa,
                         zonas_data=zonas_data,
                         df=df,
+                        location_uuid=location_uuid,
                     ),
                     style={"paddingTop": "12px"},
                 ),
@@ -1273,12 +1986,90 @@ def render_periodo_calendar(
     festivos = _get_festivos(pais_codigo, ciudad, years)
     festivos_en_periodo = {d: n for d, n in festivos.items() if fmin_p <= d <= fecha_max}
 
+    # Fetch event counts per day for cities that track cultural events
+    eventos: dict[date, int] | None = None
+    city_signals = (
+        set(_get_context_signals(location_uuid, include_active=True)) if location_uuid else set()
+    )
+    if location_uuid and "n_eventos_culturales_dia" in city_signals:
+        try:
+            from src.db.queries import get_señal_diaria
+
+            s = get_señal_diaria(
+                location_uuid,
+                "n_eventos_culturales_dia",
+                pd.Timestamp(fmin_p),
+                pd.Timestamp(fecha_max),
+            )
+            if s is not None and not s.empty:
+                eventos = {
+                    (pd.Timestamp(d).date() if not isinstance(d, date) else d): int(v)
+                    for d, v in s.items()
+                    if v > 0
+                }
+        except Exception:
+            pass
+
+    has_eventos = bool(eventos)
+
+    # Data completeness per day
+    dias_ok: set[date] = set()
+    dias_imp: set[date] = set()
+    if location_uuid:
+        try:
+            from src.db.store import get_conn as _gc
+
+            _rows = (
+                _gc()
+                .execute(
+                    """
+                SELECT fecha, BOOL_AND(imputado) AS todo_imputado
+                FROM visitas
+                WHERE ubicacion_id = ? AND fecha BETWEEN ? AND ?
+                GROUP BY fecha
+                """,
+                    [location_uuid, str(fmin_p), str(fecha_max)],
+                )
+                .fetchall()
+            )
+            for _r in _rows:
+                _d = _r[0] if isinstance(_r[0], date) else _r[0].date()
+                if _r[1]:
+                    dias_imp.add(_d)
+                else:
+                    dias_ok.add(_d)
+        except Exception:
+            dias_ok = set()
+            dias_imp = set()
+
+    completeness_active = bool(dias_ok or dias_imp)
     legend = html.Div(
         [
             html.Span("■ Festivo  ", style={"color": "#856404", "fontSize": "0.72rem"}),
             html.Span("■ Sábado  ", style={"color": "#6c757d", "fontSize": "0.72rem"}),
             html.Span("■ Domingo  ", style={"color": "#adb5bd", "fontSize": "0.72rem"}),
             html.Span("■ Laborable", style={"color": "#495057", "fontSize": "0.72rem"}),
+            *(
+                [html.Span("  ● Eventos", style={"color": "#0052CC", "fontSize": "0.72rem"})]
+                if has_eventos
+                else []
+            ),
+            *(
+                [
+                    html.Span(
+                        "  ≈ Estimado  ",
+                        title="Día sin datos reales — imputado por media rolling",
+                        style={"color": "#92400e", "fontSize": "0.72rem"},
+                    ),
+                    html.Span(
+                        "× Sin datos",
+                        title="Día sin datos reales ni estimación posible",
+                        style={"color": "#b91c1c", "fontSize": "0.72rem"},
+                    ),
+                ]
+                if completeness_active
+                else []
+            ),
         ]
     )
     festivos_list = (
@@ -1310,7 +2101,14 @@ def render_periodo_calendar(
                     style={"fontSize": "0.88rem", "color": "#1e293b"},
                 ),
                 legend,
-                _build_calendar(fmin_p, fecha_max, festivos),
+                _build_calendar(
+                    fmin_p,
+                    fecha_max,
+                    festivos,
+                    eventos=eventos,
+                    dias_ok=dias_ok if completeness_active else None,
+                    dias_imp=dias_imp if completeness_active else None,
+                ),
                 festivos_list,
             ]
         ),

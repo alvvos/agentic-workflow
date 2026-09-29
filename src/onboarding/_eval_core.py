@@ -14,10 +14,6 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 
-# supercalendario removed — calendar features dropped
-
-# ── Constantes ────────────────────────────────────────────────────────────────
-
 MIN_TRAIN_ROWS = 50
 
 BASE_FEATURES: list[str] = [
@@ -45,9 +41,6 @@ _XGB_PARAMS: dict = dict(
     random_state=42,
     early_stopping_rounds=20,
 )
-
-
-# ── Carga de datos ────────────────────────────────────────────────────────────
 
 
 def _load_visitas(conn, location_uuid: str) -> pd.DataFrame:
@@ -95,9 +88,6 @@ def _load_ext_feature(
     serie = df.set_index("fecha")["valor"]
     full_idx = pd.date_range(fecha_min, fecha_max, freq="D")
     return serie.reindex(full_idx).fillna(0.0).rename(feature_key)
-
-
-# ── Construcción de la matriz de features ─────────────────────────────────────
 
 
 def _build_matrix(df: pd.DataFrame) -> pd.DataFrame:

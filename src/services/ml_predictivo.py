@@ -459,11 +459,16 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
             # El cuantil con corrección (n+1) garantiza cobertura ≥ 1−α; el weighting
             # exponencial hace que el régimen reciente de volatilidad domine sobre el
             # histórico lejano, atenuando el problema de autocorrelación en la calibración.
+            # Los días de hueco (es_gap=1, total_visits=0 por caída de nodo) se excluyen:
+            # calibrar con ceros inflados produce q_conf hasta 5–10× mayor de lo real.
             if len(X_cal) > 0:
-                resid = np.abs(y_cal.values - np.maximum(0, modelo.predict(X_cal)))
-                n_cal = len(resid)
-                level = min(np.ceil((n_cal + 1) * (1 - _CONFORMAL_ALPHA)) / n_cal, 1.0)
-                q_conf = _weighted_conformal_quantile(resid, level)
+                real_mask = X_cal["es_gap"].values == 0
+                if real_mask.any():
+                    preds_cal = np.maximum(0, modelo.predict(X_cal))
+                    resid = np.abs(y_cal.values[real_mask] - preds_cal[real_mask])
+                    n_cal = len(resid)
+                    level = min(np.ceil((n_cal + 1) * (1 - _CONFORMAL_ALPHA)) / n_cal, 1.0)
+                    q_conf = _weighted_conformal_quantile(resid, level)
 
         # Importancia de features por ganancia (solo en entrenamiento nuevo)
         if not cache_hit:

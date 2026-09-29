@@ -1262,7 +1262,7 @@ def _fig_mapa(vals, lat, lon, uuid):
     )
 
     fig.update_layout(
-        map=dict(style="carto-positron", center=dict(lat=lat, lon=lon), zoom=14),
+        map=dict(style="open-street-map", center=dict(lat=lat, lon=lon), zoom=14),
         margin=dict(t=0, b=0, l=0, r=0),
         showlegend=True,
         legend=dict(
@@ -1714,8 +1714,8 @@ def _leaflet_mapa(vals: dict, lat: float, lon: float, uuid: str):
 
     layers = [
         dl.TileLayer(
-            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-            attribution="© OpenStreetMap contributors © CARTO",
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+            attribution="© OpenStreetMap contributors",
             maxZoom=19,
         )
     ]
