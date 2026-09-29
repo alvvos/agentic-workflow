@@ -55,7 +55,7 @@ def _demo_results(zone_nombre: str, falso_hoy: str, horizonte: int) -> dict:
         upper.append(val + band)
     # Backtest: últimos 14 días con reales ≈ predichos + ruido pequeño
     reales_bt = [int(v * (1 + rng.uniform(-0.04, 0.04))) for v in predichos[:14]]
-    acc = round(rng.uniform(84.5, 91.0), 1)
+    acc = round(rng.uniform(72.0, 82.5), 1)
     mae = round(base * rng.uniform(0.05, 0.09), 1)
     return {
         "status": "success",

@@ -49,7 +49,7 @@ def peticion_dia(loc_id, fecha_str, max_retries=3):
     return fecha_str, None, "max_retries_exceeded"
 
 
-def _upsert_visitas(rows: list) -> None:
+def _upsert_visitas(rows: list, imputado: bool = False) -> None:
     from src.db.store import get_conn
 
     if not rows:
@@ -90,7 +90,8 @@ def _upsert_visitas(rows: list) -> None:
             len(rows),
             len(filas_validas),
         )
-    rows = filas_validas
+
+    rows_with_flag = [r + (imputado,) for r in filas_validas]
 
     conn.executemany(
         """
@@ -102,8 +103,9 @@ def _upsert_visitas(rows: list) -> None:
              tiempo_estancia_min, histograma_estancia, visitas_horarias,
              boxplot_estancia,
              histograma_frecuencia_7d, histograma_frecuencia_28d,
-             histograma_frecuencia_mes, histograma_frecuencia_anyo)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+             histograma_frecuencia_mes, histograma_frecuencia_anyo,
+             imputado)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT (fecha, zona_id) DO UPDATE SET
             total_visitas       = excluded.total_visitas,
             visitantes_unicos   = excluded.visitantes_unicos,
@@ -119,9 +121,10 @@ def _upsert_visitas(rows: list) -> None:
             histograma_frecuencia_7d  = excluded.histograma_frecuencia_7d,
             histograma_frecuencia_28d = excluded.histograma_frecuencia_28d,
             histograma_frecuencia_mes = excluded.histograma_frecuencia_mes,
-            histograma_frecuencia_anyo = excluded.histograma_frecuencia_anyo
+            histograma_frecuencia_anyo = excluded.histograma_frecuencia_anyo,
+            imputado                   = excluded.imputado
         """,
-        rows,
+        rows_with_flag,
     )
 
 
@@ -284,6 +287,188 @@ def actualizar_datos(
     )
 
 
+def rellenar_huecos(
+    ubicaciones_seleccionadas=None,
+    ventana_dias: int = 60,
+    fallback_media: bool = True,
+    stop_event=None,
+):
+    """
+    Detecta fechas sin datos en los últimos `ventana_dias` días y las rellena:
+    1. Re-consulta la API de Aitanna para esas fechas.
+    2. Si la API devuelve datos, los inserta con imputado=False.
+    3. Si no hay datos y fallback_media=True, imputa media rolling ±7 días (imputado=True).
+    """
+    from src.db.store import get_conn
+
+    conn = get_conn()
+    rows_ubi = conn.execute("SELECT ubicacion_id, org_id, nombre FROM ubicaciones").fetchall()
+    org_map = {r[0]: r[1] for r in rows_ubi}
+    name_map = {r[0]: r[2] for r in rows_ubi}
+
+    location_ids = ubicaciones_seleccionadas if ubicaciones_seleccionadas else list(org_map.keys())
+    hoy = datetime.today().date()
+    fecha_inicio = hoy - timedelta(days=ventana_dias)
+
+    total_rellenados = 0
+    total_imputados = 0
+
+    for loc_id in location_ids:
+        if stop_event and stop_event.is_set():
+            log.warning("rellenar_huecos: cancelado por stop_event.")
+            break
+
+        nombre = name_map.get(loc_id, loc_id[:8])
+        org_uuid = org_map.get(loc_id, "")
+
+        fechas_con_datos = {
+            (r[0].strftime("%Y-%m-%d") if hasattr(r[0], "strftime") else str(r[0]))
+            for r in conn.execute(
+                "SELECT DISTINCT fecha FROM visitas WHERE ubicacion_id = ? AND fecha >= ? AND fecha <= ?",
+                [loc_id, str(fecha_inicio), str(hoy)],
+            ).fetchall()
+        }
+
+        fechas_esperadas = {
+            (fecha_inicio + timedelta(days=i)).strftime("%Y-%m-%d")
+            for i in range((hoy - fecha_inicio).days + 1)
+        }
+
+        huecos = sorted(fechas_esperadas - fechas_con_datos)
+        if not huecos:
+            log.debug("[%s] sin huecos en ventana de %d días", nombre, ventana_dias)
+            continue
+
+        log.info("[%s] %d hueco(s) detectado(s) — re-consultando API", nombre, len(huecos))
+
+        api_ok: list[tuple] = []
+        api_sin_datos: list[str] = []
+
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futuros = {executor.submit(peticion_dia, loc_id, f): f for f in huecos}
+            for futuro in as_completed(futuros):
+                fecha_str, datos, status = futuro.result()
+                if status == "OK" and datos:
+                    api_ok.append((fecha_str, datos))
+                else:
+                    api_sin_datos.append(fecha_str)
+
+        if api_ok:
+            filas = []
+            for fecha_str, datos in api_ok:
+                for zona in datos:
+                    z_uuid = zona.get("zoneUUID", "")
+                    hours_data = zona.get("visitorsHour", [])
+                    hourly_array = (
+                        [
+                            h.get("value", 0)
+                            for h in sorted(hours_data, key=lambda x: x.get("hour", 0))
+                        ]
+                        if isinstance(hours_data, list)
+                        else [0] * 24
+                    )
+                    filas.append(
+                        (
+                            fecha_str,
+                            z_uuid,
+                            loc_id,
+                            org_uuid,
+                            int(zona.get("totalVisits", 0) or 0),
+                            int(zona.get("uniqueVisitor", 0) or 0),
+                            int(zona.get("newVisitor", 0) or 0),
+                            float(zona.get("uniqueVisitorLast7days", 0) or 0),
+                            float(zona.get("uniqueVisitorLast28days", 0) or 0),
+                            float(zona.get("uniqueVisitorCurrentMonth", 0) or 0),
+                            float(zona.get("uniqueVisitorCurrentYear", 0) or 0),
+                            float(zona.get("frequencyLast7days", 0.0) or 0),
+                            float(zona.get("frequencyLast28days", 0.0) or 0),
+                            float(zona.get("frequencyCurrentMonth", 0.0) or 0),
+                            float(zona.get("frequencyCurrentYear", 0.0) or 0),
+                            float(zona.get("dwellTime", 0.0) or 0),
+                            json.dumps(zona.get("dwellTimeHistogram") or []),
+                            json.dumps(hourly_array),
+                            json.dumps(zona.get("boxplot") or {}),
+                            json.dumps(zona.get("frequencyLast7daysHistogram") or {}),
+                            json.dumps(zona.get("frequencyLast28daysHistogram") or {}),
+                            json.dumps(zona.get("frequencyCurrentMonthHistogram") or {}),
+                            json.dumps(zona.get("frequencyCurrentYearHistogram") or {}),
+                        )
+                    )
+            if filas:
+                _upsert_visitas(filas, imputado=False)
+                total_rellenados += len(filas)
+                log.info("[%s] +%d fila(s) recuperadas desde API", nombre, len(filas))
+
+        if api_sin_datos and fallback_media:
+            filas_imp = []
+            for fecha_str in api_sin_datos:
+                fecha_dt = datetime.strptime(fecha_str, "%Y-%m-%d").date()
+                ventana_ini = str(fecha_dt - timedelta(days=7))
+                ventana_fin = str(fecha_dt + timedelta(days=7))
+                medias = conn.execute(
+                    """
+                    SELECT zona_id,
+                           AVG(total_visitas),   AVG(visitantes_unicos), AVG(visitantes_nuevos),
+                           AVG(unicos_7d),        AVG(unicos_28d),
+                           AVG(unicos_mes),       AVG(unicos_anyo),
+                           AVG(frecuencia_7d),    AVG(frecuencia_28d),
+                           AVG(frecuencia_mes),   AVG(frecuencia_anyo),
+                           AVG(tiempo_estancia_min)
+                    FROM visitas
+                    WHERE ubicacion_id = ?
+                      AND fecha BETWEEN ? AND ?
+                      AND fecha != ?
+                      AND imputado = FALSE
+                    GROUP BY zona_id
+                    """,
+                    [loc_id, ventana_ini, ventana_fin, fecha_str],
+                ).fetchall()
+                for row in medias:
+                    filas_imp.append(
+                        (
+                            fecha_str,
+                            row[0],
+                            loc_id,
+                            org_uuid,
+                            int(row[1] or 0),
+                            int(row[2] or 0),
+                            int(row[3] or 0),
+                            float(row[4] or 0),
+                            float(row[5] or 0),
+                            float(row[6] or 0),
+                            float(row[7] or 0),
+                            float(row[8] or 0),
+                            float(row[9] or 0),
+                            float(row[10] or 0),
+                            float(row[11] or 0),
+                            float(row[12] or 0),
+                            json.dumps([]),
+                            json.dumps([0] * 24),
+                            json.dumps({}),
+                            json.dumps({}),
+                            json.dumps({}),
+                            json.dumps({}),
+                            json.dumps({}),
+                        )
+                    )
+            if filas_imp:
+                _upsert_visitas(filas_imp, imputado=True)
+                total_imputados += len(filas_imp)
+                log.info("[%s] +%d fila(s) imputadas por media rolling", nombre, len(filas_imp))
+            else:
+                log.info(
+                    "[%s] %d fecha(s) sin datos API y sin vecinos para imputation — omitidas",
+                    nombre,
+                    len(api_sin_datos),
+                )
+
+    log.info(
+        "rellenar_huecos — %d fila(s) recuperadas (API), %d imputadas (media rolling)",
+        total_rellenados,
+        total_imputados,
+    )
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -292,9 +477,22 @@ if __name__ == "__main__":
     parser.add_argument("--loc", nargs="+", metavar="UUID", help="location_uuid(s) a sincronizar")
     parser.add_argument("--desde", metavar="YYYY-MM-DD")
     parser.add_argument("--hasta", metavar="YYYY-MM-DD")
-    args = parser.parse_args()
-    actualizar_datos(
-        ubicaciones_seleccionadas=args.loc,
-        desde=args.desde,
-        hasta=args.hasta,
+    parser.add_argument("--rellenar-huecos", action="store_true", help="detectar y rellenar huecos")
+    parser.add_argument("--ventana", type=int, default=60, metavar="DIAS")
+    parser.add_argument(
+        "--sin-fallback", action="store_true", help="no imputa por media si la API falla"
     )
+    args = parser.parse_args()
+
+    if args.rellenar_huecos:
+        rellenar_huecos(
+            ubicaciones_seleccionadas=args.loc,
+            ventana_dias=args.ventana,
+            fallback_media=not args.sin_fallback,
+        )
+    else:
+        actualizar_datos(
+            ubicaciones_seleccionadas=args.loc,
+            desde=args.desde,
+            hasta=args.hasta,
+        )

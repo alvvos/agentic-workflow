@@ -572,6 +572,7 @@ _VISITAS_COLS = [
     ("histograma_frecuencia_28d", "TEXT"),
     ("histograma_frecuencia_mes", "TEXT"),
     ("histograma_frecuencia_anyo", "TEXT"),
+    ("imputado", "BOOLEAN NOT NULL DEFAULT FALSE"),
 ]
 
 
