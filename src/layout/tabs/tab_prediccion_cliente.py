@@ -96,19 +96,58 @@ def _demo_results(zone_nombre: str, falso_hoy: str, horizonte: int) -> dict:
         lower.append(max(0, val - band))
         upper.append(val + band)
 
-    bt_noise = {"exterior": 0.06, "interior": 0.04, "caja": 0.025}[ztype]
-    reales_bt = [int(v * (1 + rng.uniform(-bt_noise, bt_noise))) for v in predichos[:14]]
-    acc_lo, acc_hi = _ACC_BY_TYPE[ztype]
-    mae_lo, mae_hi = _MAE_PCT_BY_TYPE[ztype]
-    acc = round(rng.uniform(acc_lo, acc_hi), 1)
-    mae = round(base * rng.uniform(mae_lo, mae_hi), 1)
+    # Backtest: dos curvas independientes para que la divergencia visual
+    # sea coherente con el accuracy mostrado.
+    # real_noise_bt ≈ 2× WMAPE esperado; pred_noise_bt mucho menor (modelo suave).
+    real_noise_bt = {"exterior": 0.55, "interior": 0.38, "caja": 0.26}[ztype]
+    pred_noise_bt = noise_mag * 0.45
+
+    rng_real = random.Random("r_" + zone_nombre + falso_hoy)
+    rng_macro_real = random.Random("rm_" + falso_hoy)
+    rng_pred_bt = random.Random("p_" + zone_nombre + falso_hoy)
+    rng_macro_pred = random.Random("pm_" + falso_hoy)
+
+    reales_bt, predichos_bt = [], []
+    for h in range(min(horizonte, 14)):
+        d_bt = hoy - timedelta(days=horizonte - h)
+        dow = d_bt.weekday()
+        r_val = max(
+            0,
+            int(
+                base
+                * dow_factors[dow]
+                * (1 + rng_macro_real.uniform(-0.06, 0.06))
+                * (1 + rng_real.uniform(-real_noise_bt, real_noise_bt))
+            ),
+        )
+        p_val = max(
+            0,
+            int(
+                base
+                * dow_factors[dow]
+                * (1 + rng_macro_pred.uniform(-0.03, 0.03))
+                * (1 + rng_pred_bt.uniform(-pred_noise_bt, pred_noise_bt))
+            ),
+        )
+        reales_bt.append(r_val)
+        predichos_bt.append(p_val)
+
+    # Compute acc/mae from the actual error so número y gráfica son coherentes
+    n_bt = len(reales_bt)
+    mae = round(sum(abs(r - p) for r, p in zip(reales_bt, predichos_bt)) / n_bt)
+    wmape_pct = round(
+        sum(abs(r - p) / max(r, 1) for r, p in zip(reales_bt, predichos_bt)) / n_bt * 100, 1
+    )
+    acc = round(100 - wmape_pct, 1)
+
+    band_bt = int(sum(predichos_bt) / n_bt * band_b)
     return {
         "status": "success",
         "cache_hit": False,
         "metricas": {
             "accuracy": acc,
             "mae": mae,
-            "wmape_pct": round(100 - acc, 1),
+            "wmape_pct": wmape_pct,
             "arboles_optimos": rng.randint(90, 140),
             "q_conf": round(rng.uniform(0.80, 0.90), 3),
         },
@@ -120,11 +159,13 @@ def _demo_results(zone_nombre: str, falso_hoy: str, horizonte: int) -> dict:
             "upper": upper,
         },
         "grafica_bt": {
-            "fechas": fechas[:14],
+            "fechas": [
+                (hoy - timedelta(days=horizonte - h)).strftime("%Y-%m-%d") for h in range(n_bt)
+            ],
             "reales": reales_bt,
-            "predichos": predichos[:14],
-            "lower": lower[:14],
-            "upper": upper[:14],
+            "predichos": predichos_bt,
+            "lower": [max(0, p - band_bt) for p in predichos_bt],
+            "upper": [p + band_bt for p in predichos_bt],
         },
     }
 
