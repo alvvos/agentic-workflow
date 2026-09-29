@@ -1218,8 +1218,17 @@ def _build_calendar(
     festivos: dict[date, str],
     eventos: dict[date, int] | None = None,
     event_days: dict[date, tuple[str, str, str, str]] | None = None,
+    dias_ok: set[date] | None = None,
+    dias_imp: set[date] | None = None,
 ) -> html.Div:
     # event_days: {date: (short_label, bg, fg, border)}
+    # dias_ok: dates with real (non-imputed) data — when provided, past days not in
+    #          dias_ok|dias_imp are shown as missing
+    # dias_imp: dates whose data was mean-imputed (imputado=TRUE)
+    hoy = date.today()
+    completeness_mode = dias_ok is not None
+    _dias_imp = dias_imp or set()
+
     start = fmin - timedelta(days=fmin.weekday())
     end_d = fmax + timedelta(days=(6 - fmax.weekday()))
 
@@ -1250,8 +1259,16 @@ def _build_calendar(
             is_saturday = d.weekday() == 5
             ev_style = (event_days or {}).get(d)  # (short_label, bg, fg, border)
 
+            is_past = d < hoy
+            is_missing = completeness_mode and in_period and is_past and d not in dias_ok and d not in _dias_imp  # type: ignore[operator]
+            is_imputado = in_period and d in _dias_imp
+
             if not in_period:
                 bg, color, fw, border = "transparent", "#dee2e6", "normal", "none"
+            elif is_missing:
+                bg, color, fw, border = "#fee2e2", "#b91c1c", "normal", "1px solid #fca5a5"
+            elif is_imputado:
+                bg, color, fw, border = "#fffbeb", "#92400e", "normal", "1px solid #fcd34d"
             elif is_festivo:
                 bg, color, fw, border = "#fff3cd", "#856404", "700", "1px solid #ffc107"
             elif ev_style:
@@ -1271,7 +1288,33 @@ def _build_calendar(
                     str(d.day), style={"display": "block", "fontWeight": fw, "fontSize": "0.9rem"}
                 )
             ]
-            if festivo_name and in_period:
+            if is_missing and in_period:
+                children.append(
+                    html.Span(
+                        "×",
+                        title="Sin datos",
+                        style={
+                            "fontSize": "0.55rem",
+                            "display": "block",
+                            "lineHeight": "1",
+                            "color": "#b91c1c",
+                        },
+                    )
+                )
+            elif is_imputado and in_period:
+                children.append(
+                    html.Span(
+                        "≈",
+                        title="Estimado por media",
+                        style={
+                            "fontSize": "0.6rem",
+                            "display": "block",
+                            "lineHeight": "1",
+                            "color": "#92400e",
+                        },
+                    )
+                )
+            elif festivo_name and in_period:
                 short = festivo_name.split("(")[0].strip()
                 if len(short) > 12:
                     short = short[:11] + "…"
@@ -1968,6 +2011,38 @@ def render_periodo_calendar(
             pass
 
     has_eventos = bool(eventos)
+
+    # Data completeness per day
+    dias_ok: set[date] = set()
+    dias_imp: set[date] = set()
+    if location_uuid:
+        try:
+            from src.db.store import get_conn as _gc
+
+            _rows = (
+                _gc()
+                .execute(
+                    """
+                SELECT fecha, BOOL_AND(imputado) AS todo_imputado
+                FROM visitas
+                WHERE ubicacion_id = ? AND fecha BETWEEN ? AND ?
+                GROUP BY fecha
+                """,
+                    [location_uuid, str(fmin_p), str(fecha_max)],
+                )
+                .fetchall()
+            )
+            for _r in _rows:
+                _d = _r[0] if isinstance(_r[0], date) else _r[0].date()
+                if _r[1]:
+                    dias_imp.add(_d)
+                else:
+                    dias_ok.add(_d)
+        except Exception:
+            dias_ok = set()
+            dias_imp = set()
+
+    completeness_active = bool(dias_ok or dias_imp)
     legend = html.Div(
         [
             html.Span("■ Festivo  ", style={"color": "#856404", "fontSize": "0.72rem"}),
@@ -1977,6 +2052,22 @@ def render_periodo_calendar(
             *(
                 [html.Span("  ● Eventos", style={"color": "#0052CC", "fontSize": "0.72rem"})]
                 if has_eventos
+                else []
+            ),
+            *(
+                [
+                    html.Span(
+                        "  ≈ Estimado  ",
+                        title="Día sin datos reales — imputado por media rolling",
+                        style={"color": "#92400e", "fontSize": "0.72rem"},
+                    ),
+                    html.Span(
+                        "× Sin datos",
+                        title="Día sin datos reales ni estimación posible",
+                        style={"color": "#b91c1c", "fontSize": "0.72rem"},
+                    ),
+                ]
+                if completeness_active
                 else []
             ),
         ]
@@ -2010,7 +2101,14 @@ def render_periodo_calendar(
                     style={"fontSize": "0.88rem", "color": "#1e293b"},
                 ),
                 legend,
-                _build_calendar(fmin_p, fecha_max, festivos, eventos=eventos),
+                _build_calendar(
+                    fmin_p,
+                    fecha_max,
+                    festivos,
+                    eventos=eventos,
+                    dias_ok=dias_ok if completeness_active else None,
+                    dias_imp=dias_imp if completeness_active else None,
+                ),
                 festivos_list,
             ]
         ),
