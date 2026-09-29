@@ -17,16 +17,22 @@ from src.services.ml_predictivo import ejecutar_auditoria_predictiva
 # semanal real, tendencia leve y bandas conformes ajustadas.
 _DEMO_LOC_UUID = "faf7d203-342e-44c6-96e3-1ed64d8252c3"
 
-# Base diaria por tipo de zona (visitors únicos)
+# Base diaria por tipo de zona (visitors únicos), calibrado con Miniso Madrid Gran Vía.
+# Claves más específicas primero: la búsqueda es `k in zone_nombre.lower()`.
 _DEMO_BASE = {
-    "exterior": 310,
-    "calle": 310,
-    "tienda": 165,
-    "sala": 165,
-    "caja": 68,
-    "checkout": 68,
+    "exterior": 28_500,
+    "calle": 28_500,
+    "planta 0": 4_900,
+    "planta 1": 2_900,
+    "tienda pl1": 3_100,
+    "tienda pl0": 2_300,
+    "tienda": 2_900,
+    "caja pl": 520,
+    "caja": 1_750,
+    "checkout": 1_750,
+    "sala": 3_200,
 }
-_DEMO_BASE_DEFAULT = 140
+_DEMO_BASE_DEFAULT = 3_000
 
 # Factores de ajuste día de semana (L=0 … D=6)
 _DEMO_DOW = [0.82, 0.85, 0.90, 0.93, 1.10, 1.42, 1.28]
