@@ -96,10 +96,10 @@ def _demo_results(zone_nombre: str, falso_hoy: str, horizonte: int) -> dict:
         lower.append(max(0, val - band))
         upper.append(val + band)
 
-    # Backtest: dos curvas independientes para que la divergencia visual
-    # sea coherente con el accuracy mostrado.
-    # real_noise_bt ≈ 2× WMAPE esperado; pred_noise_bt mucho menor (modelo suave).
-    real_noise_bt = {"exterior": 0.55, "interior": 0.38, "caja": 0.26}[ztype]
+    # Backtest: dos curvas independientes — real con más ruido que la predicción
+    # para que se vea divergencia creíble sin que el accuracy sea demasiado bajo.
+    # real ~±15-18 %, pred ~±4 % → WMAPE resultante ~10-14 % → acc ~86-90 %.
+    real_noise_bt = {"exterior": 0.18, "interior": 0.13, "caja": 0.09}[ztype]
     pred_noise_bt = noise_mag * 0.45
 
     rng_real = random.Random("r_" + zone_nombre + falso_hoy)
@@ -132,13 +132,14 @@ def _demo_results(zone_nombre: str, falso_hoy: str, horizonte: int) -> dict:
         reales_bt.append(r_val)
         predichos_bt.append(p_val)
 
-    # Compute acc/mae from the actual error so número y gráfica son coherentes
+    # Compute acc/mae from the actual error so número y gráfica son coherentes.
+    # Clamp acc ≥ 80 para que siempre muestre "Fiabilidad media" o superior.
     n_bt = len(reales_bt)
     mae = round(sum(abs(r - p) for r, p in zip(reales_bt, predichos_bt)) / n_bt)
     wmape_pct = round(
         sum(abs(r - p) / max(r, 1) for r, p in zip(reales_bt, predichos_bt)) / n_bt * 100, 1
     )
-    acc = round(100 - wmape_pct, 1)
+    acc = max(80.0, round(100 - wmape_pct, 1))
 
     band_bt = int(sum(predichos_bt) / n_bt * band_b)
     return {
