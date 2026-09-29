@@ -687,34 +687,9 @@ def _calendar_comercial_section(
     # Build event_days dict: {date: (short_label, bg, fg, border)}
     # Lower-priority sources first (supercalendario), own events overwrite last
     event_days: dict[date, tuple[str, str, str, str]] = {}
-    # events_by_group accumulates legend rows keyed by impact group
-    events_by_group: dict[str, list] = {k: [] for k, *_ in _GROUP_META}
-
-    def _swatch(cell_bg, cell_fg, cell_border):
-        return html.Span(
-            "■",
-            style={
-                "color": cell_fg,
-                "backgroundColor": cell_bg,
-                "border": f"1px solid {cell_border}",
-                "borderRadius": "3px",
-                "padding": "0 3px",
-                "marginRight": "5px",
-                "fontSize": "0.8rem",
-                "display": "inline-block",
-            },
-        )
-
-    def _legend_row(*children):
-        return html.Div(
-            list(children),
-            style={
-                "marginBottom": "3px",
-                "display": "flex",
-                "alignItems": "baseline",
-                "gap": "3px",
-            },
-        )
+    # events_by_group: {grp_key: [{"cell": (bg,fg,border), "label": str, "stat": str,
+    #                                "stat_color": str, "icon": str|None}]}
+    events_by_group: dict[str, list[dict]] = {k: [] for k, *_ in _GROUP_META}
 
     # ── Supercalendario ───────────────────────────────────────────────────────
     for event_key, meta in _COMMERCIAL_EVENTS.items():
@@ -745,14 +720,13 @@ def _calendar_comercial_section(
         grp, stat_txt, stat_color = _compute_event_stats(g0, g1)
 
         events_by_group[grp].append(
-            _legend_row(
-                _swatch(cell_bg, cell_fg, cell_border),
-                html.Span(
-                    meta["label"],
-                    style={"fontSize": "0.76rem", "color": "#374151", "fontWeight": "500"},
-                ),
-                html.Span(stat_txt, style={"fontSize": "0.71rem", "color": stat_color}),
-            )
+            {
+                "cell": (cell_bg, cell_fg, cell_border),
+                "label": meta["label"],
+                "stat": stat_txt,
+                "stat_color": stat_color,
+                "icon": None,
+            }
         )
 
     # ── Eventos propios ───────────────────────────────────────────────────────
@@ -810,50 +784,140 @@ def _calendar_comercial_section(
         tipo_label = (ep_tipo or "otro").capitalize()
 
         events_by_group[grp_ep].append(
-            _legend_row(
-                _swatch(cell_bg, cell_fg, cell_border),
-                html.I(className=f"{ep_icon} me-1", style={"color": cell_fg, "fontSize": "0.7rem"}),
-                html.Span(
-                    ep_nombre,
-                    style={"fontSize": "0.76rem", "color": "#374151", "fontWeight": "500"},
-                ),
-                html.Span(f"· {tipo_label}", style={"fontSize": "0.70rem", "color": cell_fg}),
-                html.Span(stat_txt_ep, style={"fontSize": "0.71rem", "color": stat_color_ep}),
-            )
+            {
+                "cell": (cell_bg, cell_fg, cell_border),
+                "label": ep_nombre,
+                "stat": stat_txt_ep,
+                "stat_color": stat_color_ep,
+                "icon": ep_icon,
+                "sublabel": tipo_label,
+            }
         )
 
     if not event_days and not ep_rows:
         return None
 
-    # ── Build grouped legend ──────────────────────────────────────────────────
-    grouped_legend: list = []
+    # ── Compact accordion grouped by impact ───────────────────────────────────
+    first_active: str | None = None
+    accordion_items = []
     for grp_key, grp_label, grp_color, grp_bg in _GROUP_META:
-        rows = events_by_group.get(grp_key, [])
-        if not rows:
+        entries = events_by_group.get(grp_key, [])
+        if not entries:
             continue
-        grouped_legend.append(
-            html.Div(
+        if first_active is None:
+            first_active = grp_key
+
+        event_rows = []
+        for e in entries:
+            bg, fg, border = e["cell"]
+            swatch = html.Span(
+                "■",
+                style={
+                    "color": fg,
+                    "backgroundColor": bg,
+                    "border": f"1px solid {border}",
+                    "borderRadius": "3px",
+                    "padding": "0 3px",
+                    "marginRight": "6px",
+                    "fontSize": "0.78rem",
+                    "display": "inline-block",
+                },
+            )
+            icon_el = (
+                html.I(className=f"{e['icon']} me-1", style={"color": fg, "fontSize": "0.68rem"})
+                if e.get("icon")
+                else None
+            )
+            sublabel_el = (
+                html.Span(
+                    f"· {e['sublabel']}",
+                    style={"fontSize": "0.68rem", "color": fg, "marginLeft": "3px"},
+                )
+                if e.get("sublabel")
+                else None
+            )
+            event_rows.append(
+                html.Div(
+                    [
+                        c
+                        for c in [
+                            swatch,
+                            icon_el,
+                            html.Span(
+                                e["label"],
+                                style={
+                                    "fontSize": "0.75rem",
+                                    "color": "#374151",
+                                    "fontWeight": "500",
+                                },
+                            ),
+                            sublabel_el,
+                            html.Span(
+                                e["stat"],
+                                style={
+                                    "fontSize": "0.70rem",
+                                    "color": e["stat_color"],
+                                    "marginLeft": "6px",
+                                },
+                            ),
+                        ]
+                        if c is not None
+                    ],
+                    style={
+                        "display": "flex",
+                        "alignItems": "center",
+                        "padding": "3px 0",
+                        "borderBottom": "1px solid #f3f4f6",
+                    },
+                )
+            )
+
+        title_el = html.Span(
+            [
+                html.Span("●  ", style={"color": grp_color, "fontSize": "0.85rem"}),
                 html.Span(
                     grp_label,
+                    style={"fontSize": "0.76rem", "fontWeight": "600", "color": grp_color},
+                ),
+                dbc.Badge(
+                    str(len(entries)),
+                    pill=True,
+                    color="light",
                     style={
-                        "fontWeight": "700",
-                        "fontSize": "0.69rem",
                         "color": grp_color,
-                        "textTransform": "uppercase",
-                        "letterSpacing": "0.4px",
+                        "border": f"1px solid {grp_color}",
+                        "fontSize": "0.65rem",
+                        "marginLeft": "7px",
                     },
                 ),
+            ],
+            style={"display": "inline-flex", "alignItems": "center"},
+        )
+
+        accordion_items.append(
+            dbc.AccordionItem(
+                html.Div(event_rows, style={"paddingTop": "2px"}),
+                title=title_el,
+                item_id=grp_key,
                 style={
-                    "backgroundColor": grp_bg,
                     "borderLeft": f"3px solid {grp_color}",
+                    "marginBottom": "2px",
                     "borderRadius": "0 4px 4px 0",
-                    "padding": "2px 7px",
-                    "marginTop": "8px",
-                    "marginBottom": "4px",
                 },
             )
         )
-        grouped_legend.extend(rows)
+
+    impact_accordion = (
+        dbc.Accordion(
+            accordion_items,
+            active_item=first_active,
+            flush=True,
+            className="mt-2",
+            style={"fontSize": "0.78rem"},
+        )
+        if accordion_items
+        else None
+    )
 
     # ── Calendar legend header ────────────────────────────────────────────────
     cal_legend = html.Div(
@@ -871,7 +935,7 @@ def _calendar_comercial_section(
             _sub_header("fas fa-calendar-alt", "Calendario comercial", "#8E44AD"),
             cal_legend,
             _build_calendar(fmin_p, fecha_max, festivos or {}, event_days=event_days),
-            html.Div(grouped_legend, className="mt-2") if grouped_legend else None,
+            impact_accordion,
         ],
         className="mt-3",
     )
