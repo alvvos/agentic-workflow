@@ -131,7 +131,12 @@ def build_tab_informes():
                                         className="w-100 fw-bold rounded-3",
                                     ),
                                     dcc.Download(id="inf-download-pdf"),
-                                    html.Div(id="inf-status", className="mt-3"),
+                                    dcc.Loading(
+                                        html.Div(id="inf-status", className="mt-3"),
+                                        type="circle",
+                                        color="#6c757d",
+                                        style={"minHeight": "40px"},
+                                    ),
                                 ],
                                 style={"padding": "20px 18px"},
                             ),
@@ -146,9 +151,13 @@ def build_tab_informes():
                             dbc.CardBody(
                                 [
                                     _section_header("Contenido del informe"),
-                                    html.Div(
-                                        id="inf-preview-content",
-                                        children=_preview_placeholder(),
+                                    dcc.Loading(
+                                        html.Div(
+                                            id="inf-preview-content",
+                                            children=_preview_placeholder(),
+                                        ),
+                                        type="circle",
+                                        color="#495057",
                                     ),
                                 ],
                                 style={"padding": "20px 18px"},
@@ -281,7 +290,7 @@ def build_tab_informes():
     return dcc.Tab(
         label="Informes",
         value="tab-informes",
-        className="fw-bold",
+        className="fw-bold tab-admin",
         children=[content],
     )
 

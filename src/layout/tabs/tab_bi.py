@@ -8,7 +8,7 @@ def build_tab_bi():
     return dcc.Tab(
         label="Analítica",
         value="tab-auditoria",
-        className="fw-bold",
+        className="fw-bold tab-public",
         children=[
             html.Br(),
             dcc.Store(id="zonas-activas-combined"),

@@ -7,7 +7,7 @@ def build_tab_pm():
     return dcc.Tab(
         label="Estado",
         value="tab-ejecutivo",
-        className="fw-bold h-min-screen",
+        className="fw-bold h-min-screen tab-public",
         children=[
             html.Br(),
             loading_section(
