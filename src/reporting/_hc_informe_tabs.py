@@ -1897,9 +1897,20 @@ def render_informe_tabs(
             x
             for x in [
                 (
-                    html.Img(
-                        src=logo_src,
-                        style={"height": "26px", "objectFit": "contain", "marginRight": "10px"},
+                    html.Div(
+                        html.Img(
+                            src=logo_src,
+                            style={"height": "26px", "objectFit": "contain"},
+                        ),
+                        style={
+                            "background": "#ffffff",
+                            "borderRadius": "6px",
+                            "padding": "3px 8px",
+                            "marginRight": "10px",
+                            "border": "1px solid #e9ecef",
+                            "display": "inline-flex",
+                            "alignItems": "center",
+                        },
                     )
                     if logo_src
                     else None

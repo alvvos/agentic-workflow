@@ -380,25 +380,3 @@ body {
     background: #fffbeb !important;
     color: #d97706 !important;
 }
-
-/* ── Tab icons: acceso público vs. admin ─────────────────────────────────── */
-.custom-tabs .tab.tab-public::after,
-.custom-tabs .tab.tab-admin::after {
-    font-family: "Font Awesome 6 Free";
-    font-weight: 900;
-    font-size: 0.5rem;
-    margin-left: 5px;
-    vertical-align: middle;
-    position: relative;
-    top: -1px;
-}
-.custom-tabs .tab.tab-public::after {
-    content: "\f0c0";  /* fa-users */
-    opacity: 0.28;
-    color: #6c757d;
-}
-.custom-tabs .tab.tab-admin::after {
-    content: "\f3ed";  /* fa-shield-halved */
-    opacity: 0.5;
-    color: #6c757d;
-}

@@ -290,7 +290,7 @@ def build_tab_informes():
     return dcc.Tab(
         label="Informes",
         value="tab-informes",
-        className="fw-bold tab-admin",
+        className="fw-bold",
         children=[content],
     )
 

@@ -849,7 +849,7 @@ def build_tab_prediccion_cliente(role: str = "viewer"):
     return dcc.Tab(
         label="Predicción",
         value="tab-prediccion-publica",
-        className="fw-bold tab-public",
+        className="fw-bold",
         children=[tab_content],
     )
 
