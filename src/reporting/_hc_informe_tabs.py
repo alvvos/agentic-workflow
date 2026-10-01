@@ -2252,53 +2252,57 @@ def render_eventos_carousel(
                 if e.get("icon")
                 else None
             )
-            sublabel_el = (
-                html.Span(
-                    f"· {e['sublabel']}",
-                    style={"fontSize": "0.68rem", "color": "#9ca3af", "marginLeft": "3px"},
+            meta_parts = [c for c in [icon_el] if c is not None]
+            if e.get("sublabel"):
+                meta_parts.append(
+                    html.Span(
+                        e["sublabel"],
+                        style={"fontSize": "0.68rem", "color": "#9ca3af"},
+                    )
                 )
-                if e.get("sublabel")
-                else None
+            meta_parts.append(
+                html.Span(
+                    e["stat"],
+                    style={
+                        "fontSize": "0.70rem",
+                        "color": e["stat_color"],
+                        "fontWeight": "600",
+                    },
+                )
             )
             event_rows.append(
                 html.Div(
                     [
-                        c
-                        for c in [
-                            swatch,
-                            icon_el,
-                            html.Span(
-                                e["label"],
-                                style={
-                                    "fontSize": "0.77rem",
-                                    "color": "#374151",
-                                    "fontWeight": "500",
-                                    "flex": "1",
-                                    "minWidth": "0",
-                                    "overflow": "hidden",
-                                    "textOverflow": "ellipsis",
-                                    "whiteSpace": "nowrap",
-                                },
-                            ),
-                            sublabel_el,
-                            html.Span(
-                                e["stat"],
-                                style={
-                                    "fontSize": "0.72rem",
-                                    "color": e["stat_color"],
-                                    "marginLeft": "8px",
-                                    "whiteSpace": "nowrap",
-                                    "flexShrink": "0",
-                                    "fontWeight": "600",
-                                },
-                            ),
-                        ]
-                        if c is not None
+                        html.Div(
+                            [
+                                swatch,
+                                html.Span(
+                                    e["label"],
+                                    style={
+                                        "fontSize": "0.78rem",
+                                        "color": "#1e293b",
+                                        "fontWeight": "600",
+                                    },
+                                ),
+                            ],
+                            style={
+                                "display": "flex",
+                                "alignItems": "center",
+                                "marginBottom": "2px",
+                            },
+                        ),
+                        html.Div(
+                            meta_parts,
+                            style={
+                                "display": "flex",
+                                "gap": "6px",
+                                "alignItems": "center",
+                                "paddingLeft": "22px",
+                            },
+                        ),
                     ],
                     style={
-                        "display": "flex",
-                        "alignItems": "center",
-                        "padding": "5px 0",
+                        "padding": "6px 0",
                         "borderBottom": "1px solid #f3f4f6",
                     },
                 )
@@ -2346,8 +2350,7 @@ def render_eventos_carousel(
                     ),
                 ],
                 style={
-                    "minWidth": "240px",
-                    "maxWidth": "300px",
+                    "minWidth": "280px",
                     "flexShrink": "0",
                     "borderRadius": "8px",
                     "border": f"1px solid {grp_color}33",

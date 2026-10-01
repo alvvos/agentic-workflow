@@ -2338,26 +2338,18 @@ def generar_mensajes_salud(
     _calendario_card = render_periodo_calendar(location_uuid, fmin_p, fecha_max)
     _eventos_carousel = render_eventos_carousel(location_uuid, df, fmin_p, fecha_max)
 
-    if mapa_contexto:
-        cuerpo_superior = dbc.Row(
-            [
-                dbc.Col(_correlacion_card, xs=12, lg=6, className="mb-3 mb-lg-0"),
-                dbc.Col(
-                    [mapa_contexto, html.Div(className="mt-3"), _calendario_card],
-                    xs=12,
-                    lg=6,
-                ),
-            ],
-            className="mb-3 align-items-start",
-        )
-    else:
-        cuerpo_superior = dbc.Row(
-            [
-                dbc.Col(_correlacion_card, xs=12, lg=6, className="mb-3 mb-lg-0"),
-                dbc.Col(_calendario_card, xs=12, lg=6),
-            ],
-            className="mb-3 align-items-start",
-        )
+    cuerpo_superior = dbc.Row(
+        [
+            dbc.Col(
+                [_correlacion_card, html.Div(className="mt-3"), _calendario_card],
+                xs=12,
+                lg=6,
+                className="mb-3 mb-lg-0",
+            ),
+            dbc.Col(mapa_contexto or html.Div(), xs=12, lg=6),
+        ],
+        className="mb-3 align-items-start",
+    )
 
     return html.Div(
         [
