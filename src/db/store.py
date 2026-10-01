@@ -28,12 +28,14 @@ load_dotenv()
 _POOL: Optional[ConnectionPool] = None
 _POOL_LOCK = threading.Lock()
 _local = threading.local()
+_POOL_ATEXIT_REGISTERED = False
 
 _DDL_APPLIED = False
 _DDL_LOCK = threading.Lock()
 
 
 def _build_pool() -> ConnectionPool:
+    global _POOL_ATEXIT_REGISTERED
     pool_timeout = float(os.getenv("DB_POOL_TIMEOUT", "30"))
     conninfo = (
         f"host={os.getenv('DB_HOST', 'localhost')} "
@@ -64,15 +66,33 @@ def _build_pool() -> ConnectionPool:
             "DB no disponible al arrancar (%s) — la app levanta en modo degradado y reintentará.",
             exc,
         )
-    atexit.register(pool.close)
+    # Registrar atexit una sola vez sobre _close_pool (cierra _POOL por referencia global,
+    # no por closure sobre este objeto pool). Evita acumular handlers en cada recreación.
+    if not _POOL_ATEXIT_REGISTERED:
+        atexit.register(_close_pool)
+        _POOL_ATEXIT_REGISTERED = True
     return pool
 
 
-def _pool() -> ConnectionPool:
+def _close_pool() -> None:
+    """Atexit handler: cierra el pool global si sigue abierto."""
     global _POOL
-    if _POOL is None:
+    p = _POOL
+    if p is not None and not p.closed:
+        try:
+            p.close()
+        except Exception:
+            pass
+
+
+def _pool() -> ConnectionPool:
+    """Devuelve el pool global, recreándolo si fue cerrado (shutdown parcial, reload)."""
+    global _POOL
+    p = _POOL
+    if p is None or p.closed:
         with _POOL_LOCK:
-            if _POOL is None:
+            p = _POOL
+            if p is None or p.closed:
                 _POOL = _build_pool()
     return _POOL
 
