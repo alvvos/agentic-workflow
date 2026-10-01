@@ -1,17 +1,15 @@
 """
-PostgreSQL store — ConnectionPool via psycopg (v3).
+PostgreSQL store — conexión directa per-thread via psycopg (v3).
+
+Sin pool: cada thread mantiene su propia conexión persistente con autocommit.
+Si la conexión cae (tunel cortado, reinicio del servidor), get_conn() la reconecta
+automáticamente en la siguiente llamada. Sin PoolClosed, sin atexit, sin locks globales.
 
 Connection config via .env:
-    DB_HOST / DB_PORT / DB_USER / DB_PASSWORD / DB_NAME / DB_POOL_MAX
-
-Usage
------
-  from src.db.store import get_conn
-  conn = get_conn()                  # thread-local, autocommit=True
-  conn = get_conn(read_only=False)   # read_only ignored (pool is shared)
+    DB_HOST / DB_PORT / DB_USER / DB_PASSWORD / DB_NAME
 """
 
-import atexit
+import logging
 import os
 import threading
 from typing import Optional
@@ -19,82 +17,30 @@ from typing import Optional
 import pandas as pd
 import psycopg
 from dotenv import load_dotenv
-from psycopg_pool import ConnectionPool
 
 load_dotenv()
 
-# ── Connection pool ────────────────────────────────────────────────────────────
+log = logging.getLogger(__name__)
 
-_POOL: Optional[ConnectionPool] = None
-_POOL_LOCK = threading.Lock()
+# ── Conexión per-thread ───────────────────────────────────────────────────────
+
 _local = threading.local()
-_POOL_ATEXIT_REGISTERED = False
 
 _DDL_APPLIED = False
 _DDL_LOCK = threading.Lock()
 
 
-def _build_pool() -> ConnectionPool:
-    global _POOL_ATEXIT_REGISTERED
-    pool_timeout = float(os.getenv("DB_POOL_TIMEOUT", "30"))
-    conninfo = (
+def _conninfo() -> str:
+    timeout = min(int(float(os.getenv("DB_POOL_TIMEOUT", "30"))), 10)
+    return (
         f"host={os.getenv('DB_HOST', 'localhost')} "
         f"port={os.getenv('DB_PORT', '5432')} "
         f"user={os.getenv('DB_USER', 'agentic')} "
         f"password={os.getenv('DB_PASSWORD', '')} "
         f"dbname={os.getenv('DB_NAME', 'agentic')} "
-        f"connect_timeout={min(int(pool_timeout), 10)} "
-        # TCP keepalive: detecta conexiones muertas en ~30s en lugar de esperar el timeout del pool
+        f"connect_timeout={timeout} "
         "keepalives=1 keepalives_idle=30 keepalives_interval=10 keepalives_count=3"
     )
-    pool = ConnectionPool(
-        conninfo,
-        min_size=1,
-        max_size=int(os.getenv("DB_POOL_MAX", "10")),
-        timeout=pool_timeout,
-        reconnect_timeout=pool_timeout,
-        # Comprueba la salud de las conexiones idle cada 60s y las reemplaza si están muertas
-        max_idle=60.0,
-        open=False,
-    )
-    try:
-        pool.open(wait=True, timeout=pool_timeout)
-    except Exception as exc:
-        import logging
-
-        logging.getLogger("store").warning(
-            "DB no disponible al arrancar (%s) — la app levanta en modo degradado y reintentará.",
-            exc,
-        )
-    # Registrar atexit una sola vez sobre _close_pool (cierra _POOL por referencia global,
-    # no por closure sobre este objeto pool). Evita acumular handlers en cada recreación.
-    if not _POOL_ATEXIT_REGISTERED:
-        atexit.register(_close_pool)
-        _POOL_ATEXIT_REGISTERED = True
-    return pool
-
-
-def _close_pool() -> None:
-    """Atexit handler: cierra el pool global si sigue abierto."""
-    global _POOL
-    p = _POOL
-    if p is not None and not p.closed:
-        try:
-            p.close()
-        except Exception:
-            pass
-
-
-def _pool() -> ConnectionPool:
-    """Devuelve el pool global, recreándolo si fue cerrado (shutdown parcial, reload)."""
-    global _POOL
-    p = _POOL
-    if p is None or p.closed:
-        with _POOL_LOCK:
-            p = _POOL
-            if p is None or p.closed:
-                _POOL = _build_pool()
-    return _POOL
 
 
 # ── Query result wrapper ──────────────────────────────────────────────────────
@@ -140,12 +86,11 @@ class PgConn:
     executemany() → batched INSERT/UPDATE via psycopg cursor.executemany
     """
 
-    __slots__ = ("_conn", "_cur", "_closed")
+    __slots__ = ("_conn", "_cur")
 
     def __init__(self, raw: psycopg.Connection):
         self._conn = raw
         self._cur: psycopg.Cursor = raw.cursor()
-        self._closed = False
 
     def execute(self, sql: str, params=None) -> _PgResult:
         self._cur.execute(_norm_sql(sql), params)
@@ -157,22 +102,17 @@ class PgConn:
         self._cur.executemany(_norm_sql(sql), params_list)
 
     def close(self) -> None:
-        if self._closed:
-            return
-        self._closed = True
         try:
             self._cur.close()
         except Exception:
             pass
         try:
-            _pool().putconn(self._conn)
+            self._conn.close()
         except Exception:
             pass
 
     def __del__(self) -> None:
-        # Safety net para hilos de streaming que nunca llaman close() explícitamente.
-        # _closed evita el double-putconn si close() ya fue llamado antes.
-        self.close()
+        pass
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
@@ -188,14 +128,13 @@ def get_conn(read_only: bool = False) -> PgConn:  # noqa: ARG001  (read_only kep
 
     conn_obj: Optional[PgConn] = getattr(_local, "conn", None)
     if conn_obj is None or conn_obj._conn.closed:
-        # Limpiar _local.conn ANTES de cerrar para que un __del__ concurrente
-        # no vea una conexión ya cerrada en el thread-local y la doble-devuelva.
-        _local.conn = None
         if conn_obj is not None:
-            # close() cierra el cursor y devuelve la conn al pool con guardia _closed.
             conn_obj.close()
-        raw = _pool().getconn()
-        raw.autocommit = True
+        try:
+            raw = psycopg.connect(_conninfo(), autocommit=True)
+        except Exception as exc:
+            log.warning("DB no disponible: %s", exc)
+            raise
         conn_obj = PgConn(raw)
         _local.conn = conn_obj
 
