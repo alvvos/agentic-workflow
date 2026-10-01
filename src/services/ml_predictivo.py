@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import holidays
 import numpy as np
 import pandas as pd
-import xgboost as xgb
+from catboost import CatBoostRegressor
 from sklearn.metrics import mean_absolute_error
 
 from src.db.queries import get_active_ext_features, get_org_info
@@ -25,9 +25,12 @@ _CONFORMAL_DECAY = 0.04
 # Con beta=0.15: día 1 → ×1.00, día 7 → ×1.29, día 14 → ×1.40.
 _HORIZON_BETA = 0.15
 # TTL del modelo en caché: 14 días = 2 ciclos semanales completos.
-# El XGBoost aprende patrones día-de-semana; con <2 semanas puede no haber visto
-# suficientes repeticiones de cada día. Más de 14 días arriesga drift estacional.
 _MODEL_CACHE_TTL_DAYS = 14
+
+# Features tratadas como categóricas por CatBoost (ordered target encoding nativo).
+# dia_semana (0–6) y mes (1–12) son ordinales enteros que CatBoost convierte
+# internamente — no requieren OHE ni label encoding previo.
+_CAT_FEATURES = ["dia_semana", "mes"]
 
 
 def _weighted_conformal_quantile(resid: np.ndarray, level: float) -> float:
@@ -74,7 +77,7 @@ def _registry_paths(location_uuid, zone_uuid, falso_hoy: str = ""):
         f"{location_uuid}_{zone_uuid}_{falso_hoy}" if falso_hoy else f"{location_uuid}_{zone_uuid}"
     )
     return (
-        os.path.join(_REGISTRY_DIR, f"{key}.ubj"),
+        os.path.join(_REGISTRY_DIR, f"{key}.cbm"),
         os.path.join(_REGISTRY_DIR, f"{key}.meta.json"),
     )
 
@@ -104,7 +107,7 @@ def _load_cached_model(location_uuid, zone_uuid, features, falso_hoy: str = ""):
         if meta.get("q_conf") is None:
             log.info("CACHE MISS [%s] — q_conf ausente", _key)
             return None, {}, None
-        modelo = xgb.XGBRegressor()
+        modelo = CatBoostRegressor()
         modelo.load_model(model_path)
         log.info("CACHE HIT  [%s] — modelo cargado (%d días)", _key, age_days)
         return modelo, meta.get("metrics", {}), meta.get("q_conf")
@@ -134,9 +137,10 @@ def _purge_stale_registry() -> None:
                 meta = json.load(f)
             if datetime.fromisoformat(meta["trained_at"]) < cutoff:
                 os.remove(meta_path)
-                ubj = os.path.join(_REGISTRY_DIR, fname.replace(".meta.json", ".ubj"))
-                if os.path.exists(ubj):
-                    os.remove(ubj)
+                for ext in (".cbm", ".ubj"):  # .ubj = legacy XGBoost
+                    stale = os.path.join(_REGISTRY_DIR, fname.replace(".meta.json", ext))
+                    if os.path.exists(stale):
+                        os.remove(stale)
         except Exception:
             pass
 
@@ -446,14 +450,18 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
             X_cal, y_cal = X_train.iloc[split_train:split_cal], y_train.iloc[split_train:split_cal]
             X_v, y_v = X_train.iloc[split_cal:], y_train.iloc[split_cal:]
 
-            modelo = xgb.XGBRegressor(
-                n_estimators=250,
+            active_cat = [f for f in _CAT_FEATURES if f in features]
+            modelo = CatBoostRegressor(
+                iterations=500,
                 learning_rate=0.05,
-                max_depth=4,
-                random_state=42,
-                early_stopping_rounds=20,
+                depth=6,
+                random_seed=42,
+                early_stopping_rounds=30,
+                cat_features=active_cat,
+                loss_function="RMSE",
+                verbose=0,
             )
-            modelo.fit(X_t, y_t, eval_set=[(X_t, y_t), (X_v, y_v)], verbose=False)
+            modelo.fit(X_t, y_t, eval_set=(X_v, y_v))
 
             # Conformal q con pesos exponenciales por recencia (EnbPI adaptado).
             # El cuantil con corrección (n+1) garantiza cobertura ≥ 1−α; el weighting
@@ -473,10 +481,11 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
         # Importancia de features por ganancia (solo en entrenamiento nuevo)
         if not cache_hit:
             try:
-                scores = modelo.get_booster().get_score(importance_type="gain")
-                top = sorted(scores.items(), key=lambda x: -x[1])[:12]
+                scores = modelo.get_feature_importance()
+                names = modelo.feature_names_
+                top = sorted(zip(names, scores), key=lambda x: -x[1])[:12]
                 log.info(
-                    "FEATURE IMPORTANCE (gain) [%s/%s falso_hoy=%s]: %s",
+                    "FEATURE IMPORTANCE [%s/%s falso_hoy=%s]: %s",
                     location_uuid[:8],
                     zone_uuid[:8],
                     falso_hoy,
@@ -534,7 +543,7 @@ def ejecutar_auditoria_predictiva(df_master, location_uuid, zone_uuid, falso_hoy
         best_iter = (
             cached_metrics.get("best_iteration")
             if cache_hit
-            else getattr(modelo, "best_iteration", None)
+            else getattr(modelo, "best_iteration_", None)
         )
 
         if not cache_hit and es_produccion:

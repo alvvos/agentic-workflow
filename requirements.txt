@@ -7,7 +7,7 @@ gunicorn
 numpy
 python-dotenv
 requests
-xgboost
+catboost>=1.2
 python-pptx
 scikit-learn
 google-generativeai

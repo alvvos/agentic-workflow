@@ -12,7 +12,7 @@ from datetime import date
 import holidays
 import numpy as np
 import pandas as pd
-import xgboost as xgb
+from catboost import CatBoostRegressor
 
 MIN_TRAIN_ROWS = 50
 
@@ -34,12 +34,15 @@ BASE_FEATURES: list[str] = [
 
 _FESTIVOS = holidays.ES(years=list(range(2023, 2029)))
 
-_XGB_PARAMS: dict = dict(
-    n_estimators=250,
+_CB_PARAMS: dict = dict(
+    iterations=500,
     learning_rate=0.05,
-    max_depth=4,
-    random_state=42,
-    early_stopping_rounds=20,
+    depth=6,
+    random_seed=42,
+    early_stopping_rounds=30,
+    cat_features=["dia_semana", "mes"],
+    loss_function="RMSE",
+    verbose=0,
 )
 
 
@@ -126,15 +129,11 @@ def _fit_eval(
     y_eval: pd.Series,
 ) -> float:
     split = int(len(X_train) * 0.85)
-    modelo = xgb.XGBRegressor(**_XGB_PARAMS)
+    modelo = CatBoostRegressor(**_CB_PARAMS)
     modelo.fit(
         X_train.iloc[:split],
         y_train.iloc[:split],
-        eval_set=[
-            (X_train.iloc[:split], y_train.iloc[:split]),
-            (X_train.iloc[split:], y_train.iloc[split:]),
-        ],
-        verbose=False,
+        eval_set=(X_train.iloc[split:], y_train.iloc[split:]),
     )
     preds = np.maximum(0, modelo.predict(X_eval))
     return _wmape(y_eval.values, preds)
