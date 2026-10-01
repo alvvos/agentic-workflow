@@ -1856,12 +1856,7 @@ def _tab_contexto_interior(
         _visitor_blocks(zonas_data, {0, 1}, df, fmin_msaa, fmax_msaa, ventana) if zonas_data else []
     )
 
-    cal_section = _calendar_comercial_section(df, fmin_p, fecha_max, location_uuid, festivos)
-    extra = [cal_section] if cal_section is not None else []
-
-    return html.Div(
-        traffic + [_sentence_dias_apertura(ap_act, dias_v, ap_sa, ap_msa, ventana)] + extra
-    )
+    return html.Div(traffic + [_sentence_dias_apertura(ap_act, dias_v, ap_sa, ap_msa, ventana)])
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -2110,6 +2105,284 @@ def render_periodo_calendar(
                     dias_imp=dias_imp if completeness_active else None,
                 ),
                 festivos_list,
+            ]
+        ),
+        className="border-0 shadow-sm rounded-4 mb-3",
+    )
+
+
+def render_eventos_carousel(
+    location_uuid: str | None,
+    df: pd.DataFrame | None,
+    fmin_p,
+    fecha_max,
+) -> dbc.Card | None:
+    """Full-width horizontal card carousel of commercial + own events with impact stats."""
+    fmin_p = _to_date(fmin_p)
+    fecha_max = _to_date(fecha_max)
+
+    if df is None or df.empty:
+        return None
+    if "fecha_dt" not in df.columns or "unique_visitors" not in df.columns:
+        return None
+
+    try:
+        from src.db.queries import get_org_info
+
+        org = get_org_info(location_uuid) if location_uuid else {}
+        config_cal: dict = org.get("config_calendario", {})
+        pais: str = (org.get("pais_codigo") or "ES").upper()
+    except Exception:
+        config_cal = {}
+        pais = "ES"
+
+    v_daily = df.groupby("fecha_dt")["unique_visitors"].sum().sort_index()
+    if v_daily.empty or len(v_daily) < 20:
+        return None
+
+    fmin_df = min(v_daily.index)
+    fmax_df = max(v_daily.index)
+
+    events_by_group: dict[str, list[dict]] = {k: [] for k, *_ in _GROUP_META}
+
+    for event_key, meta in _COMMERCIAL_EVENTS.items():
+        if pais not in meta["paises"]:
+            continue
+        if not config_cal.get(meta["cfg_key"], True):
+            continue
+
+        cell_bg, cell_fg, cell_border = meta["cell"]
+        flag_s = _build_event_flag_series(fmin_df, fmax_df, event_key)
+        flag_s.index = pd.to_datetime(flag_s.index)
+        v_ts = v_daily.copy()
+        v_ts.index = pd.to_datetime(v_ts.index)
+        merged = pd.DataFrame({"flag": flag_s, "v": v_ts}).dropna()
+        g0 = merged.loc[merged["flag"] == 0, "v"].to_numpy()
+        g1 = merged.loc[merged["flag"] == 1, "v"].to_numpy()
+        grp, stat_txt, stat_color = _compute_event_stats(g0, g1)
+        events_by_group[grp].append(
+            {
+                "cell": (cell_bg, cell_fg, cell_border),
+                "label": meta["label"],
+                "stat": stat_txt,
+                "stat_color": stat_color,
+                "icon": None,
+                "sublabel": None,
+            }
+        )
+
+    ep_rows: list = []
+    if location_uuid:
+        try:
+            from src.db.store import get_conn
+
+            ep_rows = (
+                get_conn()
+                .execute(
+                    "SELECT id, nombre, tipo, descripcion, fecha_inicio, fecha_fin "
+                    "FROM eventos_propios WHERE ubicacion_id = ? AND activo = TRUE "
+                    "ORDER BY fecha_inicio",
+                    [location_uuid],
+                )
+                .fetchall()
+            )
+        except Exception:
+            ep_rows = []
+
+    _TIPO_ICON = {
+        "promocion": "fas fa-percent",
+        "oferta": "fas fa-tags",
+        "lanzamiento": "fas fa-rocket",
+        "otro": "fas fa-calendar-plus",
+    }
+
+    for _ep_id, ep_nombre, ep_tipo, _ep_desc, ep_fi, ep_ff in ep_rows:
+        ep_fi = ep_fi if isinstance(ep_fi, date) else date.fromisoformat(str(ep_fi))
+        ep_ff = ep_ff if isinstance(ep_ff, date) else date.fromisoformat(str(ep_ff))
+        cell_bg, cell_fg, cell_border = _TIPO_CELL.get(ep_tipo or "otro", _TIPO_CELL["otro"])
+        idx_ts = pd.to_datetime(pd.date_range(fmin_df, fmax_df, freq="D"))
+        flag_ep = pd.Series(
+            [1.0 if ep_fi <= d2.date() <= ep_ff else 0.0 for d2 in idx_ts], index=idx_ts
+        )
+        v_ts2 = v_daily.copy()
+        v_ts2.index = pd.to_datetime(v_ts2.index)
+        merged2 = pd.DataFrame({"flag": flag_ep, "v": v_ts2}).dropna()
+        g0_ep = merged2.loc[merged2["flag"] == 0, "v"].to_numpy()
+        g1_ep = merged2.loc[merged2["flag"] == 1, "v"].to_numpy()
+        grp_ep, stat_txt_ep, stat_color_ep = _compute_event_stats(g0_ep, g1_ep)
+        events_by_group[grp_ep].append(
+            {
+                "cell": (cell_bg, cell_fg, cell_border),
+                "label": ep_nombre,
+                "stat": stat_txt_ep,
+                "stat_color": stat_color_ep,
+                "icon": _TIPO_ICON.get(ep_tipo or "otro", _TIPO_ICON["otro"]),
+                "sublabel": (ep_tipo or "otro").capitalize(),
+            }
+        )
+
+    cards = []
+    for grp_key, grp_label, grp_color, grp_bg in _GROUP_META:
+        entries = events_by_group.get(grp_key, [])
+        if not entries:
+            continue
+
+        event_rows = []
+        for e in entries:
+            bg, fg, border = e["cell"]
+            swatch = html.Span(
+                "■",
+                style={
+                    "color": fg,
+                    "backgroundColor": bg,
+                    "border": f"1px solid {border}",
+                    "borderRadius": "3px",
+                    "padding": "0 3px",
+                    "marginRight": "6px",
+                    "fontSize": "0.78rem",
+                    "display": "inline-block",
+                    "flexShrink": "0",
+                },
+            )
+            icon_el = (
+                html.I(
+                    className=f"{e['icon']} me-1",
+                    style={"color": fg, "fontSize": "0.7rem"},
+                )
+                if e.get("icon")
+                else None
+            )
+            sublabel_el = (
+                html.Span(
+                    f"· {e['sublabel']}",
+                    style={"fontSize": "0.68rem", "color": "#9ca3af", "marginLeft": "3px"},
+                )
+                if e.get("sublabel")
+                else None
+            )
+            event_rows.append(
+                html.Div(
+                    [
+                        c
+                        for c in [
+                            swatch,
+                            icon_el,
+                            html.Span(
+                                e["label"],
+                                style={
+                                    "fontSize": "0.77rem",
+                                    "color": "#374151",
+                                    "fontWeight": "500",
+                                    "flex": "1",
+                                    "minWidth": "0",
+                                    "overflow": "hidden",
+                                    "textOverflow": "ellipsis",
+                                    "whiteSpace": "nowrap",
+                                },
+                            ),
+                            sublabel_el,
+                            html.Span(
+                                e["stat"],
+                                style={
+                                    "fontSize": "0.72rem",
+                                    "color": e["stat_color"],
+                                    "marginLeft": "8px",
+                                    "whiteSpace": "nowrap",
+                                    "flexShrink": "0",
+                                    "fontWeight": "600",
+                                },
+                            ),
+                        ]
+                        if c is not None
+                    ],
+                    style={
+                        "display": "flex",
+                        "alignItems": "center",
+                        "padding": "5px 0",
+                        "borderBottom": "1px solid #f3f4f6",
+                    },
+                )
+            )
+
+        n = len(entries)
+        cards.append(
+            dbc.Card(
+                [
+                    dbc.CardHeader(
+                        html.Div(
+                            [
+                                html.Span("●  ", style={"color": grp_color, "fontSize": "0.85rem"}),
+                                html.Span(
+                                    grp_label,
+                                    style={
+                                        "fontSize": "0.76rem",
+                                        "fontWeight": "700",
+                                        "color": grp_color,
+                                    },
+                                ),
+                                dbc.Badge(
+                                    str(n),
+                                    pill=True,
+                                    color="light",
+                                    style={
+                                        "color": grp_color,
+                                        "border": f"1px solid {grp_color}",
+                                        "fontSize": "0.62rem",
+                                        "marginLeft": "7px",
+                                    },
+                                ),
+                            ],
+                            style={"display": "inline-flex", "alignItems": "center"},
+                        ),
+                        style={
+                            "backgroundColor": grp_bg,
+                            "borderBottom": f"2px solid {grp_color}",
+                            "padding": "7px 12px",
+                        },
+                    ),
+                    dbc.CardBody(
+                        html.Div(event_rows, style={"paddingTop": "2px"}),
+                        style={"padding": "8px 12px"},
+                    ),
+                ],
+                style={
+                    "minWidth": "240px",
+                    "maxWidth": "300px",
+                    "flexShrink": "0",
+                    "borderRadius": "8px",
+                    "border": f"1px solid {grp_color}33",
+                    "scrollSnapAlign": "start",
+                },
+            )
+        )
+
+    if not cards:
+        return None
+
+    return dbc.Card(
+        dbc.CardBody(
+            [
+                html.H6(
+                    [
+                        html.I(
+                            className="fas fa-calendar-alt me-2",
+                            style={"color": "#8E44AD"},
+                        ),
+                        "Impacto de eventos comerciales",
+                    ],
+                    className="fw-bold mb-3",
+                    style={"fontSize": "0.88rem", "color": "#1e293b"},
+                ),
+                html.Div(
+                    cards,
+                    style={
+                        "display": "flex",
+                        "gap": "10px",
+                        "overflowX": "auto",
+                        "paddingBottom": "6px",
+                        "scrollSnapType": "x mandatory",
+                    },
+                ),
             ]
         ),
         className="border-0 shadow-sm rounded-4 mb-3",

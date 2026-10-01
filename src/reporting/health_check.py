@@ -67,7 +67,11 @@ from src.reporting._hc_charts import (
 from src.reporting._hc_charts import (
     _fig_embudo_conversion as _fig_embudo_conversion_base,
 )
-from src.reporting._hc_informe_tabs import render_informe_tabs, render_periodo_calendar
+from src.reporting._hc_informe_tabs import (
+    render_eventos_carousel,
+    render_informe_tabs,
+    render_periodo_calendar,
+)
 from src.reporting.geo_panel import generar_mapa_contexto, generar_panel_geo_visual
 
 log = logging.getLogger(__name__)
@@ -2332,35 +2336,35 @@ def generar_mensajes_salud(
         location_uuid, zonas_data, df, fmin_p, fecha_max, ventana=ventana
     )
     _calendario_card = render_periodo_calendar(location_uuid, fmin_p, fecha_max)
+    _eventos_carousel = render_eventos_carousel(location_uuid, df, fmin_p, fecha_max)
 
-    cuerpo_superior = (
-        dbc.Row(
+    if mapa_contexto:
+        cuerpo_superior = dbc.Row(
             [
+                dbc.Col(_correlacion_card, xs=12, lg=6, className="mb-3 mb-lg-0"),
                 dbc.Col(
-                    [_correlacion_card, html.Div(className="mb-3"), _calendario_card],
+                    [mapa_contexto, html.Div(className="mt-3"), _calendario_card],
                     xs=12,
                     lg=6,
-                    className="mb-3 mb-lg-0",
                 ),
-                dbc.Col(mapa_contexto, xs=12, lg=6),
             ],
             className="mb-3 align-items-start",
         )
-        if mapa_contexto
-        else dbc.Row(
+    else:
+        cuerpo_superior = dbc.Row(
             [
                 dbc.Col(_correlacion_card, xs=12, lg=6, className="mb-3 mb-lg-0"),
                 dbc.Col(_calendario_card, xs=12, lg=6),
             ],
             className="mb-3 align-items-start",
         )
-    )
 
     return html.Div(
         [
             pdf_header,
             header,
             cuerpo_superior,
+            *([_eventos_carousel] if _eventos_carousel else []),
             acordeon,
         ]
     )
