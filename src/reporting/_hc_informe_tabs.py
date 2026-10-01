@@ -1869,6 +1869,7 @@ def render_informe_tabs(
     fmin_p,
     fecha_max,
     ventana: str = "semana",
+    branding=None,
 ) -> dbc.Card:
     """
     3-tab informe card: Resumen · Contexto Exterior · Contexto Interior.
@@ -1887,6 +1888,47 @@ def render_informe_tabs(
     pais_codigo, ciudad = _get_location_meta(location_uuid) if location_uuid else ("ES", "")
     festivos = _get_festivos(pais_codigo, ciudad, years)
 
+    primary = branding.primary if branding else "#0052CC"
+    logo_src = branding.logo_asset if branding and branding.logo_asset else None
+    tagline = branding.report_tagline if branding and branding.report_tagline else ""
+
+    _branded_header = html.Div(
+        [
+            x
+            for x in [
+                (
+                    html.Img(
+                        src=logo_src,
+                        style={"height": "26px", "objectFit": "contain", "marginRight": "10px"},
+                    )
+                    if logo_src
+                    else None
+                ),
+                html.Span(
+                    "Informe de período",
+                    className="fw-bold",
+                    style={"fontSize": "0.94rem", "color": "#1e293b"},
+                ),
+                (
+                    html.Span(
+                        f" · {tagline}",
+                        style={
+                            "fontSize": "0.78rem",
+                            "color": primary,
+                            "marginLeft": "4px",
+                            "fontWeight": "600",
+                        },
+                    )
+                    if tagline
+                    else None
+                ),
+            ]
+            if x is not None
+        ],
+        style={"display": "flex", "alignItems": "center"},
+        className="mb-2",
+    )
+
     _lbl_style = {"fontSize": "0.83rem", "padding": "7px 12px"}
     _active_style = {"fontSize": "0.83rem", "padding": "7px 12px", "fontWeight": "600"}
 
@@ -1900,7 +1942,7 @@ def render_informe_tabs(
                 label="Resumen",
                 tab_id="resumen",
                 label_style=_lbl_style,
-                active_label_style={**_active_style, "color": "#0052CC"},
+                active_label_style={**_active_style, "color": primary},
             ),
             dbc.Tab(
                 html.Div(
@@ -1950,20 +1992,9 @@ def render_informe_tabs(
     )
 
     return dbc.Card(
-        dbc.CardBody(
-            [
-                html.H6(
-                    [
-                        html.I(className="fas fa-chart-line me-2 text-primary"),
-                        "Informe de período",
-                    ],
-                    className="fw-bold mb-2",
-                    style={"fontSize": "0.94rem", "color": "#1e293b"},
-                ),
-                tabs,
-            ]
-        ),
+        dbc.CardBody([_branded_header, tabs]),
         className="border-0 shadow-sm rounded-4 h-100",
+        style={"borderTop": f"3px solid {primary}"},
     )
 
 

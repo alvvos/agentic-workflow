@@ -32,6 +32,7 @@ class OrgBranding:
     logo_asset: str  # ruta relativa a /assets/
     palette: tuple[str, ...]  # paleta multi-serie; ≥10 colores
     band_color: str = ""  # color de relleno de bandas IC; si vacío usa primary
+    report_tagline: str = ""  # subtítulo opcional del informe (e.g. "Showroom · Madrid")
 
     @property
     def effective_band_color(self) -> str:
@@ -95,7 +96,8 @@ _REGISTRY: dict[str, OrgBranding] = {
         nombre="TSE Showroom",
         primary="#1a1a2e",
         secondary="#0052CC",
-        logo_asset="",
+        logo_asset="/assets/logo_summer.png",
+        report_tagline="Showroom · Temporada",
         palette=(
             "#1a1a2e",
             "#0052CC",

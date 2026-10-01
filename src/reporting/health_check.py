@@ -1978,6 +1978,7 @@ def generar_mensajes_salud(
     location_uuid=None,
     ventana="semana",
     primary_color: str = "#0052CC",
+    branding=None,
 ):
     if df.empty:
         return dbc.Alert("Ausencia de datos.", color="warning", className="rounded-4")
@@ -2212,14 +2213,32 @@ def generar_mensajes_salud(
                     ),
                     dbc.Col(
                         [
-                            html.P(
-                                f"Emitido: {pd.Timestamp('today').strftime('%d/%m/%Y')}",
-                                className="text-end text-muted mb-0 small fw-bold",
-                            ),
-                            html.P(
-                                f"Datos hasta: {fecha_max.strftime('%d/%m/%Y')}",
-                                className="text-end text-muted mb-0 small",
-                            ),
+                            x
+                            for x in [
+                                (
+                                    html.Img(
+                                        src=branding.logo_asset,
+                                        style={
+                                            "height": "48px",
+                                            "objectFit": "contain",
+                                            "display": "block",
+                                            "marginLeft": "auto",
+                                            "marginBottom": "6px",
+                                        },
+                                    )
+                                    if branding and branding.logo_asset
+                                    else None
+                                ),
+                                html.P(
+                                    f"Emitido: {pd.Timestamp('today').strftime('%d/%m/%Y')}",
+                                    className="text-end text-muted mb-0 small fw-bold",
+                                ),
+                                html.P(
+                                    f"Datos hasta: {fecha_max.strftime('%d/%m/%Y')}",
+                                    className="text-end text-muted mb-0 small",
+                                ),
+                            ]
+                            if x is not None
                         ],
                         width=4,
                         className="d-flex flex-column justify-content-center",
@@ -2333,7 +2352,7 @@ def generar_mensajes_salud(
     )
 
     _correlacion_card = render_informe_tabs(
-        location_uuid, zonas_data, df, fmin_p, fecha_max, ventana=ventana
+        location_uuid, zonas_data, df, fmin_p, fecha_max, ventana=ventana, branding=branding
     )
     _calendario_card = render_periodo_calendar(location_uuid, fmin_p, fecha_max)
     _eventos_carousel = render_eventos_carousel(location_uuid, df, fmin_p, fecha_max)
@@ -2370,7 +2389,8 @@ def generar_panel_pm(df_completo, locs, zonas_sel, ventana="semana"):
 
     from src.core.org_branding import get_branding_from_locs
 
-    primary_color = get_branding_from_locs(locs).primary
+    _branding = get_branding_from_locs(locs)
+    primary_color = _branding.primary
 
     paneles = []
     for ubi in df_completo[df_completo["location_id"].isin(locs)]["Ubicación"].unique():
@@ -2378,7 +2398,13 @@ def generar_panel_pm(df_completo, locs, zonas_sel, ventana="semana"):
         loc_uuid = df_ubi["location_id"].iloc[0] if "location_id" in df_ubi.columns else None
         paneles.append(
             generar_mensajes_salud(
-                df_ubi, ubi, zonas_sel, loc_uuid, ventana=ventana, primary_color=primary_color
+                df_ubi,
+                ubi,
+                zonas_sel,
+                loc_uuid,
+                ventana=ventana,
+                primary_color=primary_color,
+                branding=_branding,
             )
         )
     return html.Div(paneles)
