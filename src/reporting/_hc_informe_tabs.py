@@ -1903,7 +1903,7 @@ def render_informe_tabs(
                             style={"height": "26px", "objectFit": "contain"},
                         ),
                         style={
-                            "background": "#ffffff",
+                            "background": "#000000",
                             "borderRadius": "6px",
                             "padding": "3px 8px",
                             "marginRight": "10px",
